@@ -11,7 +11,7 @@ import { makeDemo } from './demo.js';
 import { defaultShell, autoLocCount, utLocations, coursesWithElev, shellHeight, courseSummary, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.0.1';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -956,7 +956,7 @@ function refreshApi() {
 /* ------------------------------------------------------------- shell UT view */
 
 function viewShell() {
-  return `<div class="page wide shell-page"><div class="page-head"><div><h1>Shell UT</h1><p class="muted">Shell course thickness readings at standard locations around the circumference, drawn on a shell roll-out.</p></div>
+  return `<div class="page wide shell-page"><div class="page-head"><div><h1>Shell UT</h1><p class="muted">Shell course thickness readings at standard UT stations around the circumference, with a shell roll-out showing the station lines.</p></div>
     <div class="acts"><button class="btn" data-act="exp-shell">Export CSV</button><button class="btn" data-act="exp-shell-svg">Roll-out (SVG)</button></div></div>
     <div id="shellBody">${shellBodyHTML()}</div></div>`;
 }
@@ -977,9 +977,9 @@ function shellBodyHTML() {
       <div class="acts"><button class="btn sm" data-act="course-add">+ Course on top</button></div>
       <p class="muted small">Course 1 is the bottom course. t-min is the minimum required thickness for each course (API 653 §4.3), entered by you.</p></section>
 
-    <section class="card"><h2>UT locations</h2>
-      <p class="small">${D > 0 ? `Circumference ${fmt(C, 'big', job)} ÷ ${fmt(SPACING_MM, 'big', job)} = ${(C / SPACING_MM).toFixed(1)} → standard <b>${auto}</b> locations (minimum 4, maximum 8, one per 32 ft of circumference), equally spaced.` : 'Enter the tank diameter in Tank setup.'}</p>
-      <div class="fgrid">${field('Number of locations', 'shell.nLoc', 'num', { ph: `${auto} (standard)`, hint: 'Leave blank for the standard count' })}${field('First location at', 'shell.start', 'num', { unit: '°', ph: '0' })}</div>
+    <section class="card"><h2>UT stations</h2>
+      <p class="small">${D > 0 ? `Circumference ${fmt(C, 'big', job)} ÷ ${fmt(SPACING_MM, 'big', job)} = ${(C / SPACING_MM).toFixed(1)} → standard <b>${auto}</b> stations (minimum 4, maximum 8, one per 32 ft of circumference), equally spaced.` : 'Enter the tank diameter in Tank setup.'}</p>
+      <div class="fgrid">${field('Number of stations', 'shell.nLoc', 'num', { ph: `${auto} (standard)`, hint: 'Leave blank for the standard count' })}${field('First station at', 'shell.start', 'num', { unit: '°', ph: '0' })}</div>
       <div class="loc-list">${locs.map((l) => `<span class="loc-chip"><b>${l.label}</b> ${l.angle.toFixed(1)}° <small>${fmt(l.arc, 'big', job)}</small></span>`).join('')}</div>
       <p class="muted small">Readings are kept by angle, so changing the count keeps readings at angles that stay the same (e.g. 0°, 90°, 180°, 270°).</p></section>
   </div>
@@ -989,7 +989,7 @@ function shellBodyHTML() {
     ${top.map((c) => { const s = sm.get(c.id); return `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${c.no}</b> <small class="muted">${c.tMin ? 'min ' + fmt(c.tMin, 't', job, false) : ''}</small></td>${locs.map((l) => { const v = sh.ut?.[l.key]?.[c.id]; const bad = v != null && c.tMin > 0 && v < c.tMin - 1e-9; return `<td class="${bad ? 'bad-cell' : ''}"><input data-shut="${l.key}" data-course="${c.id}" data-kind="t" inputmode="decimal" value="${h(inVal(v, 't', job))}"></td>`; }).join('')}<td class="n"><b>${s.min != null ? fmt(s.min, 't', job, false) : '—'}</b></td><td>${st(s)}</td></tr>`; }).join('')}
     </tbody></table></div></section>` : ''}
 
-  <section class="card"><div class="sp-head"><h2>Shell roll-out</h2><span class="muted small">click a reading to edit it</span></div>
+  <section class="card"><div class="sp-head"><h2>Shell roll-out</h2><span class="muted small">UT station lines</span></div>
     <div class="ro-wrap" id="roWrap">${rolloutSVG(job)}</div></section>`;
 }
 
@@ -1001,13 +1001,6 @@ function refreshShell() {
     if (key) { const n = c.querySelector(key); if (n) { n.focus(); try { n.select(); } catch { /* */ } } }
   }, 0);
 }
-
-document.addEventListener('click', (e) => {
-  const g = e.target.closest?.('#roWrap [data-cell]'); if (!g) return;
-  const [key, cid] = g.dataset.cell.split('|');
-  const inp = $(`#shellBody input[data-shut="${CSS.escape(key)}"][data-course="${CSS.escape(cid)}"]`);
-  if (inp) { inp.scrollIntoView({ block: 'center', behavior: 'smooth' }); inp.focus(); inp.select(); }
-});
 
 /* ------------------------------------------------------------ report view */
 

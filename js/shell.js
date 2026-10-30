@@ -61,8 +61,8 @@ const f1 = (v) => (Math.round(v * 10) / 10).toString();
 
 /**
  * Roll-out drawing: the shell unwrapped from 0° to 360° (left to right, looking from outside),
- * courses as bands (course 1 at the bottom), reading locations as vertical lines with each course's
- * reading at mid-height, and shell nozzles at their angle and elevation.
+ * courses as bands (course 1 at the bottom), UT station lines with their angles, and shell nozzles
+ * at their angle and elevation.
  * Horizontal and vertical scales differ so tall and wide tanks both stay readable.
  */
 export function rolloutSVG(job, opts = {}) {
@@ -83,7 +83,7 @@ export function rolloutSVG(job, opts = {}) {
   courses.forEach((c, i) => {
     const y1 = Y(c.z1), y0 = Y(c.z0);
     const s = sum.get(c.id);
-    o.push(`<rect x="${L}" y="${f1(y1)}" width="${W}" height="${f1(y0 - y1)}" class="ro-course ${i % 2 ? 'alt' : ''}${s?.status === 'Below t-min' ? ' bad' : ''}"/>`);
+    o.push(`<rect x="${L}" y="${f1(y1)}" width="${W}" height="${f1(y0 - y1)}" class="ro-course ${i % 2 ? 'alt' : ''}"/>`);
     o.push(`<text x="${L - 34}" y="${f1((y0 + y1) / 2 - 6)}" text-anchor="end" class="ro-cl" font-size="13">Course ${c.no}</text>`);
     o.push(`<text x="${L - 34}" y="${f1((y0 + y1) / 2 + 10)}" text-anchor="end" class="ro-cs" font-size="10.5">${c.tNom ? fmt(c.tNom, 't', job) : ''}${c.tMin ? ' · min ' + fmt(c.tMin, 't', job, false) : ''}</text>`);
   });
@@ -93,7 +93,6 @@ export function rolloutSVG(job, opts = {}) {
     const big = a % 90 === 0, mid = a % 45 === 0;
     o.push(`<line x1="${f1(X(a))}" y1="${T + Hd}" x2="${f1(X(a))}" y2="${T + Hd + (big ? 10 : mid ? 7 : 4)}" class="ro-tick"/>`);
     if (mid) o.push(`<text x="${f1(X(a))}" y="${T + Hd + 23}" text-anchor="middle" font-size="11.5" class="ro-deg${big ? ' big' : ''}">${a}°${a === 0 && job.info?.zeroRef ? ' ' + esc(job.info.zeroRef) : ''}</text>`);
-    if (big) o.push(`<text x="${f1(X(a))}" y="${T + Hd + 38}" text-anchor="middle" font-size="10" class="ro-arc">${fmt((C * a) / 360, 'big', job, false)} ${U.big}</text>`);
   }
   o.push(`<text x="${L}" y="${vh - 6}" font-size="10" class="ro-note">Looking from outside the tank · angles clockwise from 0° · distance along the circumference below · horizontal and vertical scales differ</text>`);
   // elevation scale on the right
@@ -110,15 +109,8 @@ export function rolloutSVG(job, opts = {}) {
   for (const l of locs) {
     const x = X(l.angle);
     o.push(`<line x1="${f1(x)}" y1="${T - 6}" x2="${f1(x)}" y2="${T + Hd}" class="ro-loc"/>`);
+    o.push(`<text x="${f1(x)}" y="${T + Hd + 38}" text-anchor="middle" font-size="10" class="ro-arc">${fmt(l.arc, 'big', job, false)} ${U.big}</text>`);
     o.push(`<text x="${f1(x)}" y="${T - 26}" text-anchor="middle" font-size="12.5" class="ro-ll">${l.label}</text><text x="${f1(x)}" y="${T - 12}" text-anchor="middle" font-size="10.5" class="ro-la">${f1(l.angle)}°</text>`);
-    for (const c of courses) {
-      const v = reading(job, l.key, c.id);
-      const yc = (Y(c.z0) + Y(c.z1)) / 2;
-      const bad = v !== null && +c.tMin > 0 && v < +c.tMin - 1e-9;
-      const txt = v === null ? '—' : (fromMm(v, 't', job)).toFixed(U.tDec);
-      const wbox = 46;
-      o.push(`<g class="ro-r${bad ? ' bad' : ''}${v === null ? ' empty' : ''}" data-cell="${l.key}|${c.id}"><rect x="${f1(x - wbox / 2)}" y="${f1(yc - 9)}" width="${wbox}" height="18" rx="3"/><text x="${f1(x)}" y="${f1(yc + 4)}" text-anchor="middle" font-size="11.5">${txt}</text></g>`);
-    }
   }
   o.push('</svg>');
   return o.join('');
