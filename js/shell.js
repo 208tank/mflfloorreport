@@ -165,77 +165,138 @@ export function courseSummary(job) {
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const f1 = (v) => (Math.round(v * 10) / 10).toString();
 
+/** Dimension text: 12'-1 7/8" (to 1/32") for imperial, mm for metric. */
+export function dimText(mm, job) {
+  if (job.units === 'metric') return { main: `${Math.round(mm)}`, sub: '' };
+  let n32 = Math.round((mm / 25.4) * 32);
+  const ft = Math.floor(n32 / (12 * 32)); n32 -= ft * 12 * 32;
+  const whole = Math.floor(n32 / 32); let num = n32 - whole * 32, den = 32;
+  while (num && num % 2 === 0) { num /= 2; den /= 2; }
+  return { main: `${ft}'-${whole}${num ? ` ${num}/${den}` : ''}"`, sub: `[${Math.round(mm)}]` };
+}
+
+/** Every plate rectangle that shows between 0° and 360° (a plate crossing 0°/360° is drawn whole at both ends). */
+function visiblePlates(cp) {
+  const out = [];
+  for (const p of cp.plates) for (const k of [-1, 0, 1]) {
+    const a0 = p.a0 + k * 360, a1 = p.a1 + k * 360;
+    if (a1 > 1e-6 && a0 < 360 - 1e-6) out.push({ ...p, a0, a1 });
+  }
+  return out;
+}
+
 /**
- * Roll-out: the shell unwrapped from 0° to 360° (left to right, looking from outside). Courses are
- * bands (course 1 at the bottom) divided into their plates by the vertical seams; UT station lines
- * run the full height; shell nozzles sit at their angle and elevation. Scales differ horizontally
- * and vertically so wide and tall tanks both stay readable.
+ * Shell roll-out in the style of a fabrication drawing: the shell unwrapped from 0° to 360° looking
+ * from outside, each course drawn as whole plates (plates that cross 0°/360° overhang both ends),
+ * UT station lines with the angle in a circle at the top, arc-length dimensions between stations,
+ * course and overall height dimensions on the right, the circumference along the bottom, and shell
+ * nozzles with hexagon tags. Drawn to scale; very wide, short shells get their height stretched.
  */
 export function rolloutSVG(job, opts = {}) {
   const courses = coursesWithElev(job), H = shellHeight(job), D = +job.tank?.diameter || 0;
-  const U = u(job);
   if (!courses.length || !(H > 0) || !(D > 0)) {
     return `<svg class="rollout" viewBox="0 0 1000 160" xmlns="http://www.w3.org/2000/svg"><text x="500" y="80" text-anchor="middle" class="ro-empty" font-size="16">Enter the tank diameter and the shell courses to draw the roll-out</text></svg>`;
   }
   const C = Math.PI * D;
-  const L = 168, T = 54, W = 860, Hd = Math.max(240, Math.min(460, 120 + courses.length * 58)), B = 64;
-  const vw = L + W + 40, vh = T + Hd + B;
-  const X = (a) => L + (a / 360) * W, Y = (z) => T + Hd - (z / H) * Hd;
+  const W = 1000, kx = W / C;                             // px per mm along the circumference
+  const maxAspect = 4.2;
+  let ky = kx, stretched = false;
+  if (H * ky < W / maxAspect) { ky = W / maxAspect / H; stretched = true; }
+  const Hd = H * ky;
+  const plateSets = courses.map((c, i) => coursePlates(job, c, i));
+  const vis = plateSets.map(visiblePlates);
+  const minA = Math.min(0, ...vis.flat().map((p) => p.a0)), maxA = Math.max(360, ...vis.flat().map((p) => p.a1));
+  const ox = 34 + ((-minA) / 360) * W;                    // x of 0°
+  const right = ox + W + ((maxA - 360) / 360) * W;        // right end of the widest course
+  const T = 112;                                          // top of shell
+  const X = (a) => ox + (a / 360) * W, Y = (z) => T + Hd - z * ky;
+  const dimX1 = right + 26, dimX2 = dimX1 + 118;
+  const vw = dimX2 + 46, vh = T + Hd + 74;
   const locs = utLocations(job);
-  const clip = 'roclip' + Math.random().toString(36).slice(2, 7);
+  const tick = (x, y) => `<path d="M${f1(x - 4)} ${f1(y + 4)}L${f1(x + 4)} ${f1(y - 4)}" class="ro-tk"/>`;
   const o = [];
-  o.push(`<svg class="rollout${opts.print ? ' print' : ''}" viewBox="0 0 ${vw} ${vh}" xmlns="http://www.w3.org/2000/svg">`);
-  o.push(`<defs><clipPath id="${clip}"><rect x="${L}" y="${T}" width="${W}" height="${Hd}"/></clipPath></defs>`);
+  o.push(`<svg class="rollout${opts.print ? ' print' : ''}" viewBox="0 0 ${f1(vw)} ${f1(vh)}" xmlns="http://www.w3.org/2000/svg">`);
+
+  // courses: whole plates
+  const stX = [...locs.map((l) => X(l.angle)), X(360)];
   courses.forEach((c, i) => {
     const y1 = Y(c.z1), y0 = Y(c.z0), hh = y0 - y1;
-    o.push(`<rect x="${L}" y="${f1(y1)}" width="${W}" height="${f1(hh)}" class="ro-course ${i % 2 ? 'alt' : ''}"/>`);
-    const cp = coursePlates(job, c, i);
-    o.push(`<g clip-path="url(#${clip})">`);
-    for (const p of cp.plates) {
-      for (const shift of [0, -360]) {
-        const a0 = p.a0 + shift, a1 = p.a1 + shift;
-        if (a1 <= 0 || a0 >= 360) continue;
-        const v0 = Math.max(0, a0), v1 = Math.min(360, a1);
-        if ((v1 - v0) / (a1 - a0) < 0.45) continue; // label the larger part of a plate that wraps past 0°
-        const xm = (X(v0) + X(v1)) / 2, wpx = X(v1) - X(v0);
-        if (wpx > 18 && hh > 14) o.push(`<text x="${f1(xm)}" y="${f1(y1 + Math.min(15, hh / 2 + 4))}" text-anchor="middle" font-size="${wpx > 44 ? 10.5 : 8.5}" class="ro-pl">${c.no}-${p.no}${p.closure ? '*' : ''}</text>`);
-      }
+    for (const p of vis[i]) {
+      const x0 = X(p.a0), x1 = X(p.a1);
+      o.push(`<rect x="${f1(x0)}" y="${f1(y1)}" width="${f1(x1 - x0)}" height="${f1(hh)}" class="ro-plate"/>`);
+      const r = Math.min(10, hh / 3.2, (x1 - x0) / 3.2);
+      let cx = (x0 + x1) / 2;
+      if (stX.some((sx) => Math.abs(sx - cx) < r + 4)) { const alt = [cx + r * 2.2, cx - r * 2.2, cx + r * 3, cx - r * 3].find((v) => v - r > x0 + 2 && v + r < x1 - 2 && !stX.some((sx) => Math.abs(sx - v) < r + 4)); if (alt !== undefined) cx = alt; }
+      if (r >= 5) o.push(`<circle cx="${f1(cx)}" cy="${f1((y0 + y1) / 2)}" r="${f1(r)}" class="ro-pc"/><text x="${f1(cx)}" y="${f1((y0 + y1) / 2 + r * 0.36)}" text-anchor="middle" font-size="${f1(r * 1.05)}" class="ro-pn">${p.no}${p.closure ? '*' : ''}</text>`);
     }
-    for (const a of cp.seams) o.push(`<line x1="${f1(X(a))}" y1="${f1(y1)}" x2="${f1(X(a))}" y2="${f1(y0)}" class="ro-seam"/>`);
-    o.push('</g>');
-    o.push(`<text x="${L - 34}" y="${f1((y0 + y1) / 2 - 7)}" text-anchor="end" class="ro-cl" font-size="13">Course ${c.no}</text>`);
-    o.push(`<text x="${L - 34}" y="${f1((y0 + y1) / 2 + 8)}" text-anchor="end" class="ro-cs" font-size="10.5">${c.tNom ? fmt(c.tNom, 't', job) : ''}${c.tMin ? ' · min ' + fmt(c.tMin, 't', job, false) : ''}</text>`);
-    if (hh > 34) o.push(`<text x="${L - 34}" y="${f1((y0 + y1) / 2 + 21)}" text-anchor="end" class="ro-cs" font-size="10">${cp.n} plate${cp.n === 1 ? '' : 's'}</text>`);
+    o.push(`<text x="${f1(Math.min(...vis[i].map((p) => X(p.a0))) - 6)}" y="${f1((y0 + y1) / 2 + 4)}" text-anchor="end" font-size="10" class="ro-cn">C${c.no}</text>`);
   });
-  o.push(`<rect x="${L}" y="${T}" width="${W}" height="${Hd}" class="ro-frame"/>`);
-  for (let a = 0; a <= 360; a += 15) {
-    const big = a % 90 === 0, mid = a % 45 === 0;
-    o.push(`<line x1="${f1(X(a))}" y1="${T + Hd}" x2="${f1(X(a))}" y2="${T + Hd + (big ? 10 : mid ? 7 : 4)}" class="ro-tick"/>`);
-    if (mid) o.push(`<text x="${f1(X(a))}" y="${T + Hd + 23}" text-anchor="middle" font-size="11.5" class="ro-deg${big ? ' big' : ''}">${a}°${a === 0 && job.info?.zeroRef ? ' ' + esc(job.info.zeroRef) : ''}</text>`);
+
+  // station lines with angle circles
+  const st = [...locs.map((l) => ({ a: l.angle, label: l.label })), { a: 360, label: '' }].sort((a, b) => a.a - b.a);
+  for (const sl of st) {
+    const x = X(sl.a);
+    o.push(`<line x1="${f1(x)}" y1="${T - 82}" x2="${f1(x)}" y2="${f1(T + Hd + (sl.a === 0 || sl.a === 360 ? 48 : 6))}" class="ro-st"/>`);
+    o.push(`<circle cx="${f1(x)}" cy="${T - 92}" r="12" class="ro-sc"/><text x="${f1(x)}" y="${T - 88}" text-anchor="middle" font-size="10.5" class="ro-sa">${Math.round(sl.a * 10) / 10}</text>`);
+    if (sl.label) o.push(`<text x="${f1(x + 15)}" y="${T - 95}" font-size="8.5" class="ro-sq">${sl.label}</text>`);
   }
-  o.push(`<text x="${L}" y="${vh - 6}" font-size="10" class="ro-note">Looking from outside the tank · angles clockwise from 0° · solid lines are vertical seams, plates numbered course-plate clockwise from the first seam (* closure plate) · scales differ</text>`);
-  [0, H].forEach((z) => o.push(`<text x="${L + W + 4}" y="${f1(Y(z) + 4)}" font-size="10" class="ro-arc">${fmt(z, 'big', job, false)}</text>`));
-  for (const n of job.nozzles || []) {
-    const a = +n.angle; if (!Number.isFinite(a)) continue;
-    const z = +n.elev > 0 ? +n.elev : null; if (z === null || z > H) continue;
-    const r = Math.max(4, Math.min(26, ((+n.size || 0) / C) * W / 2));
+  // arc-length dimensions between stations
+  const yd = T - 30;
+  for (let i = 0; i + 1 < st.length; i++) {
+    const xa = X(st[i].a), xb = X(st[i + 1].a), d = dimText(((st[i + 1].a - st[i].a) / 360) * C, job);
+    o.push(`<line x1="${f1(xa)}" y1="${yd}" x2="${f1(xb)}" y2="${yd}" class="ro-dim"/>${tick(xa, yd)}${tick(xb, yd)}`);
+    o.push(`<text x="${f1((xa + xb) / 2)}" y="${yd - 5}" text-anchor="middle" font-size="9.5" class="ro-dt">${esc(d.main)}</text>`);
+    if (d.sub) o.push(`<text x="${f1((xa + xb) / 2)}" y="${yd + 11}" text-anchor="middle" font-size="8.5" class="ro-ds">${d.sub}</text>`);
+  }
+  // overall circumference along the bottom
+  const yb = T + Hd + 40, dc = dimText(C, job);
+  o.push(`<line x1="${f1(X(0))}" y1="${f1(yb)}" x2="${f1(X(360))}" y2="${f1(yb)}" class="ro-dim"/>${tick(X(0), yb)}${tick(X(360), yb)}`);
+  o.push(`<text x="${f1(X(180))}" y="${f1(yb - 5)}" text-anchor="middle" font-size="10.5" class="ro-dt">${esc(dc.main)}${job.units === 'metric' ? ' mm' : ''}</text>`);
+  if (dc.sub) o.push(`<text x="${f1(X(180))}" y="${f1(yb + 12)}" text-anchor="middle" font-size="9" class="ro-ds">${dc.sub}</text>`);
+
+  // course heights and overall height on the right
+  o.push(`<line x1="${f1(dimX1)}" y1="${T}" x2="${f1(dimX1)}" y2="${f1(T + Hd)}" class="ro-dim"/>`);
+  for (const c of courses) {
+    const y1 = Y(c.z1), y0 = Y(c.z0), d = dimText(+c.h, job);
+    o.push(`<line x1="${f1(right + 4)}" y1="${f1(y1)}" x2="${f1(dimX1 + 6)}" y2="${f1(y1)}" class="ro-ext"/>${tick(dimX1, y1)}`);
+    o.push(`<text x="${f1(dimX1 + 7)}" y="${f1((y0 + y1) / 2 - (d.sub ? 2 : -3))}" font-size="9.5" class="ro-dt">${esc(d.main)}</text>`);
+    if (d.sub) o.push(`<text x="${f1(dimX1 + 7)}" y="${f1((y0 + y1) / 2 + 10)}" font-size="8.5" class="ro-ds">${d.sub}</text>`);
+  }
+  o.push(`<line x1="${f1(right + 4)}" y1="${f1(T + Hd)}" x2="${f1(dimX2 + 6)}" y2="${f1(T + Hd)}" class="ro-ext"/>${tick(dimX1, T + Hd)}`);
+  o.push(`<line x1="${f1(dimX1 + 6)}" y1="${T}" x2="${f1(dimX2 + 6)}" y2="${T}" class="ro-ext"/>`);
+  o.push(`<line x1="${f1(dimX2)}" y1="${T}" x2="${f1(dimX2)}" y2="${f1(T + Hd)}" class="ro-dim"/>${tick(dimX2, T)}${tick(dimX2, T + Hd)}`);
+  const dh = dimText(H, job);
+  o.push(`<text transform="translate(${f1(dimX2 + 13)} ${f1(T + Hd / 2)}) rotate(90)" text-anchor="middle" font-size="10" class="ro-dt">${esc(dh.main)}${dh.sub ? ' ' + dh.sub : ''}</text>`);
+
+  // nozzles: symbol at angle / elevation, hexagon tag above with a leader
+  const placed = [];
+  const noz = (job.nozzles || []).filter((n) => Number.isFinite(+n.angle) && +n.elev > 0 && +n.elev <= H).slice().sort((a, b) => (+a.angle) - (+b.angle));
+  for (const n of noz) {
+    const x = X(+n.angle), y = Y(+n.elev);
+    const mw = /manway|door/i.test(n.type || '');
+    const r = Math.max(mw ? 7 : 3.5, ((+n.size || 0) / 2) * kx);
     const bad = nozzleUT(n).status === 'Below t-min';
-    o.push(`<g class="ro-noz${bad ? ' bad' : ''}"><circle cx="${f1(X(a))}" cy="${f1(Y(z))}" r="${f1(r)}"/><text x="${f1(X(a) + r + 3)}" y="${f1(Y(z) + 4)}" font-size="10.5">${esc(n.mark || '')}</text></g>`);
+    let ty = y - r - 24;
+    while (placed.some((p) => Math.abs(p.x - x) < 26 && Math.abs(p.y - ty) < 22)) ty -= 22;
+    placed.push({ x, y: ty });
+    const hx = 12, hy = 9;
+    o.push(`<g class="ro-noz${bad ? ' bad' : ''}">`);
+    if (mw) o.push(`<circle cx="${f1(x)}" cy="${f1(y)}" r="${f1(r)}"/><circle cx="${f1(x)}" cy="${f1(y)}" r="${f1(r * 0.72)}"/>`);
+    else o.push(`<circle cx="${f1(x)}" cy="${f1(y)}" r="${f1(r)}"/><path d="M${f1(x - r - 3)} ${f1(y)}H${f1(x + r + 3)}M${f1(x)} ${f1(y - r - 3)}V${f1(y + r + 3)}" class="ro-cross"/>`);
+    o.push(`<line x1="${f1(x)}" y1="${f1(y - r)}" x2="${f1(x)}" y2="${f1(ty + hy)}" class="ro-lead"/>`);
+    o.push(`<path d="M${f1(x - hx)} ${f1(ty)}L${f1(x - hx / 2)} ${f1(ty - hy)}L${f1(x + hx / 2)} ${f1(ty - hy)}L${f1(x + hx)} ${f1(ty)}L${f1(x + hx / 2)} ${f1(ty + hy)}L${f1(x - hx / 2)} ${f1(ty + hy)}Z" class="ro-hex"/>`);
+    o.push(`<text x="${f1(x)}" y="${f1(ty + 3.3)}" text-anchor="middle" font-size="${(n.mark || '').length > 3 ? 7.5 : 9}" class="ro-ht">${esc(n.mark || '')}</text></g>`);
   }
-  for (const l of locs) {
-    const x = X(l.angle);
-    o.push(`<line x1="${f1(x)}" y1="${T - 6}" x2="${f1(x)}" y2="${T + Hd}" class="ro-loc"/>`);
-    o.push(`<text x="${f1(x)}" y="${T - 26}" text-anchor="middle" font-size="12.5" class="ro-ll">${l.label}</text><text x="${f1(x)}" y="${T - 12}" text-anchor="middle" font-size="10.5" class="ro-la">${f1(l.angle)}°</text>`);
-    o.push(`<text x="${f1(x)}" y="${T + Hd + 38}" text-anchor="middle" font-size="10" class="ro-arc">${fmt(l.arc, 'big', job, false)} ${U.big}</text>`);
-  }
+
+  o.push(`<text x="${f1(ox)}" y="${f1(vh - 6)}" font-size="9" class="ro-note">Shell roll-out looking from outside · angles clockwise from 0°${job.info?.zeroRef ? ' (' + esc(job.info.zeroRef) + ')' : ''} · circled numbers are plates in each course, numbered clockwise from the first seam (* closure plate) · ${stretched ? 'height stretched for clarity' : 'to scale'}${job.units === 'metric' ? ' · dimensions in mm' : ' · dimensions ft-in [mm]'}</text>`);
   o.push('</svg>');
   return o.join('');
 }
 
 export const SHELL_SVG_STYLE = `<style>
-.ro-course{fill:#fff;stroke:#9aa3ad;stroke-width:.8}.ro-course.alt{fill:#f4f6f8}.ro-frame{fill:none;stroke:#1d232b;stroke-width:1.6}
-.ro-seam{stroke:#1d232b;stroke-width:1.3}.ro-pl{fill:#5b6470;font-family:Arial,sans-serif}
-.ro-cl{fill:#1d232b;font-weight:700;font-family:Arial,sans-serif}.ro-cs,.ro-arc,.ro-note,.ro-la{fill:#5b6470;font-family:Arial,sans-serif}.ro-deg{fill:#3a434e;font-family:Arial,sans-serif}.ro-deg.big{font-weight:700;fill:#1d232b}
-.ro-tick{stroke:#1d232b}.ro-loc{stroke:#0f766e;stroke-width:1.2;stroke-dasharray:5 3}.ro-ll{fill:#0f766e;font-weight:700;font-family:Arial,sans-serif}
-.ro-noz circle{fill:#eef0f3;stroke:#1d232b;stroke-width:1.2}.ro-noz text{fill:#1d232b;font-weight:700;font-family:Arial,sans-serif}.ro-noz.bad circle{stroke:#b91c1c}
+.ro-plate{fill:#fff;stroke:#111;stroke-width:1.1}.ro-pc{fill:#fff;stroke:#111;stroke-width:.9}.ro-pn,.ro-cn{fill:#111;font-family:Arial,sans-serif}
+.ro-st{stroke:#111;stroke-width:.8}.ro-sc{fill:#fff;stroke:#111;stroke-width:1}.ro-sa{fill:#111;font-family:Arial,sans-serif;font-weight:700}.ro-sq{fill:#0f766e;font-family:Arial,sans-serif;font-weight:700}
+.ro-dim{stroke:#111;stroke-width:.8}.ro-ext{stroke:#111;stroke-width:.5}.ro-tk{stroke:#111;stroke-width:1.2}.ro-dt{fill:#111;font-family:Arial,sans-serif}.ro-ds{fill:#444;font-family:Arial,sans-serif}
+.ro-noz circle{fill:#fff;stroke:#111;stroke-width:1.1}.ro-cross{stroke:#111;stroke-width:.8}.ro-lead{stroke:#111;stroke-width:.7}.ro-hex{fill:#fff;stroke:#111;stroke-width:.9}.ro-ht{fill:#111;font-family:Arial,sans-serif;font-weight:700}
+.ro-noz.bad circle,.ro-noz.bad .ro-hex{stroke:#b91c1c}.ro-noz.bad .ro-ht{fill:#b91c1c}.ro-note{fill:#555;font-family:Arial,sans-serif}
 </style>`;

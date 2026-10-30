@@ -147,10 +147,13 @@ The **Shell UT** page records shell thickness readings:
   across; **Enter moves up the same station** (Shift+Enter down). Readings below the course t-min
   are red; each course shows its minimum, % loss against nominal and OK / Below t-min. Readings
   are stored by station angle and elevation, so changing the pattern keeps readings already taken.
-- **Shell roll-out** — the shell unwrapped from 0° to 360° looking from outside, courses divided
-  into their plates by the **vertical seams** (plates numbered course-plate, e.g. 1-4), UT station
-  lines with angle and distance along the circumference, and shell nozzles at their angle and
-  elevation. Horizontal and vertical scales differ.
+- **Shell roll-out** — drawn like a fabrication drawing: the shell unwrapped from 0° to 360°
+  looking from outside, each course drawn as **whole plates** with circled plate numbers (plates that
+  cross 0°/360° overhang both ends), UT station lines with the angle circled at the top,
+  arc-length dimensions between stations along the top, course and overall height dimensions on
+  the right, the circumference along the bottom (ft-in to 1/32" with [mm]), and shell nozzles as
+  symbols at their angle and elevation with hexagon tags (manways as double circles). Drawn to
+  scale; very wide, short shells have their height stretched (noted on the drawing).
 - The report has a Shell UT page (roll-out and course summary) and a **Shell UT readings** table of
   every elevation and station. *Export → Shell UT readings (CSV / Excel)* and *Shell roll-out (SVG)*.
 - Readings entered in v2.0 (one per course) are kept at mid-height of their course.

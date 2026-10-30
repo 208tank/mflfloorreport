@@ -331,27 +331,25 @@ button.sug { border: 1px dashed var(--accent); background: none; color: var(--ac
 .grid.readings td { padding: 3px 6px; }
 .report .readings-rp td { padding: 2px 6px; font-size: 10px; } .report .readings-rp tr.crow td { background: #eef5f4; font-size: 10.5px; }
 .report b.bad { color: #b91c1c; }
-.rollout .ro-seam { stroke: var(--ink); stroke-width: 1.3; } .rollout .ro-pl { fill: var(--muted); }
 .grid.readings input { width: 70px; min-height: 28px; padding: 3px 6px; text-align: right; font-size: 13px; }
 .grid.readings td.bad-cell input { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); font-weight: 600; }
 .loc-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 .loc-chip { border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: 12.5px; background: var(--panel2); }
 .loc-chip b { color: var(--accent); margin-right: 4px; } .loc-chip small { color: var(--muted); margin-left: 4px; }
 .ro-wrap { overflow-x: auto; } .ro-wrap svg { width: 100%; min-width: 760px; height: auto; display: block; }
-.rollout .ro-course { fill: var(--panel); stroke: var(--plate-line); stroke-width: .8; } .rollout .ro-course.alt { fill: var(--panel2); } .rollout .ro-course.bad { fill: var(--bad-soft); }
-.rollout .ro-frame { fill: none; stroke: var(--ink); stroke-width: 1.6; }
-.rollout text { font-family: var(--font); } .rollout .ro-cl { fill: var(--ink); font-weight: 700; } .rollout .ro-cs, .rollout .ro-arc, .rollout .ro-note, .rollout .ro-la { fill: var(--muted); }
-.rollout .ro-deg { fill: var(--ink2); } .rollout .ro-deg.big { fill: var(--ink); font-weight: 700; } .rollout .ro-tick { stroke: var(--ink); }
-.rollout .ro-loc { stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 5 3; } .rollout .ro-ll { fill: var(--accent); font-weight: 700; }
-.rollout .ro-r { cursor: pointer; } .rollout .ro-r rect { fill: var(--panel); stroke: var(--accent); stroke-width: 1; } .rollout .ro-r text { fill: var(--ink); font-weight: 600; }
-.rollout .ro-r.bad rect { fill: var(--bad-soft); stroke: var(--bad); } .rollout .ro-r.bad text { fill: var(--bad); }
-.rollout .ro-r.empty rect { stroke: var(--line); stroke-dasharray: 2 2; } .rollout .ro-r.empty text { fill: var(--muted); font-weight: 400; }
-.rollout .ro-r:hover rect { stroke-width: 2; }
-.rollout .ro-noz circle { fill: var(--plate-ann); stroke: var(--ink2); stroke-width: 1.2; } .rollout .ro-noz text { fill: var(--ink); font-weight: 700; } .rollout .ro-noz.bad circle { stroke: var(--bad); }
 .rollout .ro-empty { fill: var(--muted); }
+.rollout text { font-family: var(--font); }
+.rollout .ro-plate { fill: var(--map-bg); stroke: var(--ink); stroke-width: 1.1; }
+.rollout .ro-pc { fill: var(--map-bg); stroke: var(--ink); stroke-width: .9; } .rollout .ro-pn, .rollout .ro-cn { fill: var(--ink); }
+.rollout .ro-st { stroke: var(--ink); stroke-width: .8; } .rollout .ro-sc { fill: var(--map-bg); stroke: var(--ink); stroke-width: 1; }
+.rollout .ro-sa { fill: var(--ink); font-weight: 700; } .rollout .ro-sq { fill: var(--accent); font-weight: 700; }
+.rollout .ro-dim { stroke: var(--ink); stroke-width: .8; } .rollout .ro-ext { stroke: var(--ink2); stroke-width: .5; } .rollout .ro-tk { stroke: var(--ink); stroke-width: 1.2; }
+.rollout .ro-dt { fill: var(--ink); } .rollout .ro-ds { fill: var(--muted); } .rollout .ro-note { fill: var(--muted); }
+.rollout .ro-noz circle { fill: var(--map-bg); stroke: var(--ink); stroke-width: 1.1; } .rollout .ro-cross { stroke: var(--ink); stroke-width: .8; } .rollout .ro-lead { stroke: var(--ink); stroke-width: .7; }
+.rollout .ro-hex { fill: var(--map-bg); stroke: var(--ink); stroke-width: .9; } .rollout .ro-ht { fill: var(--ink); font-weight: 700; }
+.rollout .ro-noz.bad circle, .rollout .ro-noz.bad .ro-hex { stroke: var(--bad); } .rollout .ro-noz.bad .ro-ht { fill: var(--bad); }
+.report .rollout { --map-bg: #fff; --ink: #111; --ink2: #333; --muted: #555; }
 .report .ro-print svg { width: 100%; height: auto; display: block; }
-.report .rollout .ro-course { fill: #fff; stroke: #9aa3ad; } .report .rollout .ro-course.alt { fill: #f4f6f8; } .report .rollout .ro-course.bad { fill: #fdecec; }
-.report .rollout .ro-r rect { fill: #fff; } .report .rollout .ro-r.bad rect { fill: #fde8e8; }
 @media (max-width: 1100px) { .shell-grid { grid-template-columns: 1fr; } }
 
 /* datums */

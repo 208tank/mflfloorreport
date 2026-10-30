@@ -11,7 +11,7 @@ import { makeDemo } from './demo.js';
 import { defaultShell, defaultZones, autoLocCount, autoPlateCount, utLocations, coursesWithElev, courseAt, coursePlates, shellHeight, courseSummary, readingElevations, zoneCount, getReading, fmtElev, zKey, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '2.1.0';
+const APP_VERSION = '2.2.0';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1018,7 +1018,7 @@ function shellBodyHTML() {
   ${courses.length ? `<section class="card"><div class="sp-head"><h2>UT readings</h2><span class="muted small">thickness in ${U.small} · Tab moves across, Enter moves up the station</span></div>
     <div class="tblwrap rd-wrap"><table class="grid readings"><thead><tr><th>Elevation</th>${locs.map((l) => `<th class="n">${l.label}<br><small>${l.angle.toFixed(1)}°</small></th>`).join('')}<th class="n">Row min</th></tr></thead><tbody>${grid || `<tr><td colspan="${locs.length + 2}" class="empty">Set up reading elevations to start.</td></tr>`}</tbody></table></div></section>` : ''}
 
-  <section class="card"><div class="sp-head"><h2>Shell roll-out</h2><span class="muted small">vertical seams, plates and UT station lines</span></div>
+  <section class="card"><div class="sp-head"><h2>Shell roll-out</h2><span class="muted small">plates, UT stations, dimensions and nozzles</span></div>
     <div class="ro-wrap" id="roWrap">${rolloutSVG(job)}</div></section>`;
 }
 
