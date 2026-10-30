@@ -10,7 +10,7 @@ import { newJob, migrate, nextNo, uid, getPath, setPath } from './model.js';
 import { makeDemo } from './demo.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.7.1';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -408,7 +408,7 @@ function relocateOrphans(before) {
     const p = plateAt(S.layout, f.x, f.y);
     if (!p) { lost++; continue; }
     const l = toLocal(S.layout, p, f.x, f.y);
-    it.plate = p.key; it.x = Math.round(l.X * 10) / 10; it.y = Math.round(l.Y * 10) / 10; moved++;
+    it.plate = p.key; it.x = Math.round(Math.max(0, l.X) * 10) / 10; it.y = Math.round(Math.max(0, l.Y) * 10) / 10; moved++;
   }
   if (moved) { recompute(); scheduleSave(); }
   if (moved || lost) toast(`${moved ? `${moved} item${moved > 1 ? 's' : ''} moved to the plate now at ${moved > 1 ? 'their' : 'its'} location (X/Y recalculated).` : ''}${lost ? ` ${lost} could not be placed — check them.` : ''}`);
@@ -489,7 +489,7 @@ function focusPlate() {
   return null;
 }
 
-function roundLocal(v) { const st = S.job.units === 'metric' ? 5 : 6.35; return Math.round(v / st) * st || 0; }
+function roundLocal(v) { const st = S.job.units === 'metric' ? 5 : 6.35; return Math.max(0, Math.round(v / st) * st) || 0; }
 
 function mapHover(fp) {
   const el = $('#hoverInfo'); if (!el) return;
@@ -1108,7 +1108,7 @@ document.addEventListener('change', async (e) => {
     const ft = S.job.features.find((f) => f.id === el.closest('[data-ed]').dataset.id); if (!ft) return;
     const k = el.dataset.fb;
     if (k === 'plate') { const p = findPlate(el.value); el.closest('.fld').classList.toggle('invalid', !p); if (!p) return; ft.plate = p.key; }
-    else ft[k] = readInput(el);
+    else { const v = readInput(el); if ((k === 'x' || k === 'y') && v !== null && v < 0) { toast(`${k.toUpperCase()} can't be negative.`); return; } ft[k] = v; }
     commit(); drawMap(); if (k === 'type') renderSide(); return;
   }
   if (el.matches('[data-cb]')) { S.company[el.dataset.cb] = el.value; await db.setMeta('company', S.company); return; }
@@ -1150,6 +1150,12 @@ function onIndField(el) {
     ind.plate = p.key;
   } else {
     const v = readInput(el);
+    if ((k === 'x' || k === 'y') && v !== null && v < 0) {
+      el.closest('.fld').classList.add('invalid');
+      toast(`${k.toUpperCase()} can't be negative. Measure it from the plate's datum corner (${datumName(S.layout.byKey.get(ind.plate) || { kind: 'floor', datum: { c: S.job.layout.refCorner || 'BL' } })}).`);
+      return;
+    }
+    el.closest('.fld')?.classList.remove('invalid');
     if (v === null || v === '') delete ind[k]; else ind[k] = v;
   }
   ind.updated = Date.now();

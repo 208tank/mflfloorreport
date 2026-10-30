@@ -119,8 +119,10 @@ The datum corner of each plate is marked on the map with a small green triangle 
 - **Mark the corner used:** on the Floor map press **D** (*Set datum*) and click inside the plate,
   in the corner the crew measured from. You can also pick the corner in the plate panel or in the
   Datum column on the Plates page. X/Y values stay as entered; they are read from the new corner.
-- **Cut edge plates:** if the chosen corner falls outside the shell, the datum sits where that
-  plate's seam meets the shell.
+- **X and Y are never negative.** They are measured from the plate's outer edges on the datum
+  side, so every point on the plate is zero or more. On cut edge plates where the datum corner falls
+  outside the shell, the marker is drawn where the seam meets the shell, but X/Y are still measured
+  from the plate's edges. Typed negative values are refused.
 - **Annular plates:** the datum is the start seam (X runs clockwise along the shell) or the end seam
   (X runs counter-clockwise); Y is the distance in from the shell.
 - Angles are clockwise from 0° at the top of the drawing; the 0° label (N, manway, etc.) is set in Setup.

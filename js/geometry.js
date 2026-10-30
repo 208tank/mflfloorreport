@@ -75,7 +75,7 @@ export function defaultLayout() {
  * Returns { R, Ri, plates: [...], byKey: Map }
  * plate = { key, label, kind: 'floor'|'annular', poly, bb, area, fullArea, cut, a0, a1 }
  */
-export function buildLayout(job) {
+export function buildLayout(job, opts = {}) {
   const L = { ...defaultLayout(), ...(job.layout || {}) };
   const R = (job.tank?.diameter || 0) / 2;
   const plates = [];
@@ -166,14 +166,17 @@ export function buildLayout(job) {
     }
     let x = custom ? o.datumX : c[1] === 'L' ? p.bb.x0 : p.bb.x1;
     let y = custom ? o.datumY : c[0] === 'B' ? p.bb.y0 : p.bb.y1;
-    let snapped = false;
+    // X/Y are measured from the plate's outer edges in the datum direction (the corner of its
+    // bounding box), so every point on the plate has X ≥ 0 and Y ≥ 0. Where that corner lies off the
+    // floor (cut by the shell), the marker is drawn at the nearest seam / shell point instead.
+    let mx = x, my = y, snapped = false;
     if (!custom && p.cut && !onPlate(p, x, y)) {
-      // corner lies off the floor (cut by the shell): use the nearest seam / shell point instead
       let bd = Infinity;
-      for (const [sx, sy] of datumSnapPoints(p)) { const d = Math.hypot(sx - x, sy - y); if (d < bd) { bd = d; x = sx; y = sy; } }
+      for (const [sx, sy] of datumSnapPoints(p)) { const d = Math.hypot(sx - x, sy - y); if (d < bd) { bd = d; mx = sx; my = sy; } }
       snapped = true;
+      if (opts.legacySnap) { x = mx; y = my; } // v1.0–1.7 measured from the snapped point
     }
-    p.datum = { c, custom, snapped, own: !!o.datumC || custom, x, y };
+    p.datum = { c, custom, snapped, own: !!o.datumC || custom, x, y, mx, my };
   }
   const byKey = new Map(plates.map((p) => [p.key, p]));
   return { R, Ri, plates, byKey, L };
@@ -382,7 +385,7 @@ export function toFloor(layout, plate, X, Y) {
 /** Datum position on the floor (for annular plates: the datum seam at the shell). */
 export function datumPoint(layout, plate) {
   if (plate.kind === 'annular') { const [x, y] = polar(layout.R, plate.datumEnd ? plate.a1 : plate.a0); return { x, y }; }
-  return { x: plate.datum.x, y: plate.datum.y };
+  return { x: plate.datum.mx ?? plate.datum.x, y: plate.datum.my ?? plate.datum.y };
 }
 
 /** Points worth snapping a datum to: plate corners and where seams meet the shell / annular ring. */
@@ -397,7 +400,7 @@ export const orientName = (o) => (o === 'v' ? 'Vertical' : 'Horizontal');
 
 export function datumName(plate) {
   if (plate.kind === 'annular') return plate.datumEnd ? 'end seam' : 'start seam';
-  if (plate.datum.snapped) return `${refCornerName(plate.datum.c)} corner (at shell)`;
+  if (plate.datum.snapped) return `${refCornerName(plate.datum.c)} (plate edges, corner cut by shell)`;
   return `${refCornerName(plate.datum.c)} corner`;
 }
 
