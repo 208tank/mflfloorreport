@@ -8,10 +8,10 @@ import { download, indicationsCSV, platesCSV, nozzlesCSV, shellCSV, svgForExport
 import { buildReport, legendHTML } from './report.js';
 import { newJob, migrate, nextNo, uid, getPath, setPath } from './model.js';
 import { makeDemo } from './demo.js';
-import { defaultShell, autoLocCount, utLocations, coursesWithElev, shellHeight, courseSummary, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
+import { defaultShell, defaultZones, autoLocCount, autoPlateCount, utLocations, coursesWithElev, courseAt, coursePlates, shellHeight, courseSummary, readingElevations, zoneCount, getReading, fmtElev, zKey, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '2.0.1';
+const APP_VERSION = '2.1.0';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -354,7 +354,7 @@ function refreshBuilder() {
   }, 0);
 }
 function focusSel(el) {
-  const attrs = ['data-rowf', 'data-row', 'data-secf', 'data-sec', 'data-mpf', 'data-pl', 'data-shc', 'data-shut', 'data-course', 'data-bind', 'data-act'];
+  const attrs = ['data-rowf', 'data-row', 'data-secf', 'data-sec', 'data-mpf', 'data-pl', 'data-shc', 'data-shut', 'data-course', 'data-z', 'data-zf', 'data-zone', 'data-bind', 'data-act'];
   const parts = attrs.filter((k) => el.hasAttribute(k)).map((k) => `[${k}="${CSS.escape(el.getAttribute(k))}"]`);
   return parts.length ? el.tagName.toLowerCase() + parts.join('') : null;
 }
@@ -962,34 +962,63 @@ function viewShell() {
 }
 
 function shellBodyHTML() {
-  const job = S.job, sh = job.shell || defaultShell(), U = u(job);
+  const job = S.job, sh = job.shell || defaultShell(job.units), U = u(job);
   const courses = coursesWithElev(job), locs = utLocations(job), sum = courseSummary(job);
-  const D = +job.tank?.diameter || 0, C = Math.PI * D, auto = autoLocCount(job);
+  const D = +job.tank?.diameter || 0, C = Math.PI * D, auto = autoLocCount(job), H = shellHeight(job);
   const top = courses.slice().reverse();
-  const cin = (c, k, kind, ph = '') => `<input data-shc="${k}" data-course="${c.id}" data-kind="${kind}" inputmode="decimal" value="${h(inVal(c[k], kind, job))}" placeholder="${h(ph)}">`;
+  const cin = (c, k, kind, ph = '', cls = '') => `<input data-shc="${k}" data-course="${c.id}" data-kind="${kind}" inputmode="decimal" value="${h(kind === 'num' ? c[k] ?? '' : inVal(c[k], kind, job))}" placeholder="${h(ph)}" class="${cls}">`;
   const st = (s) => (s.status ? `<span class="st ${s.status === 'OK' ? 'st-OK' : 'st-below-MRT'}">${s.status}</span>` : '');
   const sm = new Map(sum.map((x) => [x.id, x]));
+  const zs = readingElevations(job);
+  const autoN = autoPlateCount(job);
+
+  // readings grid: elevation rows bottom → top, grouped by course
+  let grid = '';
+  if (courses.length && zs.length) {
+    let cur = null;
+    const rows = [];
+    for (const z of zs) {
+      const c = courseAt(courses, z);
+      if (c && c.id !== cur) {
+        cur = c.id; const s = sm.get(c.id);
+        rows.push(`<tr class="crow"><td colspan="${locs.length + 2}"><b>Course ${c.no}</b> <span class="muted small">${fmtElev(c.z0, job)} – ${fmtElev(c.z1, job)} · nominal ${fmt(c.tNom, 't', job)} · t-min ${fmt(c.tMin, 't', job)} · min reading <b>${s.min != null ? fmt(s.min, 't', job) : '—'}</b></span> ${st(s)}</td></tr>`);
+      }
+      const vals = locs.map((l) => getReading(job, l.key, z)).filter((v) => v !== null);
+      const rmin = vals.length ? Math.min(...vals) : null;
+      const extra = (sh.extraZ || []).some((e) => zKey(e) === zKey(z));
+      rows.push(`<tr><td class="el">${fmtElev(z, job)}${extra ? ` <button class="x" data-act="z-del" data-z="${zKey(z)}" title="Remove this extra elevation">✕</button>` : ''}</td>${locs.map((l) => { const v = getReading(job, l.key, z); const bad = v != null && c?.tMin > 0 && v < c.tMin - 1e-9; return `<td class="${bad ? 'bad-cell' : ''}"><input data-shut="${l.key}" data-z="${zKey(z)}" data-kind="t" inputmode="decimal" value="${h(inVal(v, 't', job))}"></td>`; }).join('')}<td class="n">${rmin != null ? fmt(rmin, 't', job, false) : ''}</td></tr>`);
+    }
+    grid = rows.join('');
+  }
+
   return `<div class="shell-grid">
-    <section class="card"><div class="sp-head"><h2>Shell courses</h2><span class="muted small">${courses.length} course${courses.length === 1 ? '' : 's'} · ${fmt(shellHeight(job), 'big', job)} high</span></div>
-      <div class="tblwrap"><table class="grid courses"><thead><tr><th>Course</th><th>Height (${U.big})</th><th>Nominal t (${U.small})</th><th>t-min (${U.small})</th><th class="n">Min. reading</th><th class="n">Loss</th><th>Status</th><th></th></tr></thead><tbody>
-      ${top.map((c) => { const s = sm.get(c.id); return `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${c.no}</b>${c.no === 1 ? ' <span class="muted small">bottom</span>' : ''}</td><td>${cin(c, 'h', 'big')}</td><td>${cin(c, 'tNom', 't')}</td><td>${cin(c, 'tMin', 't')}</td><td class="n">${s.min != null ? fmt(s.min, 't', job, false) : '—'}<small class="muted"> ${s.count}/${s.of}</small></td><td class="n">${s.lossPct != null ? s.lossPct.toFixed(0) + '%' : '—'}</td><td>${st(s)}</td><td><button class="btn sm icon ghost danger" data-act="course-del" data-course="${c.id}" title="Delete course">✕</button></td></tr>`; }).join('') || `<tr><td colspan="8" class="empty">No courses yet. Add them from the bottom course up, or start with <button class="btn sm" data-act="courses-std" data-n="5">5 courses</button> <button class="btn sm" data-act="courses-std" data-n="6">6 courses</button> <button class="btn sm" data-act="courses-std" data-n="8">8 courses</button></td></tr>`}
+    <section class="card"><div class="sp-head"><h2>Shell courses &amp; plates</h2><span class="muted small">${courses.length} course${courses.length === 1 ? '' : 's'} · ${fmt(H, 'big', job)} high</span></div>
+      <div class="tblwrap"><table class="grid courses"><thead><tr><th>Course</th><th>Height (${U.big})</th><th>Nominal t (${U.small})</th><th>t-min (${U.small})</th><th title="Number of shell plates in the course">Plates</th><th title="Angle of the first vertical seam">1st seam (°)</th><th title="Optional: plate length; the last plate is the closure plate">Plate length (${U.big})</th><th class="n">Min. reading</th><th>Status</th><th></th></tr></thead><tbody>
+      ${top.map((c, k) => { const s = sm.get(c.id); const cp = coursePlates(job, c, c.no - 1); return `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${c.no}</b>${c.no === 1 ? ' <span class="muted small">bottom</span>' : ''}</td><td>${cin(c, 'h', 'big')}</td><td>${cin(c, 'tNom', 't')}</td><td>${cin(c, 'tMin', 't')}</td><td>${cin(c, 'pn', 'num', String(c.plen ? cp.n : autoN), 'xs')}</td><td>${cin(c, 'seam0', 'num', (Math.round(cp.seam0 * 10) / 10).toString(), 'xs')}</td><td>${cin(c, 'plen', 'big', fmt(cp.plates[0]?.len, 'big', job, false))}</td><td class="n">${s.min != null ? fmt(s.min, 't', job, false) : '—'}<small class="muted"> ${s.count}</small></td><td>${st(s)}</td><td><button class="btn sm icon ghost danger" data-act="course-del" data-course="${c.id}" title="Delete course">✕</button></td></tr>`; }).join('') || `<tr><td colspan="10" class="empty">No courses yet. Add them from the bottom course up, or start with <button class="btn sm" data-act="courses-std" data-n="5">5 courses</button> <button class="btn sm" data-act="courses-std" data-n="6">6 courses</button> <button class="btn sm" data-act="courses-std" data-n="8">8 courses</button></td></tr>`}
       </tbody></table></div>
       <div class="acts"><button class="btn sm" data-act="course-add">+ Course on top</button></div>
-      <p class="muted small">Course 1 is the bottom course. t-min is the minimum required thickness for each course (API 653 §4.3), entered by you.</p></section>
+      <p class="muted small">Course 1 is the bottom course. Plates: give the number of plates (equal lengths), or a plate length (full plates from the first seam, the last one is the closure plate). Blank first seam staggers alternate courses by half a plate. t-min is the minimum required thickness you enter for each course.</p></section>
 
+    <div class="shell-side">
     <section class="card"><h2>UT stations</h2>
       <p class="small">${D > 0 ? `Circumference ${fmt(C, 'big', job)} ÷ ${fmt(SPACING_MM, 'big', job)} = ${(C / SPACING_MM).toFixed(1)} → standard <b>${auto}</b> stations (minimum 4, maximum 8, one per 32 ft of circumference), equally spaced.` : 'Enter the tank diameter in Tank setup.'}</p>
       <div class="fgrid">${field('Number of stations', 'shell.nLoc', 'num', { ph: `${auto} (standard)`, hint: 'Leave blank for the standard count' })}${field('First station at', 'shell.start', 'num', { unit: '°', ph: '0' })}</div>
-      <div class="loc-list">${locs.map((l) => `<span class="loc-chip"><b>${l.label}</b> ${l.angle.toFixed(1)}° <small>${fmt(l.arc, 'big', job)}</small></span>`).join('')}</div>
-      <p class="muted small">Readings are kept by angle, so changing the count keeps readings at angles that stay the same (e.g. 0°, 90°, 180°, 270°).</p></section>
+      <div class="loc-list">${locs.map((l) => `<span class="loc-chip"><b>${l.label}</b> ${l.angle.toFixed(1)}° <small>${fmt(l.arc, 'big', job)}</small></span>`).join('')}</div></section>
+
+    <section class="card"><div class="sp-head"><h2>Reading elevations</h2><span class="muted small">${zs.length} per station · ${zs.length * locs.length} readings</span></div>
+      <p class="muted small">Readings are taken at each station at these elevations above the bottom. Each zone gives a reading every <i>step</i> from <i>start</i> to <i>end</i> (blank end = top of the shell). Values in ${U.small}.</p>
+      <table class="grid zones"><thead><tr><th>From</th><th>To</th><th>Every</th><th class="n">Readings</th><th></th></tr></thead><tbody>
+      ${(sh.zones || []).map((zn) => `<tr><td><input data-zf="start" data-zone="${zn.id}" data-kind="small" inputmode="decimal" value="${h(inVal(zn.start, 'small', job))}"></td><td><input data-zf="end" data-zone="${zn.id}" data-kind="small" inputmode="decimal" value="${h(inVal(zn.end, 'small', job))}" placeholder="top"></td><td><input data-zf="step" data-zone="${zn.id}" data-kind="small" inputmode="decimal" value="${h(inVal(zn.step, 'small', job))}"></td><td class="n">${zoneCount(job, zn)}<br><small class="muted">${fmtElev(+zn.start || 0, job)}${zn.end != null ? ' – ' + fmtElev(+zn.end, job) : ' – top'}</small></td><td><button class="btn sm icon ghost danger" data-act="zone-del" data-zone="${zn.id}" title="Remove zone">✕</button></td></tr>`).join('') || '<tr><td colspan="5" class="empty">No zones.</td></tr>'}
+      </tbody></table>
+      <div class="acts"><button class="btn sm" data-act="zone-add">+ Zone</button><button class="btn sm" data-act="zones-std">Standard: every 1 in to 2 ft, then every 1 ft</button></div>
+      <div class="acts extra-z"><label class="fld inline"><span class="lbl">Add one elevation</span><span class="ctl"><input id="extraZ" data-kind="small" inputmode="decimal" placeholder="${U.small}"><i class="unit">${U.small}</i></span></label><button class="btn sm" data-act="z-add">Add</button></div></section>
+    </div>
   </div>
 
-  ${courses.length ? `<section class="card"><div class="sp-head"><h2>UT readings</h2><span class="muted small">thickness in ${U.small} · tab across a course</span></div>
-    <div class="tblwrap"><table class="grid readings"><thead><tr><th>Course</th>${locs.map((l) => `<th class="n">${l.label}<br><small>${l.angle.toFixed(1)}°</small></th>`).join('')}<th class="n">Min</th><th>Status</th></tr></thead><tbody>
-    ${top.map((c) => { const s = sm.get(c.id); return `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${c.no}</b> <small class="muted">${c.tMin ? 'min ' + fmt(c.tMin, 't', job, false) : ''}</small></td>${locs.map((l) => { const v = sh.ut?.[l.key]?.[c.id]; const bad = v != null && c.tMin > 0 && v < c.tMin - 1e-9; return `<td class="${bad ? 'bad-cell' : ''}"><input data-shut="${l.key}" data-course="${c.id}" data-kind="t" inputmode="decimal" value="${h(inVal(v, 't', job))}"></td>`; }).join('')}<td class="n"><b>${s.min != null ? fmt(s.min, 't', job, false) : '—'}</b></td><td>${st(s)}</td></tr>`; }).join('')}
-    </tbody></table></div></section>` : ''}
+  ${courses.length ? `<section class="card"><div class="sp-head"><h2>UT readings</h2><span class="muted small">thickness in ${U.small} · Tab moves across, Enter moves up the station</span></div>
+    <div class="tblwrap rd-wrap"><table class="grid readings"><thead><tr><th>Elevation</th>${locs.map((l) => `<th class="n">${l.label}<br><small>${l.angle.toFixed(1)}°</small></th>`).join('')}<th class="n">Row min</th></tr></thead><tbody>${grid || `<tr><td colspan="${locs.length + 2}" class="empty">Set up reading elevations to start.</td></tr>`}</tbody></table></div></section>` : ''}
 
-  <section class="card"><div class="sp-head"><h2>Shell roll-out</h2><span class="muted small">UT station lines</span></div>
+  <section class="card"><div class="sp-head"><h2>Shell roll-out</h2><span class="muted small">vertical seams, plates and UT station lines</span></div>
     <div class="ro-wrap" id="roWrap">${rolloutSVG(job)}</div></section>`;
 }
 
@@ -1176,9 +1205,33 @@ document.addEventListener('click', async (e) => {
     }
     case 'course-del': {
       const sh = S.job.shell; const c = sh?.courses?.find((x) => x.id === el.dataset.course); if (!c) return;
-      const n = Object.values(sh.ut || {}).filter((m) => m[c.id] != null).length;
-      if (n && !(await askConfirm(`Delete this course and its ${n} UT reading${n > 1 ? 's' : ''}?`, { ok: 'Delete', danger: true }))) return;
-      sh.courses = sh.courses.filter((x) => x.id !== c.id); for (const m of Object.values(sh.ut || {})) delete m[c.id];
+      if (!(await askConfirm('Delete this course? The courses above it move down, and readings stay at their elevations.', { ok: 'Delete', danger: true }))) return;
+      sh.courses = sh.courses.filter((x) => x.id !== c.id); commit(); refreshShell(); return;
+    }
+    case 'zone-add': {
+      const sh = S.job.shell; sh.zones = sh.zones || [];
+      const last = sh.zones[sh.zones.length - 1];
+      const ft = S.job.units === 'metric' ? 300 : 304.8;
+      sh.zones.push({ id: uid(), start: last && last.end != null ? +last.end + (+last.step || ft) : 0, end: null, step: last?.step ?? ft });
+      commit(); refreshShell(); return;
+    }
+    case 'zone-del': { const sh = S.job.shell; sh.zones = (sh.zones || []).filter((z) => z.id !== el.dataset.zone); commit(); refreshShell(); return; }
+    case 'zones-std': {
+      if ((S.job.shell.zones || []).length && !(await askConfirm('Replace the reading zones with the standard pattern (every 1 in up to 2 ft, then every 1 ft to the top)? Readings already entered are kept.', { ok: 'Use standard' }))) return;
+      S.job.shell.zones = defaultZones(S.job.units); commit(); refreshShell(); return;
+    }
+    case 'z-add': {
+      const inp = $('#extraZ'); const v = toMm(inp?.value, 'small', S.job);
+      if (v === null || v < 0) { toast('Enter an elevation above the bottom.'); return; }
+      const H = shellHeight(S.job); if (H > 0 && v > H) { toast('That is above the top of the shell.'); return; }
+      const sh = S.job.shell; sh.extraZ = sh.extraZ || []; if (!sh.extraZ.some((e) => zKey(e) === zKey(v))) sh.extraZ.push(+zKey(v));
+      commit(); refreshShell(); return;
+    }
+    case 'z-del': {
+      const sh = S.job.shell, zk = el.dataset.z;
+      const has = Object.values(sh.rd || {}).some((m) => m?.[zk] != null);
+      if (has && !(await askConfirm(`Remove the elevation ${fmtElev(+zk, S.job)} and its readings?`, { ok: 'Remove', danger: true }))) return;
+      sh.extraZ = (sh.extraZ || []).filter((e) => zKey(e) !== zk); for (const m of Object.values(sh.rd || {})) if (m) delete m[zk];
       commit(); refreshShell(); return;
     }
     case 'courses-std': {
@@ -1253,17 +1306,29 @@ document.addEventListener('change', async (e) => {
   }
   if (el.matches('[data-shc]')) {
     const c = S.job.shell?.courses?.find((x) => x.id === el.dataset.course); if (!c) return;
-    const v = readInput(el); const k = el.dataset.shc;
-    if (v !== null && v < 0) { toast('Values can’t be negative.'); return; }
+    let v = readInput(el); const k = el.dataset.shc;
+    if (v !== null && v < 0 && k !== 'seam0') { toast('Values can’t be negative.'); return; }
+    if (k === 'seam0' && v !== null) v = ((v % 360) + 360) % 360;
+    if (k === 'pn' && v !== null) v = Math.max(1, Math.round(v));
     if (v === null) { if (k === 'h') return; delete c[k]; } else c[k] = v;
     commit(); refreshShell(); return;
   }
   if (el.matches('[data-shut]')) {
-    const sh = (S.job.shell = S.job.shell || defaultShell()); sh.ut = sh.ut || {};
-    const m = (sh.ut[el.dataset.shut] = sh.ut[el.dataset.shut] || {});
+    const sh = S.job.shell; sh.rd = sh.rd || {};
+    const m = (sh.rd[el.dataset.shut] = sh.rd[el.dataset.shut] || {});
     const v = readInput(el);
     if (v !== null && v < 0) { toast('Readings can’t be negative.'); return; }
-    if (v === null) delete m[el.dataset.course]; else m[el.dataset.course] = v;
+    if (v === null) delete m[el.dataset.z]; else m[el.dataset.z] = v;
+    commit(); refreshShell(); return;
+  }
+  if (el.matches('[data-zf]')) {
+    const zn = S.job.shell?.zones?.find((x) => x.id === el.dataset.zone); if (!zn) return;
+    const v = readInput(el), k = el.dataset.zf;
+    if (v !== null && v < 0) { toast('Values can’t be negative.'); return; }
+    if (k === 'step' && v !== null && v <= 0) { toast('The step must be more than zero.'); return; }
+    zn[k] = v;
+    const n = readingElevations(S.job).length;
+    if (n > 1500) toast(`That gives ${n} elevations per station — check the step.`);
     commit(); refreshShell(); return;
   }
   if (el.matches('[data-nb]')) {
@@ -1376,6 +1441,15 @@ function onIndField(el) {
 }
 
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.matches?.('input[data-shut]')) {
+    e.preventDefault();
+    const inputs = $$(`#shellBody input[data-shut="${CSS.escape(e.target.dataset.shut)}"]`);
+    const i = inputs.indexOf(e.target), next = inputs[e.shiftKey ? i - 1 : i + 1];
+    const key = next ? `input[data-shut="${CSS.escape(next.dataset.shut)}"][data-z="${CSS.escape(next.dataset.z)}"]` : null;
+    e.target.dispatchEvent(new Event('change', { bubbles: true }));
+    setTimeout(() => { const n = key && $('#shellBody ' + key); if (n) { n.focus(); n.select(); } }, 20);
+    return;
+  }
   const typing = e.target.matches('input, textarea, select');
   if (e.key === 'Escape') {
     if ($('#dlg').open || $('#confirmDlg').open) return;

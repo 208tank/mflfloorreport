@@ -2,7 +2,7 @@
 import { fmt, fmtRate, u } from './units.js';
 import { RESULTS, RESULT_SHORT, nozzleUT, NZ_CONN_SHORT, UT_CLOCK } from './calc.js';
 import { renderMapSVG, COLORS } from './map.js';
-import { rolloutSVG, utLocations, courseSummary, autoLocCount } from './shell.js';
+import { rolloutSVG, utLocations, courseSummary, coursesWithElev, courseAt, readingElevations, getReading, fmtElev, coursePlates } from './shell.js';
 import { itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
 
 const h = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -148,13 +148,27 @@ export function buildReport(job, layout, calc, company, photos, opts) {
 
   ${(() => {
     const cs = courseSummary(job); if (!cs.length) return '';
-    const locs = utLocations(job), top = cs.slice().reverse(), sh = job.shell || {};
+    const locs = utLocations(job), top = cs.slice().reverse(), sh = job.shell || {}, courses = coursesWithElev(job), zs = readingElevations(job);
+    const csm = new Map(cs.map((c) => [c.id, c]));
+    let cur = null; const rows = [];
+    for (const z of zs) {
+      const c = courseAt(courses, z);
+      if (c && c.id !== cur) { cur = c.id; const s = csm.get(c.id); rows.push(`<tr class="crow"><td colspan="${locs.length + 2}"><b>Course ${c.no}</b> · nominal ${fmt(c.tNom, 't', job)} · t-min ${fmt(c.tMin, 't', job)} · min reading <b>${s.min != null ? fmt(s.min, 't', job) : '—'}</b>${s.status === 'Below t-min' ? ' · <b>Below t-min</b>' : ''}</td></tr>`); }
+      const vals = locs.map((l) => getReading(job, l.key, z));
+      const got = vals.filter((v) => v !== null);
+      if (!got.length) continue;
+      rows.push(`<tr><td>${fmtElev(z, job)}</td>${vals.map((v) => `<td class="n">${v === null ? '—' : c?.tMin > 0 && v < c.tMin - 1e-9 ? '<b class="bad">' + fmt(v, 't', job, false) + '</b>' : fmt(v, 't', job, false)}</td>`).join('')}<td class="n">${fmt(Math.min(...got), 't', job, false)}</td></tr>`);
+    }
+    const zsNote = (sh.zones || []).filter((zn) => +zn.step > 0).map((zn) => `every ${fmt(+zn.step, 'small', job)} from ${fmtElev(+zn.start || 0, job)} to ${zn.end != null && zn.end !== '' ? fmtElev(+zn.end, job) : 'the top'}`).join('; ');
     return `<section class="pb"><h2>Shell UT</h2>
       <div class="ro-print">${rolloutSVG(job, { print: true })}</div>
-      <p class="note">${locs.length} UT stations equally spaced from ${(+sh.start || 0).toFixed(1)}°${+sh.nLoc > 0 ? '' : ` (standard: one per 32 ft of circumference, minimum 4, maximum 8)`}. Readings at mid-height of each course. Thickness in ${U.small}.</p>
-      <table class="grid small"><thead><tr><th>Course</th><th class="n">Height</th><th class="n">Nominal</th><th class="n">t-min</th>${locs.map((l) => `<th class="n">${l.label}<br>${l.angle.toFixed(0)}°</th>`).join('')}<th class="n">Min</th><th class="n">Loss</th><th>Status</th></tr></thead><tbody>
-      ${top.map((c) => `<tr class="${c.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${c.no}</b></td><td class="n">${fmt(c.h, 'big', job, false)}</td><td class="n">${fmt(c.tNom, 't', job, false)}</td><td class="n">${fmt(c.tMin, 't', job, false)}</td>${locs.map((l) => { const v = sh.ut?.[l.key]?.[c.id]; return `<td class="n">${v != null ? (c.tMin > 0 && v < c.tMin - 1e-9 ? '<b>' + fmt(v, 't', job, false) + '</b>' : fmt(v, 't', job, false)) : '—'}</td>`; }).join('')}<td class="n"><b>${c.min != null ? fmt(c.min, 't', job, false) : '—'}</b></td><td class="n">${c.lossPct != null ? c.lossPct.toFixed(0) + '%' : '—'}</td><td>${c.status === 'Below t-min' ? '<b>Below t-min</b>' : h(c.status)}</td></tr>`).join('')}
-      </tbody></table></section>`;
+      <p class="note">${locs.length} UT stations equally spaced from ${(+sh.start || 0).toFixed(1)}°${+sh.nLoc > 0 ? '' : ' (standard: one per 32 ft of circumference, minimum 4, maximum 8)'}. Readings at each station ${zsNote || 'at the elevations listed'}. Thickness in ${U.small}.</p>
+      <table class="grid small"><thead><tr><th>Course</th><th class="n">Height</th><th class="n">Plates</th><th class="n">Nominal</th><th class="n">t-min</th><th class="n">Readings</th><th class="n">Min</th><th class="n">Loss</th><th>Status</th></tr></thead><tbody>
+      ${top.map((c) => `<tr class="${c.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${c.no}</b></td><td class="n">${fmt(c.h, 'big', job, false)}</td><td class="n">${coursePlates(job, c, c.no - 1).n}</td><td class="n">${fmt(c.tNom, 't', job, false)}</td><td class="n">${fmt(c.tMin, 't', job, false)}</td><td class="n">${c.count}</td><td class="n"><b>${c.min != null ? fmt(c.min, 't', job, false) : '—'}</b></td><td class="n">${c.lossPct != null ? c.lossPct.toFixed(0) + '%' : '—'}</td><td>${c.status === 'Below t-min' ? '<b>Below t-min</b>' : h(c.status)}</td></tr>`).join('')}
+      </tbody></table></section>
+    <section class="pb"><h2>Shell UT readings</h2>
+      <table class="grid small readings-rp"><thead><tr><th>Elevation</th>${locs.map((l) => `<th class="n">${l.label}<br>${l.angle.toFixed(0)}°</th>`).join('')}<th class="n">Min</th></tr></thead><tbody>${rows.join('') || `<tr><td colspan="${locs.length + 2}">No readings recorded.</td></tr>`}</tbody></table>
+      <p class="note">Elevation above the bottom of the shell. Readings below the course t-min in bold. Thickness in ${U.small}.</p></section>`;
   })()}
   ${platesBlock}
   ${photoBlock}

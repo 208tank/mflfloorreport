@@ -1,5 +1,6 @@
 // Demo job so the app can be tried without field data.
 import { newJob, uid } from './model.js';
+import { defaultZones } from './shell.js';
 import { buildLayout, plateAt, toLocal, polar } from './geometry.js';
 
 const IN = 25.4, FT = 304.8;
@@ -55,13 +56,22 @@ export function makeDemo() {
     { id: uid(), mark: 'N3', type: 'Water draw / drain', angle: 182, size: 4 * IN, elev: 6 * IN, service: 'Water draw to sump', conn: 'THD', sched: 'Sch 80', tNom: 0.337 * IN, tMin: 0.2 * IN, ut12: 0.301 * IN, ut3: 0.255 * IN, ut6: 0.188 * IN, ut9: 0.262 * IN, utx: [{ id: uid(), loc: '6 o’clock at shell weld', t: 0.176 * IN }] },
     { id: uid(), mark: 'CO1', type: 'Clean-out door', angle: 270, size: 48 * IN, elev: 24 * IN, service: 'Flush clean-out' }
   ];
-  // shell: 5 courses of 8 ft, readings at the 8 standard locations (377 ft circumference)
+  // shell: 5 courses of 8 ft, 13 plates per course, readings at the 8 standard stations using the
+  // standard pattern (every 1 in up to 2 ft, then every 1 ft to the top)
   const nom = [0.5, 0.4375, 0.375, 0.3125, 0.25], tmin = [0.39, 0.31, 0.24, 0.16, 0.1];
-  job.shell = { courses: nom.map((t, i) => ({ id: uid(), h: 8 * FT, tNom: t * IN, tMin: tmin[i] * IN })), nLoc: null, start: 0, ut: {}, notes: '' };
-  const wear = [[0.012, 0.018, 0.031, 0.015, 0.02, 0.026, 0.124, 0.017], [0.01, 0.014, 0.02, 0.012, 0.016, 0.011, 0.019, 0.013], [0.008, 0.01, 0.012, 0.009, 0.014, 0.01, 0.011, 0.009], [0.006, 0.008, 0.007, 0.01, 0.006, 0.009, 0.008, 0.007], [0.005, 0.007, 0.006, 0.004, 0.006, 0.005, 0.007, 0.006]];
+  job.shell = { courses: nom.map((t, i) => ({ id: uid(), h: 8 * FT, tNom: t * IN, tMin: tmin[i] * IN, pn: 13 })), nLoc: null, start: 0, rd: {}, zones: defaultZones('imperial'), extraZ: [], notes: '' };
+  const zs = [];
+  for (let k = 1; k <= 24; k++) zs.push(k * IN);
+  for (let k = 3; k <= 40; k++) zs.push(k * FT);
+  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   for (let q = 0; q < 8; q++) {
-    const key = (q * 45).toFixed(1); job.shell.ut[key] = {};
-    job.shell.courses.forEach((c, i) => { job.shell.ut[key][c.id] = Math.round((nom[i] - wear[i][q]) * 1000) / 1000 * IN; });
+    const key = (q * 45).toFixed(1); job.shell.rd[key] = {};
+    for (const z of zs) {
+      const ci = Math.min(4, Math.floor(z / (8 * FT) - 1e-9));
+      let loss = 0.004 + rnd() * 0.012;
+      if (z <= 12 * IN) loss += 0.03 * (1 - z / (12 * IN)) + (q === 6 ? 0.1 * Math.max(0, 1 - Math.abs(z - 3 * IN) / (3 * IN)) : 0); // corrosion near the bottom, worst at 270°
+      job.shell.rd[key][(Math.round(z * 10) / 10).toFixed(1)] = Math.round((nom[ci] - loss) * 1000) / 1000 * IN;
+    }
   }
   const sump = layout.plates.find((p) => p.key === job.features[0].plate);
   if (sump) job.plates[sump.key] = { scan: 'partial', notes: 'Around sump not scannable' };

@@ -129,22 +129,31 @@ straight into the Shell nozzles table in Tank setup.
 
 ## Shell UT and roll-out
 
-The **Shell UT** page records shell course thickness readings:
+The **Shell UT** page records shell thickness readings:
 
-- **Shell courses** — course 1 at the bottom; height, nominal thickness and t-min (minimum required
-  thickness, entered by you) for each. Quick start with 5, 6 or 8 courses; *+ Course on top* adds more.
+- **Shell courses & plates** — course 1 at the bottom; height, nominal thickness and t-min
+  (minimum required thickness, entered by you). For the roll-out, each course has a **plate count**
+  (equal plates) or a **plate length** (full plates from the first seam, last one the closure
+  plate) and the **angle of its first vertical seam**. Blank first seam staggers alternate courses
+  by half a plate; blank plate count suggests ≈ 30 ft plates.
 - **UT stations** — the standard count is the circumference ÷ 32 ft, rounded down, **minimum 4 and
-  maximum 8**, equally spaced from 0° (e.g. a 30 ft tank gets 4, a 60 ft tank 5, 82 ft or larger 8).
-  Override the count or the first station's angle if needed. Readings are stored by angle, so
-  stations that stay put (0°, 90°, 180°, 270°) keep their readings when the count changes.
-- **UT readings** — one reading per course at each station; tab across a course. Each course shows
-  its minimum reading, % loss against nominal and OK / Below t-min.
-- **Shell roll-out** — the shell unwrapped from 0° to 360° looking from outside, courses as bands,
-  the UT station lines with their angle and distance along the circumference, and shell nozzles at
-  their angle and elevation. The readings themselves are in the readings table. Horizontal and
-  vertical scales differ.
-- The report has a Shell UT page with the roll-out and the readings table. *Export → Shell UT
-  readings (CSV / Excel)* and *Shell roll-out (SVG)*.
+  maximum 8**, equally spaced from 0° (a 30 ft tank gets 4, 60 ft gets 5, about 82 ft and larger 8).
+  Override the count or the first station's angle if needed.
+- **Reading elevations** — set by zones, each a reading every *step* from *start* to *end* above
+  the bottom (blank end = top of the shell). The standard pattern is **every 1 in from 1 in to
+  2 ft, then every 1 ft from 3 ft to the top**. Add, edit or remove zones, or add single extra
+  elevations. Every station gets a reading at every elevation.
+- **UT readings** — a grid of elevations (grouped by course, bottom to top) × stations. Tab moves
+  across; **Enter moves up the same station** (Shift+Enter down). Readings below the course t-min
+  are red; each course shows its minimum, % loss against nominal and OK / Below t-min. Readings
+  are stored by station angle and elevation, so changing the pattern keeps readings already taken.
+- **Shell roll-out** — the shell unwrapped from 0° to 360° looking from outside, courses divided
+  into their plates by the **vertical seams** (plates numbered course-plate, e.g. 1-4), UT station
+  lines with angle and distance along the circumference, and shell nozzles at their angle and
+  elevation. Horizontal and vertical scales differ.
+- The report has a Shell UT page (roll-out and course summary) and a **Shell UT readings** table of
+  every elevation and station. *Export → Shell UT readings (CSV / Excel)* and *Shell roll-out (SVG)*.
+- Readings entered in v2.0 (one per course) are kept at mid-height of their course.
 
 ## Location convention — datum corners
 

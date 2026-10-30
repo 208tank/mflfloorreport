@@ -320,6 +320,18 @@ button.sug { border: 1px dashed var(--accent); background: none; color: var(--ac
 /* shell UT */
 .shell-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; }
 .grid.courses input { width: 84px; min-height: 28px; padding: 3px 6px; text-align: right; font-size: 13px; }
+.shell-side { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+.grid.courses input.xs { width: 54px; }
+.grid.zones input { width: 76px; min-height: 28px; padding: 3px 6px; text-align: right; font-size: 13px; }
+.extra-z { margin-top: 8px; } .extra-z .fld.inline .ctl { width: 110px; }
+.rd-wrap { max-height: 70vh; overflow: auto; }
+.grid.readings td.el { white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; }
+.grid.readings td.el .x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 11px; }
+.grid.readings tr.crow td { background: var(--accent-soft); color: var(--ink); position: sticky; top: 38px; z-index: 1; }
+.grid.readings td { padding: 3px 6px; }
+.report .readings-rp td { padding: 2px 6px; font-size: 10px; } .report .readings-rp tr.crow td { background: #eef5f4; font-size: 10.5px; }
+.report b.bad { color: #b91c1c; }
+.rollout .ro-seam { stroke: var(--ink); stroke-width: 1.3; } .rollout .ro-pl { fill: var(--muted); }
 .grid.readings input { width: 70px; min-height: 28px; padding: 3px 6px; text-align: right; font-size: 13px; }
 .grid.readings td.bad-cell input { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); font-weight: 600; }
 .loc-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
