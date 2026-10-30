@@ -109,6 +109,16 @@ datum corner on the standard grid and drawn on top of the neighbouring plates, s
 stay where they were measured. Blank fields fall back to the standard size; *Reset to standard size*
 clears all three. The plate register and plate CSV list each plate's size and orientation.
 
+## Shell nozzles
+
+Nozzles, manways, inlets/outlets, water draws, clean-out doors and other shell openings are located
+by **angle around the shell** (clockwise from 0°), not by plate. Add them on the Floor map with
+**+ Nozzle** and a click at the shell (the angle is taken from the click, to the nearest 0.5°; hold
+Shift to add several), or type them into **Tank setup → Shell nozzles**. Each has a mark (N1, MH1,
+CO1… numbered automatically by type), type, angle, size, elevation to centreline and service. They
+are drawn outside the shell on the map and report, listed in a nozzle schedule in the report, and
+exported with *Export → Nozzle schedule (CSV / Excel)*. Click a nozzle on the map to edit it.
+
 ## Location convention — datum corners
 
 Every indication and feature is located by **plate + X/Y measured from the plate's datum corner**.

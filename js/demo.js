@@ -47,6 +47,14 @@ export function makeDemo() {
     ...[0, 60, 120, 180, 240, 300].map((a, i) => feat('column', `C${i + 2}`, 30, a + 30, t(10))),
     feat('patch', 'Patch (2015)', 20, 110, t(24), t(24))
   ];
+  job.nozzles = [
+    { id: uid(), mark: 'MH1', type: 'Manway', angle: 0, size: 24 * IN, elev: 30 * IN, service: 'Shell manway' },
+    { id: uid(), mark: 'MH2', type: 'Manway', angle: 180, size: 24 * IN, elev: 30 * IN, service: 'Shell manway' },
+    { id: uid(), mark: 'N1', type: 'Inlet', angle: 45, size: 12 * IN, elev: 18 * IN, service: 'Product inlet' },
+    { id: uid(), mark: 'N2', type: 'Outlet', angle: 135, size: 12 * IN, elev: 18 * IN, service: 'Product outlet' },
+    { id: uid(), mark: 'N3', type: 'Water draw / drain', angle: 182, size: 4 * IN, elev: 6 * IN, service: 'Water draw to sump' },
+    { id: uid(), mark: 'CO1', type: 'Clean-out door', angle: 270, size: 48 * IN, elev: 24 * IN, service: 'Flush clean-out' }
+  ];
   const sump = layout.plates.find((p) => p.key === job.features[0].plate);
   if (sump) job.plates[sump.key] = { scan: 'partial', notes: 'Around sump not scannable' };
   const p2 = at(18, 112).plate; job.plates[p2] = { ...(job.plates[p2] || {}), scan: 'partial', notes: 'Patch plate' };

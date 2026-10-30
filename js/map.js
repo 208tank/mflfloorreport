@@ -37,7 +37,7 @@ export function renderMapSVG(job, layout, opts = {}) {
   const R = layout.R;
   if (!(R > 0)) return `<svg class="floormap" viewBox="0 0 100 60"><text x="50" y="30" text-anchor="middle" class="empty-msg" font-size="4">Enter the tank diameter and plate size in Setup</text></svg>`;
   const s = R / 100;
-  const M = R * 0.16;
+  const M = R * ((job.nozzles || []).length ? 0.19 : 0.16);
   const vb = `${f(-R - M)} ${f(-R - M)} ${f(2 * (R + M))} ${f(2 * (R + M))}`;
   const calc = opts.calc;
   const out = [];
@@ -68,7 +68,7 @@ export function renderMapSVG(job, layout, opts = {}) {
     const [x1, y1] = polar(R + s * 1.2, a), [x2, y2] = polar(R + s * (big ? 4.5 : 2.8), a);
     out.push(`<line x1="${f(x1)}" y1="${f(-y1)}" x2="${f(x2)}" y2="${f(-y2)}" stroke-width="${f(s * (big ? 0.45 : 0.25))}"/>`);
     if (big) {
-      const [tx, ty] = polar(R + s * 9, a);
+      const [tx, ty] = polar(R + s * ((job.nozzles || []).length ? 13.5 : 9), a);
       const lab = a === 0 && job.info?.zeroRef ? `${a}° ${job.info.zeroRef}` : `${a}°`;
       out.push(`<text x="${f(tx)}" y="${f(-ty)}" font-size="${f(s * 3.6)}" text-anchor="middle" dominant-baseline="central" class="${a === 0 ? 'zero' : ''}">${esc(lab)}</text>`);
     }
@@ -85,6 +85,26 @@ export function renderMapSVG(job, layout, opts = {}) {
       if (p.kind === 'annular') fs = Math.min(s * 2.6, (R - layout.Ri) * 0.45);
       if (fs < s * 0.9) continue;
       out.push(`<text x="${f(cx)}" y="${f(-cy)}" font-size="${f(fs)}" text-anchor="middle" dominant-baseline="central">${esc(p.label)}</text>`);
+    }
+    out.push('</g>');
+  }
+
+  // shell nozzles (outside the shell, by angle)
+  if ((job.nozzles || []).length) {
+    out.push(`<g class="nozzles" stroke-width="${f(s * 0.35)}">`);
+    for (const nz of job.nozzles) {
+      const a = +nz.angle; if (!Number.isFinite(a)) continue;
+      const big = /manway|door/i.test(nz.type || '');
+      const sz = Math.max(+nz.size || 0, s * (big ? 2.6 : 1.6));
+      const L1 = R + s * 0.4, L2 = R + s * (big ? 3.2 : 4.2);
+      const rad = a * Math.PI / 180, tx = Math.cos(rad), ty = -Math.sin(rad); // tangent (floor coords)
+      const P = (r, t) => { const [x, y] = polar(r, a); return [x + tx * t, y + ty * t]; };
+      const pts = [P(L1, -sz / 2), P(L2, -sz / 2), P(L2, sz / 2), P(L1, sz / 2)];
+      const fl = [P(L2, -sz / 2 - s * 0.7), P(L2 + s * 0.9, -sz / 2 - s * 0.7), P(L2 + s * 0.9, sz / 2 + s * 0.7), P(L2, sz / 2 + s * 0.7)];
+      const d = (q) => 'M' + q.map(([x, y]) => `${f(x)} ${f(-y)}`).join('L') + 'Z';
+      const [lx, ly] = polar(L2 + s * 3, a);
+      out.push(`<g class="nozzle${big ? ' mw' : ''}${opts.selNozzle === nz.id ? ' sel' : ''}" data-nozzle="${esc(nz.id)}"><path d="${d(pts)}"/><path class="fl" d="${d(fl)}"/>` +
+        `<text x="${f(lx)}" y="${f(-ly)}" font-size="${f(s * 2.3)}" text-anchor="middle" dominant-baseline="central">${esc(nz.mark || '')}</text></g>`);
     }
     out.push('</g>');
   }
@@ -232,7 +252,7 @@ export class MapController {
     const d = this.drag; this.drag = null; this.c.classList.remove('panning');
     if (!d || d.moved) return;
     const fp = this.floorPt(e);
-    const t = e.target.closest?.('[data-ind],[data-feature],[data-plate]');
-    this.h.onClick?.(fp, { ind: t?.dataset.ind, feature: t?.dataset.feature, plate: t?.dataset.plate, shift: e.shiftKey });
+    const t = e.target.closest?.('[data-ind],[data-feature],[data-nozzle],[data-plate]');
+    this.h.onClick?.(fp, { ind: t?.dataset.ind, feature: t?.dataset.feature, nozzle: t?.dataset.nozzle, plate: t?.dataset.plate, shift: e.shiftKey });
   }
 }

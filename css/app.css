@@ -297,6 +297,16 @@ button.sug { border: 1px dashed var(--accent); background: none; color: var(--ac
 .pchip.out { border-style: dashed; border-color: var(--warn); opacity: .75; }
 .pchip .x { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 3px; font-size: 12px; } .pchip .x:hover { color: var(--bad); }
 
+/* shell nozzles */
+.floormap .nozzle { cursor: pointer; }
+.floormap .nozzle path { fill: var(--panel); stroke: var(--ink2); }
+.floormap .nozzle .fl { fill: var(--ink2); }
+.floormap .nozzle.mw path:not(.fl) { fill: var(--plate-ann); }
+.floormap .nozzle text { fill: var(--ink); font-family: var(--font); font-weight: 700; stroke: none; paint-order: stroke; }
+.floormap .nozzle.sel path { stroke: #0ea5e9; } .floormap .nozzle.sel .fl { fill: #0ea5e9; } .floormap .nozzle.sel text { fill: #0369a1; }
+.grid.nozzles input, .grid.nozzles select { min-height: 28px; padding: 3px 6px; font-size: 13px; }
+.grid.nozzles input.num { width: 70px; text-align: right; } .grid.nozzles input.mk { width: 64px; font-weight: 600; }
+
 /* datums */
 .floormap .datums { pointer-events: none; }
 .floormap .datum { fill: var(--accent); opacity: .5; stroke: none; }

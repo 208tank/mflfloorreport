@@ -4,20 +4,20 @@ import { u, toMm, inVal, fmt, fmtRate, unitLabel, num, UNITS } from './units.js'
 import { buildLayout, stackSections, suggestCount, halfChord, plateAt, toLocal, itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
 import { api653, RESULTS, RESULT_SHORT, czLimitAuto, plateNominal } from './calc.js';
 import { renderMapSVG, MapController } from './map.js';
-import { download, indicationsCSV, platesCSV, svgForExport, svgToPng, fileBase } from './export.js';
+import { download, indicationsCSV, platesCSV, nozzlesCSV, svgForExport, svgToPng, fileBase } from './export.js';
 import { buildReport, legendHTML } from './report.js';
 import { newJob, migrate, nextNo, uid, getPath, setPath } from './model.js';
 import { makeDemo } from './demo.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '1.7.1';
+const APP_VERSION = '1.8.0';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const S = {
   jobs: [], job: null, layout: null, calc: null, photos: [], company: {},
-  view: 'jobs', sel: null, selPlate: null, selFeature: null, mode: 'select', ftType: 'column',
+  view: 'jobs', sel: null, selPlate: null, selFeature: null, selNozzle: null, mode: 'select', ftType: 'column',
   plateLabels: true, indLabels: true, showCZ: true, showDatums: true, filter: new Set(Object.keys(RESULTS)),
   search: '', resFilter: 'all', sort: { key: 'no', dir: 1 }, plateSearch: '',
   reportOpts: { photos: true, plates: false, provenOnly: false, plateLabels: true, datums: true },
@@ -39,6 +39,13 @@ const VT_COND = ['', 'None visible', 'Isolated pit', 'Pitting cluster', 'General
 const COATING = ['', 'None', 'Intact', 'Blistered', 'Disbonded', 'Failed / missing'];
 const UT_METHOD = ['', 'A-scan', 'B-scan', 'C-scan / mapping', 'Thickness gauge', 'Other'];
 const REPAIR_METHOD = ['', 'Patch plate (lap welded)', 'Weld build-up', 'Insert plate', 'Plate replacement', 'Coating / lining', 'Monitor', 'Other'];
+const NZ_TYPES = ['Nozzle', 'Manway', 'Inlet', 'Outlet', 'Water draw / drain', 'Clean-out door', 'Mixer', 'Level / instrument', 'Other'];
+const nzPrefix = (t) => (/manway/i.test(t) ? 'MH' : /clean-out/i.test(t) ? 'CO' : 'N');
+function nextMark(type) {
+  const pre = nzPrefix(type); let max = 0;
+  for (const n of S.job.nozzles || []) { const m = String(n.mark || '').match(new RegExp('^' + pre + '(\\d+)$')); if (m) max = Math.max(max, +m[1]); }
+  return pre + (max + 1);
+}
 const FT_TYPES = [['column', 'Roof column'], ['sump', 'Sump'], ['patch', 'Patch plate / repair'], ['nozzle', 'Nozzle / fitting'], ['manway', 'Manway'], ['other', 'Other']];
 
 /* ---------------------------------------------------------------- state ---- */
@@ -268,6 +275,8 @@ function viewSetup() {
         <p class="muted small">${L.mode !== 'grid' ? 'Edit the rows in the Floor builder below. Blank sizes use the standard plate size. ' : ''}Rows are lettered from the ${L.orient === 'v' ? 'left' : 'top'} of the drawing. X is horizontal and Y is vertical on the drawing, from each plate's datum — by default its ${refCornerName(L.refCorner)} corner. Set a different corner, or a plate's measured length, width and orientation, by clicking the plate on the Floor map or on the Plates page.</p>
       </section>
 
+      <section class="card" id="nozzleCard">${nozzleTableHTML()}</section>
+
       ${L.mode !== 'grid' ? `<section class="card" id="builderCard">${L.mode === 'measured' ? measuredHTML() : builderHTML()}</section>` : ''}
 
       <section class="card"><h2>Equipment</h2><div class="fgrid">
@@ -440,6 +449,7 @@ function viewMap() {
         <button class="btn sm${S.mode === 'select' ? ' on' : ''}" data-act="mode" data-mode="select" title="Select / pan (Esc)">Select</button>
         <button class="btn sm${S.mode === 'add' ? ' on' : ''}" data-act="mode" data-mode="add" title="Click the map to add an indication (N). Hold Shift to add several.">+ Indication <kbd>N</kbd></button>
         <button class="btn sm${S.mode === 'feature' ? ' on' : ''}" data-act="mode" data-mode="feature" title="Click the map to add a floor feature">+ Feature</button>
+        <button class="btn sm${S.mode === 'nozzle' ? ' on' : ''}" data-act="mode" data-mode="nozzle" title="Click at the shell to add a nozzle at that angle">+ Nozzle</button>
         <button class="btn sm${S.mode === 'datum' ? ' on' : ''}" data-act="mode" data-mode="datum" title="Click inside a plate, in the corner the X/Y was measured from (D)">Set datum <kbd>D</kbd></button>
         <select id="ftType" class="sm" title="Feature type">${FT_TYPES.map(([k, v]) => `<option value="${k}" ${S.ftType === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
       </div>
@@ -471,14 +481,14 @@ after.map = () => {
 function drawMap() {
   const box = $('#mapbox'); if (!box) return;
   box.innerHTML = renderMapSVG(S.job, S.layout, {
-    calc: S.calc, selected: S.sel, selPlate: S.selPlate, selFeature: S.selFeature,
+    calc: S.calc, selected: S.sel, selPlate: S.selPlate, selFeature: S.selFeature, selNozzle: S.selNozzle,
     plateLabels: S.plateLabels, indLabels: S.indLabels, filter: S.filter, showCZ: S.showCZ,
     showDatums: S.showDatums || S.mode === 'datum', datumFocus: focusPlate(),
     floorOf: (ft) => itemFloor(S.layout, ft)
   });
   box.dataset.mode = S.mode;
   S.mapCtl?.afterRender();
-  const hint = { datum: 'Click inside a plate, in the corner the X/Y was measured from · Esc to stop', select: '', add: 'Click a plate to place an indication · Shift-click to keep adding · Esc to stop', feature: 'Click to place the feature · Esc to stop', place: 'Click the map to set this indication\'s location · Esc to cancel' }[S.mode];
+  const hint = { nozzle: 'Click at the shell where the nozzle is — its angle is taken from the click · Esc to stop', datum: 'Click inside a plate, in the corner the X/Y was measured from · Esc to stop', select: '', add: 'Click a plate to place an indication · Shift-click to keep adding · Esc to stop', feature: 'Click to place the feature · Esc to stop', place: 'Click the map to set this indication\'s location · Esc to cancel' }[S.mode];
   const mh = $('#modeHint'); if (mh) mh.textContent = hint || '';
 }
 
@@ -494,6 +504,7 @@ function roundLocal(v) { const st = S.job.units === 'metric' ? 5 : 6.35; return 
 function mapHover(fp) {
   const el = $('#hoverInfo'); if (!el) return;
   if (!fp) { el.textContent = 'Scroll to zoom · drag to pan'; return; }
+  if (S.mode === 'nozzle') { el.innerHTML = `Shell angle <b>${(Math.round(angleOf(fp.x, fp.y) * 2) / 2).toFixed(1)}°</b>`; return; }
   const p = plateAt(S.layout, fp.x, fp.y);
   const r = Math.hypot(fp.x, fp.y);
   if (!p) { el.textContent = r > S.layout.R ? 'Outside shell' : 'No plate here'; return; }
@@ -504,6 +515,17 @@ function mapHover(fp) {
 function mapClick(fp, hit) {
   if (!fp) return;
   const p = plateAt(S.layout, fp.x, fp.y);
+  if (S.mode === 'nozzle') {
+    const ang = Math.round(angleOf(fp.x, fp.y) * 2) / 2 % 360;
+    const nz = { id: uid(), mark: nextMark('Nozzle'), type: 'Nozzle', angle: ang, size: null, elev: null, service: '' };
+    S.job.nozzles = S.job.nozzles || []; S.job.nozzles.push(nz);
+    S.selNozzle = nz.id; S.sel = S.selPlate = S.selFeature = null;
+    if (!hit.shift) S.mode = 'select';
+    $$('[data-act="mode"]').forEach((b) => b.classList.toggle('on', b.dataset.mode === S.mode));
+    commit(); drawMap(); renderSide();
+    setTimeout(() => $('#side [data-nb="type"]')?.focus(), 30);
+    return;
+  }
   if (S.mode === 'datum') {
     if (!p) return toast('Click inside a plate, in the corner used as the datum.');
     if (p.kind === 'annular') {
@@ -545,8 +567,9 @@ function mapClick(fp, hit) {
     return;
   }
   S.sel = hit.ind || null;
-  S.selFeature = !S.sel ? hit.feature || null : null;
-  S.selPlate = !S.sel && !S.selFeature && p ? p.key : null;
+  S.selNozzle = !S.sel ? hit.nozzle || null : null;
+  S.selFeature = !S.sel && !S.selNozzle ? hit.feature || null : null;
+  S.selPlate = !S.sel && !S.selFeature && !S.selNozzle && p ? p.key : null;
   drawMap(); renderSide();
 }
 
@@ -571,6 +594,7 @@ const curInd = () => S.job?.indications.find((i) => i.id === S.sel);
 function renderSide(focusFirst) {
   const side = $('#side'); if (!side) return;
   if (S.sel && curInd()) side.innerHTML = indEditor(curInd(), 'side');
+  else if (S.selNozzle) side.innerHTML = nozzleEditor();
   else if (S.selFeature) side.innerHTML = featureEditor();
   else if (S.selPlate) side.innerHTML = plateEditor(S.selPlate);
   else side.innerHTML = sideOverview();
@@ -674,6 +698,34 @@ function refreshEditorParts(root) {
 }
 
 /* ---------------------------------------------------- feature & plate edit */
+
+function nozzleEditor() {
+  const nz = (S.job.nozzles || []).find((x) => x.id === S.selNozzle); if (!nz) return sideOverview();
+  const f = (label, key, kind = 'text', extra = {}) => field(label, key, kind, { ...extra, attr: 'data-nb', value: nz[key], attrs: `data-id="${nz.id}"` });
+  return `<div class="ed" data-ed="nozzle" data-id="${nz.id}"><div class="ed-head"><div class="ed-title"><span>Shell nozzle</span><b>${h(nz.mark || '')}</b></div><div class="acts"><button class="btn sm icon ghost" data-act="close-sel">✕</button></div></div>
+    <div class="fgrid">
+      ${f('Mark', 'mark')}${f('Type', 'type', 'sel', { options: NZ_TYPES })}
+      ${f('Angle (clockwise from 0°)', 'angle', 'num', { unit: '°' })}${f('Size (nominal / opening)', 'size', 'small')}
+      ${f('Elevation to centreline', 'elev', 'small', { hint: 'Above the tank bottom' })}${f('Service / description', 'service', 'text', { ph: 'e.g. Inlet, 4" drain' })}
+      ${f('Notes', 'notes', 'area', { rows: 2, cls: 'span2' })}
+    </div>
+    <p class="muted small">Nozzles are located by angle around the shell, measured clockwise from 0° ${h(S.job.info.zeroRef || '')}. All nozzles are listed in Tank setup → Shell nozzles and in the report.</p>
+    <div class="ed-foot"><span></span><button class="btn sm danger ghost" data-act="nozzle-del" data-id="${nz.id}">Delete nozzle</button></div></div>`;
+}
+
+function nozzleTableHTML() {
+  const list = (S.job.nozzles || []);
+  const U = u(S.job);
+  const inp = (n, k, kind, extra = '') => kind === 'sel'
+    ? `<select data-nb="${k}" data-id="${n.id}" data-kind="text">${NZ_TYPES.map((t) => `<option ${n[k] === t ? 'selected' : ''}>${t}</option>`).join('')}</select>`
+    : `<input data-nb="${k}" data-id="${n.id}" data-kind="${kind}" ${kind !== 'text' ? 'inputmode="decimal" class="num"' : ''} value="${h(kind === 'small' ? inVal(n[k], 'small', S.job) : n[k] ?? '')}" ${extra}>`;
+  return `<div class="sp-head"><h2>Shell nozzles</h2><span class="muted small">${list.length} on the shell</span></div>
+    <p class="muted small">Angle is clockwise from 0° (${h(S.job.info.zeroRef || 'the 0° reference')}). You can also add a nozzle on the Floor map with <b>+ Nozzle</b> and a click at the shell.</p>
+    <div class="tblwrap"><table class="grid nozzles"><thead><tr><th>Mark</th><th>Type</th><th>Angle (°)</th><th>Size (${U.small})</th><th>Elev. (${U.small})</th><th>Service / description</th><th></th></tr></thead><tbody>
+    ${list.slice().sort((a, b) => (+a.angle || 0) - (+b.angle || 0)).map((n) => `<tr><td>${inp(n, 'mark', 'text', 'class="mk"')}</td><td>${inp(n, 'type', 'sel')}</td><td>${inp(n, 'angle', 'num')}</td><td>${inp(n, 'size', 'small')}</td><td>${inp(n, 'elev', 'small')}</td><td>${inp(n, 'service', 'text')}</td><td><button class="btn sm icon ghost danger" data-act="nozzle-del" data-id="${n.id}" title="Delete">✕</button></td></tr>`).join('') || '<tr><td colspan="7" class="empty">No nozzles yet.</td></tr>'}
+    </tbody></table></div>
+    <div class="acts"><button class="btn sm" data-act="nozzle-add">+ Nozzle</button><button class="btn sm" data-act="exp-noz">Export CSV</button></div>`;
+}
 
 function featureEditor() {
   const ft = S.job.features.find((x) => x.id === S.selFeature); if (!ft) return sideOverview();
@@ -977,7 +1029,7 @@ document.addEventListener('click', async (e) => {
       if (S.view === 'map') { S.sel = id; S.selPlate = S.selFeature = null; drawMap(); renderSide(); } else openIndDialog(id);
       return;
     case 'open-ind': if (S.view === 'map') { S.sel = id; drawMap(); renderSide(); } else openIndDialog(id); return;
-    case 'close-sel': S.sel = S.selPlate = S.selFeature = null; drawMap(); renderSide(); return;
+    case 'close-sel': S.sel = S.selPlate = S.selFeature = S.selNozzle = null; drawMap(); renderSide(); return;
     case 'ind-close': closeEditor(el); return;
     case 'ind-nav': {
       const inds = S.job.indications.slice().sort(byNo); const i = inds.findIndex((x) => x.id === S.sel);
@@ -1014,6 +1066,21 @@ document.addEventListener('click', async (e) => {
       S.job.indications.push(ind); commit(); renderNav(); refreshIndTable(); openIndDialog(ind.id);
       setTimeout(() => $('#dlg [data-ib="plate"]')?.focus(), 50); return;
     }
+    case 'nozzle-add': {
+      const nz = { id: uid(), mark: nextMark('Nozzle'), type: 'Nozzle', angle: null, size: null, elev: null, service: '' };
+      S.job.nozzles = S.job.nozzles || []; S.job.nozzles.push(nz); commit();
+      const c = $('#nozzleCard'); if (c) c.innerHTML = nozzleTableHTML();
+      setTimeout(() => $(`#nozzleCard input[data-nb="angle"][data-id="${nz.id}"]`)?.focus(), 30); return;
+    }
+    case 'nozzle-del': {
+      const nz = (S.job.nozzles || []).find((x) => x.id === id); if (!nz) return;
+      if (!(await askConfirm(`Delete nozzle ${nz.mark || ''}?`, { ok: 'Delete', danger: true }))) return;
+      S.job.nozzles = S.job.nozzles.filter((x) => x.id !== id); if (S.selNozzle === id) S.selNozzle = null; commit();
+      if (S.view === 'map') { drawMap(); renderSide(); }
+      const c = $('#nozzleCard'); if (c) { c.innerHTML = nozzleTableHTML(); refreshSetupPreview(); }
+      return;
+    }
+    case 'exp-noz': return download(fileBase(S.job) + '_nozzles.csv', nozzlesCSV(S.job), 'text/csv');
     case 'feature-del': {
       S.job.features = S.job.features.filter((f) => f.id !== S.selFeature); S.selFeature = null; commit(); drawMap(); renderSide(); return;
     }
@@ -1073,6 +1140,17 @@ document.addEventListener('change', async (e) => {
     if (S.view === 'setup') { if (structural) renderView(); else if (S.job.layout.mode !== 'grid' && path.startsWith('layout.')) refreshBuilder(); else refreshSetupPreview(); renderHeader(); }
     else if (S.view === 'api') refreshApi();
     if (path === 'units') renderAll();
+    return;
+  }
+  if (el.matches('[data-nb]')) {
+    const nz = (S.job.nozzles || []).find((x) => x.id === el.dataset.id); if (!nz) return;
+    const k = el.dataset.nb; let v = readInput(el);
+    if (k === 'angle' && v !== null) v = ((v % 360) + 360) % 360;
+    if (k === 'type' && (!nz.mark || /^(N|MH|CO)\d+$/.test(nz.mark)) && nzPrefix(v) !== nzPrefix(nz.type)) nz.mark = nextMark(v);
+    if (v === null || v === '') delete nz[k]; else nz[k] = v;
+    commit();
+    if (S.view === 'map') { drawMap(); if (k === 'mark' || k === 'type') renderSide(); }
+    if (S.view === 'setup') { const c = $('#nozzleCard'); if (c && (k === 'angle' || k === 'type' || k === 'mark')) setTimeout(() => { c.innerHTML = nozzleTableHTML(); }, 0); refreshSetupPreview(); }
     return;
   }
   if (el.matches('[data-secf]')) {
@@ -1174,7 +1252,7 @@ document.addEventListener('keydown', (e) => {
     if (S.view === 'map') {
       if (S.mode !== 'select') { setMode('select'); return; }
       if (typing) { e.target.blur(); return; }
-      if (S.sel || S.selPlate || S.selFeature) { S.sel = S.selPlate = S.selFeature = null; drawMap(); renderSide(); }
+      if (S.sel || S.selPlate || S.selFeature || S.selNozzle) { S.sel = S.selPlate = S.selFeature = S.selNozzle = null; drawMap(); renderSide(); }
     }
     return;
   }

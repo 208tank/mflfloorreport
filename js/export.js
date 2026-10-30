@@ -68,6 +68,15 @@ export function platesCSV(job, layout, calc) {
   return toCSV(rows);
 }
 
+export function nozzlesCSV(job) {
+  const U = u(job), d = U.smallDec + 1;
+  const rows = [['Mark', 'Type', 'Service / description', 'Angle (deg)', `Size (${U.small})`, `Elevation to centreline (${U.small})`, 'Notes']];
+  for (const n of (job.nozzles || []).slice().sort((a, b) => (+a.angle || 0) - (+b.angle || 0))) {
+    rows.push([n.mark ?? '', n.type ?? '', n.service ?? '', n.angle ?? '', r(fromMm(n.size, 'small', job), d), r(fromMm(n.elev, 'small', job), d), n.notes ?? '']);
+  }
+  return toCSV(rows);
+}
+
 export function svgForExport(svgMarkup) {
   // inline the styles the on-screen map gets from CSS so the file stands alone
   const style = `<style>
@@ -75,7 +84,7 @@ export function svgForExport(svgMarkup) {
   .hatch-bg{fill:#eceef1}.hatch-bg2{fill:#f7f8fa}.hatch-line{stroke:#9aa3ad}.shell{fill:none;stroke:#1d232b}.cz{fill:none;stroke:#c2410c;opacity:.7}
   .ticks line{stroke:#1d232b}.ticks text,.plabels text{fill:#5b6470;font-family:Arial,sans-serif}.ticks text.zero{fill:#1d232b;font-weight:700}
   .ilabel,.ftlabel{fill:#1d232b;font-family:Arial,sans-serif;font-weight:700}.rep{fill:none;stroke:#b91c1c;stroke-dasharray:3 2}.rep.bad{stroke:#b91c1c}
-  .selring{fill:none;stroke:#0ea5e9}.datum{fill:#0f766e;opacity:.6}.datum.own{opacity:.9}.ft{fill:#fff;stroke:#1d232b}.ft-column{fill:#1d232b}.ft-patch{fill:#fde68a;fill-opacity:.6}.scalebar rect{fill:#1d232b}.scalebar text{fill:#1d232b;font-family:Arial}</style>`;
+  .selring{fill:none;stroke:#0ea5e9}.nozzle path{fill:#fff;stroke:#1d232b}.nozzle .fl{fill:#1d232b}.nozzle text{fill:#1d232b;font-family:Arial;font-weight:700;stroke:none}.datum{fill:#0f766e;opacity:.6}.datum.own{opacity:.9}.ft{fill:#fff;stroke:#1d232b}.ft-column{fill:#1d232b}.ft-patch{fill:#fde68a;fill-opacity:.6}.scalebar rect{fill:#1d232b}.scalebar text{fill:#1d232b;font-family:Arial}</style>`;
   return svgMarkup.replace(/<defs>/, style + '<defs>');
 }
 
