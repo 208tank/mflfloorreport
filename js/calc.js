@@ -196,3 +196,19 @@ export function api653(job, layout) {
 
   return { C, years, Or, czLim, ...rates, K, per, regions, warnings, repairs: [...repaired], autoRepairs: [...autoSet] };
 }
+
+/* ------------------------------------------------------------------ shell nozzle neck UT --- */
+export const NZ_CONN = [['', '—'], ['RFWN', 'Raised face weld neck (RFWN)'], ['THD', 'Threaded (NPT)'], ['SO', 'Slip-on flange'], ['SW', 'Socket weld'], ['FF', 'Flat face'], ['OTH', 'Other']];
+export const NZ_CONN_SHORT = { RFWN: 'RFWN', THD: 'Threaded', SO: 'Slip-on', SW: 'Socket weld', FF: 'Flat face', OTH: 'Other' };
+export const UT_CLOCK = [['ut12', '12'], ['ut3', '3'], ['ut6', '6'], ['ut9', '9']];
+
+/** Neck UT summary: min reading, % loss against nominal, and status against t-min. */
+export function nozzleUT(n) {
+  const vals = [...UT_CLOCK.map(([k]) => n[k]), ...(n.utx || []).map((r) => r.t)].map((v) => (v === null || v === undefined || v === '' ? null : +v)).filter((v) => Number.isFinite(v));
+  if (!vals.length) return { count: 0, min: null, lossPct: null, status: '' };
+  const min = Math.min(...vals);
+  const tNom = n.tNom > 0 ? +n.tNom : null, tMin = n.tMin > 0 ? +n.tMin : null;
+  const lossPct = tNom ? Math.max(0, ((tNom - min) / tNom) * 100) : null;
+  const status = tMin ? (min < tMin - 1e-9 ? 'Below t-min' : 'OK') : '';
+  return { count: vals.length, min, lossPct, status };
+}

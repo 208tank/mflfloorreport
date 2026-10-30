@@ -307,6 +307,16 @@ button.sug { border: 1px dashed var(--accent); background: none; color: var(--ac
 .grid.nozzles input, .grid.nozzles select { min-height: 28px; padding: 3px 6px; font-size: 13px; }
 .grid.nozzles input.num { width: 70px; text-align: right; } .grid.nozzles input.mk { width: 64px; font-weight: 600; }
 
+/* nozzle neck UT */
+.ut-clock { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0 6px; }
+.ut-extra { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; align-items: flex-start; }
+.utx-row { display: grid; grid-template-columns: 1fr 110px auto; gap: 6px; width: 100%; }
+.sum-grid.three { grid-template-columns: repeat(3, 1fr); }
+.sum-grid b.ok { color: var(--ok); } .sum-grid b.bad { color: var(--bad); }
+.floormap .nozzle.bad path { stroke: var(--bad); } .floormap .nozzle.bad .fl { fill: var(--bad); } .floormap .nozzle.bad text { fill: var(--bad); }
+.grid.nozzles input.sch { width: 70px; }
+.grid.nozzles tr.is-bad { background: var(--bad-soft); }
+
 /* datums */
 .floormap .datums { pointer-events: none; }
 .floormap .datum { fill: var(--accent); opacity: .5; stroke: none; }

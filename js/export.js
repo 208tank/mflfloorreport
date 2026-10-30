@@ -1,6 +1,6 @@
 // CSV / JSON / image exports.
 import { fromMm, u, fmt } from './units.js';
-import { RESULTS } from './calc.js';
+import { RESULTS, nozzleUT, NZ_CONN_SHORT, UT_CLOCK } from './calc.js';
 import { angleOf, toLocal, datumName, orientName } from './geometry.js';
 
 export function download(name, data, type) {
@@ -69,10 +69,14 @@ export function platesCSV(job, layout, calc) {
 }
 
 export function nozzlesCSV(job) {
-  const U = u(job), d = U.smallDec + 1;
-  const rows = [['Mark', 'Type', 'Service / description', 'Angle (deg)', `Size (${U.small})`, `Elevation to centreline (${U.small})`, 'Notes']];
+  const U = u(job), d = U.smallDec + 1, td = U.tDec + 1;
+  const t = (mm) => r(fromMm(mm, 't', job), td);
+  const rows = [['Mark', 'Type', 'Connection', 'Service / description', 'Angle (deg)', `Size (${U.small})`, `Elevation to centreline (${U.small})`, 'Schedule', `Nominal wall (${U.small})`, `t-min (${U.small})`,
+    `UT 12 o'clock (${U.small})`, `UT 3 o'clock (${U.small})`, `UT 6 o'clock (${U.small})`, `UT 9 o'clock (${U.small})`, 'Other UT readings', `Min UT (${U.small})`, 'Wall loss (%)', 'Status', 'Notes']];
   for (const n of (job.nozzles || []).slice().sort((a, b) => (+a.angle || 0) - (+b.angle || 0))) {
-    rows.push([n.mark ?? '', n.type ?? '', n.service ?? '', n.angle ?? '', r(fromMm(n.size, 'small', job), d), r(fromMm(n.elev, 'small', job), d), n.notes ?? '']);
+    const s = nozzleUT(n);
+    rows.push([n.mark ?? '', n.type ?? '', NZ_CONN_SHORT[n.conn] || '', n.service ?? '', n.angle ?? '', r(fromMm(n.size, 'small', job), d), r(fromMm(n.elev, 'small', job), d), n.sched ?? '', t(n.tNom), t(n.tMin),
+      ...UT_CLOCK.map(([k]) => t(n[k])), (n.utx || []).filter((x) => x.t != null).map((x) => `${x.loc || 'other'}: ${t(x.t)}`).join('; '), t(s.min), r(s.lossPct, 1), s.status, n.notes ?? '']);
   }
   return toCSV(rows);
 }
@@ -84,7 +88,7 @@ export function svgForExport(svgMarkup) {
   .hatch-bg{fill:#eceef1}.hatch-bg2{fill:#f7f8fa}.hatch-line{stroke:#9aa3ad}.shell{fill:none;stroke:#1d232b}.cz{fill:none;stroke:#c2410c;opacity:.7}
   .ticks line{stroke:#1d232b}.ticks text,.plabels text{fill:#5b6470;font-family:Arial,sans-serif}.ticks text.zero{fill:#1d232b;font-weight:700}
   .ilabel,.ftlabel{fill:#1d232b;font-family:Arial,sans-serif;font-weight:700}.rep{fill:none;stroke:#b91c1c;stroke-dasharray:3 2}.rep.bad{stroke:#b91c1c}
-  .selring{fill:none;stroke:#0ea5e9}.nozzle path{fill:#fff;stroke:#1d232b}.nozzle .fl{fill:#1d232b}.nozzle text{fill:#1d232b;font-family:Arial;font-weight:700;stroke:none}.datum{fill:#0f766e;opacity:.6}.datum.own{opacity:.9}.ft{fill:#fff;stroke:#1d232b}.ft-column{fill:#1d232b}.ft-patch{fill:#fde68a;fill-opacity:.6}.scalebar rect{fill:#1d232b}.scalebar text{fill:#1d232b;font-family:Arial}</style>`;
+  .selring{fill:none;stroke:#0ea5e9}.nozzle path{fill:#fff;stroke:#1d232b}.nozzle .fl{fill:#1d232b}.nozzle.bad path{stroke:#b91c1c}.nozzle.bad .fl{fill:#b91c1c}.nozzle text{fill:#1d232b;font-family:Arial;font-weight:700;stroke:none}.datum{fill:#0f766e;opacity:.6}.datum.own{opacity:.9}.ft{fill:#fff;stroke:#1d232b}.ft-column{fill:#1d232b}.ft-patch{fill:#fde68a;fill-opacity:.6}.scalebar rect{fill:#1d232b}.scalebar text{fill:#1d232b;font-family:Arial}</style>`;
   return svgMarkup.replace(/<defs>/, style + '<defs>');
 }
 

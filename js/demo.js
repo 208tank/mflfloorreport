@@ -48,11 +48,11 @@ export function makeDemo() {
     feat('patch', 'Patch (2015)', 20, 110, t(24), t(24))
   ];
   job.nozzles = [
-    { id: uid(), mark: 'MH1', type: 'Manway', angle: 0, size: 24 * IN, elev: 30 * IN, service: 'Shell manway' },
+    { id: uid(), mark: 'MH1', type: 'Manway', angle: 0, size: 24 * IN, elev: 30 * IN, service: 'Shell manway', conn: 'RFWN', tNom: 0.5 * IN, tMin: 0.375 * IN, ut12: 0.49 * IN, ut3: 0.488 * IN, ut6: 0.482 * IN, ut9: 0.49 * IN },
     { id: uid(), mark: 'MH2', type: 'Manway', angle: 180, size: 24 * IN, elev: 30 * IN, service: 'Shell manway' },
-    { id: uid(), mark: 'N1', type: 'Inlet', angle: 45, size: 12 * IN, elev: 18 * IN, service: 'Product inlet' },
-    { id: uid(), mark: 'N2', type: 'Outlet', angle: 135, size: 12 * IN, elev: 18 * IN, service: 'Product outlet' },
-    { id: uid(), mark: 'N3', type: 'Water draw / drain', angle: 182, size: 4 * IN, elev: 6 * IN, service: 'Water draw to sump' },
+    { id: uid(), mark: 'N1', type: 'Inlet', angle: 45, size: 12 * IN, elev: 18 * IN, service: 'Product inlet', conn: 'RFWN', sched: 'STD', tNom: 0.375 * IN, tMin: 0.25 * IN, ut12: 0.362 * IN, ut3: 0.358 * IN, ut6: 0.341 * IN, ut9: 0.355 * IN },
+    { id: uid(), mark: 'N2', type: 'Outlet', angle: 135, size: 12 * IN, elev: 18 * IN, service: 'Product outlet', conn: 'RFWN', sched: 'STD', tNom: 0.375 * IN, tMin: 0.25 * IN, ut12: 0.366 * IN, ut3: 0.36 * IN, ut6: 0.33 * IN, ut9: 0.361 * IN },
+    { id: uid(), mark: 'N3', type: 'Water draw / drain', angle: 182, size: 4 * IN, elev: 6 * IN, service: 'Water draw to sump', conn: 'THD', sched: 'Sch 80', tNom: 0.337 * IN, tMin: 0.2 * IN, ut12: 0.301 * IN, ut3: 0.255 * IN, ut6: 0.188 * IN, ut9: 0.262 * IN, utx: [{ id: uid(), loc: '6 o’clock at shell weld', t: 0.176 * IN }] },
     { id: uid(), mark: 'CO1', type: 'Clean-out door', angle: 270, size: 48 * IN, elev: 24 * IN, service: 'Flush clean-out' }
   ];
   const sump = layout.plates.find((p) => p.key === job.features[0].plate);

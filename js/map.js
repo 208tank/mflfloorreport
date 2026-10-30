@@ -1,5 +1,6 @@
 // SVG floor map rendering and interaction.
 import { polar, datumPoint, datumAxes } from './geometry.js';
+import { nozzleUT } from './calc.js';
 
 export const COLORS = { ps: '#1f6feb', ss: '#d9480f', both: '#8250df', pending: '#6b7280', nri: '#9ca3af', other: '#9ca3af' };
 
@@ -103,7 +104,8 @@ export function renderMapSVG(job, layout, opts = {}) {
       const fl = [P(L2, -sz / 2 - s * 0.7), P(L2 + s * 0.9, -sz / 2 - s * 0.7), P(L2 + s * 0.9, sz / 2 + s * 0.7), P(L2, sz / 2 + s * 0.7)];
       const d = (q) => 'M' + q.map(([x, y]) => `${f(x)} ${f(-y)}`).join('L') + 'Z';
       const [lx, ly] = polar(L2 + s * 3, a);
-      out.push(`<g class="nozzle${big ? ' mw' : ''}${opts.selNozzle === nz.id ? ' sel' : ''}" data-nozzle="${esc(nz.id)}"><path d="${d(pts)}"/><path class="fl" d="${d(fl)}"/>` +
+      const bad = nozzleUT(nz).status === 'Below t-min';
+      out.push(`<g class="nozzle${big ? ' mw' : ''}${bad ? ' bad' : ''}${opts.selNozzle === nz.id ? ' sel' : ''}" data-nozzle="${esc(nz.id)}"><path d="${d(pts)}"/><path class="fl" d="${d(fl)}"/>` +
         `<text x="${f(lx)}" y="${f(-ly)}" font-size="${f(s * 2.3)}" text-anchor="middle" dominant-baseline="central">${esc(nz.mark || '')}</text></g>`);
     }
     out.push('</g>');

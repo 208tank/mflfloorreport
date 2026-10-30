@@ -2,7 +2,7 @@
 import { db, requestPersistence } from './db.js';
 import { u, toMm, inVal, fmt, fmtRate, unitLabel, num, UNITS } from './units.js';
 import { buildLayout, stackSections, suggestCount, halfChord, plateAt, toLocal, itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
-import { api653, RESULTS, RESULT_SHORT, czLimitAuto, plateNominal } from './calc.js';
+import { api653, RESULTS, RESULT_SHORT, czLimitAuto, plateNominal, NZ_CONN, NZ_CONN_SHORT, UT_CLOCK, nozzleUT } from './calc.js';
 import { renderMapSVG, MapController } from './map.js';
 import { download, indicationsCSV, platesCSV, nozzlesCSV, svgForExport, svgToPng, fileBase } from './export.js';
 import { buildReport, legendHTML } from './report.js';
@@ -10,7 +10,7 @@ import { newJob, migrate, nextNo, uid, getPath, setPath } from './model.js';
 import { makeDemo } from './demo.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.9.0';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -707,10 +707,34 @@ function nozzleEditor() {
       ${f('Mark', 'mark')}${f('Type', 'type', 'sel', { options: NZ_TYPES })}
       ${f('Angle (clockwise from 0°)', 'angle', 'num', { unit: '°' })}${f('Size (nominal / opening)', 'size', 'small')}
       ${f('Elevation to centreline', 'elev', 'small', { hint: 'Above the tank bottom' })}${f('Service / description', 'service', 'text', { ph: 'e.g. Inlet, 4" drain' })}
+      ${f('Connection', 'conn', 'sel', { options: NZ_CONN, cls: 'span2' })}
       ${f('Notes', 'notes', 'area', { rows: 2, cls: 'span2' })}
     </div>
+    <fieldset><legend>Neck UT</legend><div class="fgrid g3">
+      ${f('Schedule / class', 'sched', 'text', { ph: 'e.g. Sch 40, STD, XS' })}${f('Nominal wall', 'tNom', 't')}${f('t-min (required)', 'tMin', 't')}
+    </div>
+    <div class="ut-clock">${UT_CLOCK.map(([k, lab]) => field(`${lab} o’clock`, k, 't', { attr: 'data-nb', value: nz[k], attrs: `data-id="${nz.id}"` })).join('')}</div>
+    <div class="ut-extra">${(nz.utx || []).map((r) => `<div class="utx-row"><input data-nbx="loc" data-id="${nz.id}" data-rid="${r.id}" data-kind="text" value="${h(r.loc || '')}" placeholder="Location, e.g. flange side 12"><span class="ctl"><input data-nbx="t" data-id="${nz.id}" data-rid="${r.id}" data-kind="t" inputmode="decimal" value="${h(inVal(r.t, 't', S.job))}"><i class="unit">${u(S.job).small}</i></span><button class="btn sm icon ghost danger" data-act="utx-del" data-id="${nz.id}" data-rid="${r.id}" title="Remove reading">✕</button></div>`).join('')}
+      <button class="btn sm" data-act="utx-add" data-id="${nz.id}">+ Reading</button></div>
+    <div class="nz-ut" data-part="nzut">${nozzleUTBox(nz)}</div>
+    </fieldset>
     <p class="muted small">Nozzles are located by angle around the shell, measured clockwise from 0° ${h(S.job.info.zeroRef || '')}. All nozzles are listed in Tank setup → Shell nozzles and in the report.</p>
     <div class="ed-foot"><span></span><button class="btn sm danger ghost" data-act="nozzle-del" data-id="${nz.id}">Delete nozzle</button></div></div>`;
+}
+
+function refreshNozzleUT(nz) {
+  const b = $(`[data-ed="nozzle"][data-id="${nz.id}"] [data-part="nzut"]`); if (b) b.innerHTML = nozzleUTBox(nz);
+  const r = nozzleUT(nz);
+  const m = $(`[data-part="min-${nz.id}"]`); if (m) m.textContent = r.count ? fmt(r.min, 't', S.job, false) : '—';
+  const st = $(`[data-part="st-${nz.id}"]`); if (st) { st.innerHTML = `<span class="st ${r.status === 'OK' ? 'st-OK' : r.status ? 'st-below-MRT' : ''}">${r.status || ''}</span>`; st.closest('tr')?.classList.toggle('is-bad', r.status === 'Below t-min'); }
+}
+
+function nozzleUTBox(nz) {
+  const r = nozzleUT(nz);
+  if (!r.count) return '<span class="muted small">No UT readings yet.</span>';
+  return `<div class="sum-grid three"><div><span>Min. reading</span><b>${fmt(r.min, 't', S.job)}</b><small>${r.count} reading${r.count > 1 ? 's' : ''}</small></div>
+    <div><span>Wall loss</span><b>${r.lossPct != null ? r.lossPct.toFixed(0) + '%' : '—'}</b><small>${nz.tNom ? 'vs ' + fmt(nz.tNom, 't', S.job) : 'enter nominal'}</small></div>
+    <div><span>Status</span><b class="${r.status === 'OK' ? 'ok' : r.status ? 'bad' : ''}">${r.status || '—'}</b><small>${nz.tMin ? 't-min ' + fmt(nz.tMin, 't', S.job) : 'enter t-min'}</small></div></div>`;
 }
 
 function nozzleTableHTML() {
@@ -718,11 +742,13 @@ function nozzleTableHTML() {
   const U = u(S.job);
   const inp = (n, k, kind, extra = '') => kind === 'sel'
     ? `<select data-nb="${k}" data-id="${n.id}" data-kind="text">${NZ_TYPES.map((t) => `<option ${n[k] === t ? 'selected' : ''}>${t}</option>`).join('')}</select>`
-    : `<input data-nb="${k}" data-id="${n.id}" data-kind="${kind}" ${kind !== 'text' ? 'inputmode="decimal" class="num"' : ''} value="${h(kind === 'small' ? inVal(n[k], 'small', S.job) : n[k] ?? '')}" ${extra}>`;
+    : kind === 'conn'
+      ? `<select data-nb="${k}" data-id="${n.id}" data-kind="text">${NZ_CONN.map(([v, l]) => `<option value="${v}" ${(n[k] || '') === v ? 'selected' : ''}>${v ? NZ_CONN_SHORT[v] : '—'}</option>`).join('')}</select>`
+      : `<input data-nb="${k}" data-id="${n.id}" data-kind="${kind}" ${kind !== 'text' ? 'inputmode="decimal" class="num"' : ''} value="${h(kind === 'small' || kind === 't' ? inVal(n[k], kind, S.job) : n[k] ?? '')}" ${extra}>`;
   return `<div class="sp-head"><h2>Shell nozzles</h2><span class="muted small">${list.length} on the shell</span></div>
-    <p class="muted small">Angle is clockwise from 0° (${h(S.job.info.zeroRef || 'the 0° reference')}). You can also add a nozzle on the Floor map with <b>+ Nozzle</b> and a click at the shell.</p>
-    <div class="tblwrap"><table class="grid nozzles"><thead><tr><th>Mark</th><th>Type</th><th>Angle (°)</th><th>Size (${U.small})</th><th>Elev. (${U.small})</th><th>Service / description</th><th></th></tr></thead><tbody>
-    ${list.slice().sort((a, b) => (+a.angle || 0) - (+b.angle || 0)).map((n) => `<tr><td>${inp(n, 'mark', 'text', 'class="mk"')}</td><td>${inp(n, 'type', 'sel')}</td><td>${inp(n, 'angle', 'num')}</td><td>${inp(n, 'size', 'small')}</td><td>${inp(n, 'elev', 'small')}</td><td>${inp(n, 'service', 'text')}</td><td><button class="btn sm icon ghost danger" data-act="nozzle-del" data-id="${n.id}" title="Delete">✕</button></td></tr>`).join('') || '<tr><td colspan="7" class="empty">No nozzles yet.</td></tr>'}
+    <p class="muted small">Angle is clockwise from 0° (${h(S.job.info.zeroRef || 'the 0° reference')}). Neck UT readings at 12, 3, 6 and 9 o’clock; add more readings by clicking the nozzle on the Floor map. Thickness in ${U.small}.</p>
+    <div class="tblwrap"><table class="grid nozzles"><thead><tr><th>Mark</th><th>Type</th><th>Connection</th><th>Angle (°)</th><th>Size (${U.small})</th><th>Elev. (${U.small})</th><th>Schedule</th><th>Nom. wall</th><th>t-min</th>${UT_CLOCK.map(([, l]) => `<th>${l}:00</th>`).join('')}<th>Min</th><th>Status</th><th>Service / description</th><th></th></tr></thead><tbody>
+    ${list.slice().sort((a, b) => (+a.angle || 0) - (+b.angle || 0)).map((n) => { const r = nozzleUT(n); return `<tr class="${r.status === 'Below t-min' ? 'is-bad' : ''}"><td>${inp(n, 'mark', 'text', 'class="mk"')}</td><td>${inp(n, 'type', 'sel')}</td><td>${inp(n, 'conn', 'conn')}</td><td>${inp(n, 'angle', 'num')}</td><td>${inp(n, 'size', 'small')}</td><td>${inp(n, 'elev', 'small')}</td><td>${inp(n, 'sched', 'text', 'class="sch"')}</td><td>${inp(n, 'tNom', 't')}</td><td>${inp(n, 'tMin', 't')}</td>${UT_CLOCK.map(([k]) => `<td>${inp(n, k, 't')}</td>`).join('')}<td class="n" data-part="min-${n.id}">${r.count ? fmt(r.min, 't', S.job, false) + ((n.utx || []).length ? `<sup title="Includes ${(n.utx || []).length} extra reading(s)">+${(n.utx || []).length}</sup>` : '') : '—'}</td><td data-part="st-${n.id}"><span class="st ${r.status === 'OK' ? 'st-OK' : r.status ? 'st-below-MRT' : ''}">${r.status || ''}</span></td><td>${inp(n, 'service', 'text')}</td><td><button class="btn sm icon ghost danger" data-act="nozzle-del" data-id="${n.id}" title="Delete">✕</button></td></tr>`; }).join('') || '<tr><td colspan="17" class="empty">No nozzles yet.</td></tr>'}
     </tbody></table></div>
     <div class="acts"><button class="btn sm" data-act="nozzle-add">+ Nozzle</button><button class="btn sm" data-act="exp-noz">Export CSV</button></div>`;
 }
@@ -1066,6 +1092,15 @@ document.addEventListener('click', async (e) => {
       S.job.indications.push(ind); commit(); renderNav(); refreshIndTable(); openIndDialog(ind.id);
       setTimeout(() => $('#dlg [data-ib="plate"]')?.focus(), 50); return;
     }
+    case 'utx-add': {
+      const nz = (S.job.nozzles || []).find((x) => x.id === id); if (!nz) return;
+      nz.utx = nz.utx || []; const r = { id: uid(), loc: '', t: null }; nz.utx.push(r); commit(); renderSide();
+      setTimeout(() => $(`#side [data-nbx="loc"][data-rid="${r.id}"]`)?.focus(), 30); return;
+    }
+    case 'utx-del': {
+      const nz = (S.job.nozzles || []).find((x) => x.id === id); if (!nz) return;
+      nz.utx = (nz.utx || []).filter((x) => x.id !== el.dataset.rid); commit(); renderSide(); drawMap(); return;
+    }
     case 'nozzle-add': {
       const nz = { id: uid(), mark: nextMark('Nozzle'), type: 'Nozzle', angle: null, size: null, elev: null, service: '' };
       S.job.nozzles = S.job.nozzles || []; S.job.nozzles.push(nz); commit();
@@ -1149,9 +1184,15 @@ document.addEventListener('change', async (e) => {
     if (k === 'type' && (!nz.mark || /^(N|MH|CO)\d+$/.test(nz.mark)) && nzPrefix(v) !== nzPrefix(nz.type)) nz.mark = nextMark(v);
     if (v === null || v === '') delete nz[k]; else nz[k] = v;
     commit();
+    refreshNozzleUT(nz);
     if (S.view === 'map') { drawMap(); if (k === 'mark' || k === 'type') renderSide(); }
     if (S.view === 'setup') { const c = $('#nozzleCard'); if (c && (k === 'angle' || k === 'type' || k === 'mark')) setTimeout(() => { c.innerHTML = nozzleTableHTML(); }, 0); refreshSetupPreview(); }
     return;
+  }
+  if (el.matches('[data-nbx]')) {
+    const nz = (S.job.nozzles || []).find((x) => x.id === el.dataset.id); const r = nz?.utx?.find((x) => x.id === el.dataset.rid); if (!r) return;
+    const v = readInput(el); if (v === null || v === '') delete r[el.dataset.nbx]; else r[el.dataset.nbx] = v;
+    commit(); refreshNozzleUT(nz); if (S.view === 'map') drawMap(); return;
   }
   if (el.matches('[data-secf]')) {
     const k = el.dataset.secf; let v = readInput(el);

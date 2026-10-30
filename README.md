@@ -119,6 +119,14 @@ CO1… numbered automatically by type), type, angle, size, elevation to centreli
 are drawn outside the shell on the map and report, listed in a nozzle schedule in the report, and
 exported with *Export → Nozzle schedule (CSV / Excel)*. Click a nozzle on the map to edit it.
 
+Each nozzle also records its **connection** (raised face weld neck, threaded NPT, slip-on, socket
+weld, flat face, other) and **neck UT**: schedule, nominal wall, required t-min, readings at 12, 3,
+6 and 9 o'clock (looking at the nozzle from outside the tank) and any number of extra readings with
+your own location labels (*+ Reading* in the nozzle panel). The app shows the minimum reading, %
+wall loss against nominal and *OK* / *Below t-min*; nozzles below t-min are drawn red on the map
+and highlighted in the nozzle table, report and CSV. The four clock readings can also be typed
+straight into the Shell nozzles table in Tank setup.
+
 ## Location convention — datum corners
 
 Every indication and feature is located by **plate + X/Y measured from the plate's datum corner**.
