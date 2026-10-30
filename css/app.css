@@ -261,6 +261,26 @@ ul.warn { background: var(--warn-soft); color: var(--warn); border-radius: 6px; 
 .floormap .scalebar rect { fill: var(--ink); } .floormap .scalebar text { fill: var(--ink); font-family: var(--font); }
 .floormap .empty-msg { fill: var(--muted); font-family: var(--font); }
 
+/* floor builder */
+.tblwrap { overflow-x: auto; margin: 10px 0; }
+.grid.builder td { padding: 5px 6px; white-space: nowrap; }
+.grid.builder input { width: 78px; min-height: 28px; padding: 3px 6px; text-align: right; font-size: 13px; }
+.grid.builder input.sm { width: 64px; } .grid.builder input.xs { width: 40px; }
+.grid.builder .cnt { display: flex; align-items: center; gap: 4px; }
+.grid.builder .cnt input { width: 46px; text-align: center; }
+.grid.builder input { width: 56px; }
+.grid.builder th, .grid.builder td { padding-left: 4px; padding-right: 4px; }
+.grid.builder tr.bt-block { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+.chip.rw { background: var(--line2); color: var(--ink2); } .chip.blk { background: var(--accent); color: var(--accent-ink); }
+button.sug { border: 1px dashed var(--accent); background: none; color: var(--accent); border-radius: 10px; font: inherit; font-size: 11px; padding: 1px 7px; cursor: pointer; }
+.builder-tpl { margin: 6px 0; }
+.spacer { flex: 1; }
+.fld.inline { flex-direction: row; align-items: center; gap: 8px; } .fld.inline .ctl { width: 120px; }
+.row-step { gap: 8px; } .row-step span { margin-right: auto; }
+.nowrap { white-space: nowrap; }
+.grid.builder td.rowacts { white-space: nowrap; text-align: right; }
+.grid.builder td.rowacts .btn { width: 24px; }
+
 /* datums */
 .floormap .datums { pointer-events: none; }
 .floormap .datum { fill: var(--accent); opacity: .5; stroke: none; }

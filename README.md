@@ -67,6 +67,29 @@ one `.json` file holding all the job data and its photos.
    results and the repair list.
 6. **Report** → *Print / Save PDF*, and **Export** for CSV (opens in Excel), SVG/PNG map, or backup.
 
+## Building the floor: automatic grid or row by row
+
+**Tank setup → Plate layout → Layout method**
+
+- **Automatic grid** — standard plates in staggered rows across the whole floor, edges cut to the shell.
+- **Row by row** — the Floor builder lists the floor as sections stacked from the top of the drawing
+  (or from the left when rows run top – bottom):
+  - **Row** — a strip of plates one plate-width wide. Enter **how many plates are in the row**: the
+    middle ones are full-length plates and the two end ones are sketch plates cut to the shell. A
+    *fits N* hint shows the count that suits that chord. Optional plate length and offset (stagger).
+  - **Block** — full-length plates laid across the rows, e.g. **several full-length vertical plates in
+    the centre**. Enter the number of plates and their width; the block depth is the plate length.
+    The gaps between the block and the shell on each side are filled with sketch-plate rows (row
+    width × plates per row), labelled e.g. GL1, GL2… / GR1, GR2….
+  - **Start from** *Standard rows* (one row per plate width, counts worked out for you) or
+    *Centre block + sketch plates* (a vertical block in the middle with sketch-plate rows above,
+    below and beside it), then adjust counts. Insert, delete and reorder rows; *Shift all rows*
+    moves the whole stack. The builder warns if part of the floor isn't covered.
+  - **Add plates from the map:** click any plate and use the **− / +** buttons to change the number
+    of plates in its row or block.
+- When a layout change removes the plate an indication or feature was on, it is moved to whichever
+  plate now covers that spot (X/Y recalculated from the new plate's datum).
+
 ## Plate sizes and orientation
 
 Tank setup holds the **standard** plate width, length and orientation used to generate the floor.

@@ -1,15 +1,16 @@
 // Tank Floor Inspector — main application.
 import { db, requestPersistence } from './db.js';
 import { u, toMm, inVal, fmt, fmtRate, unitLabel, num, UNITS } from './units.js';
-import { buildLayout, plateAt, toLocal, itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
+import { buildLayout, stackSections, suggestCount, plateAt, toLocal, itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
 import { api653, RESULTS, RESULT_SHORT, czLimitAuto, plateNominal } from './calc.js';
 import { renderMapSVG, MapController } from './map.js';
 import { download, indicationsCSV, platesCSV, svgForExport, svgToPng, fileBase } from './export.js';
 import { buildReport, legendHTML } from './report.js';
 import { newJob, migrate, nextNo, uid, getPath, setPath } from './model.js';
 import { makeDemo } from './demo.js';
+import { newRow, rowsFromGrid, rowsCentreBlock, coverage } from './builder.js';
 
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.6.0';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -250,10 +251,11 @@ function viewSetup() {
       <section class="card"><h2>Plate layout</h2>
         ${hasInd ? '<p class="callout warn">This job has indications. They are stored as plate + X/Y, so changing the layout or numbering moves them on the map. Check them afterwards.</p>' : ''}
         <div class="fgrid">
+        ${field('Layout method', 'layout.mode', 'sel', { cls: 'span2', options: [['grid', 'Automatic grid — standard plates in staggered rows'], ['custom', 'Row by row — enter the plates in each row (centre blocks, sketch plates)']] })}
         ${field('Standard plate width (row spacing)', 'layout.plateW', 'big')}${field('Standard plate length', 'layout.plateL', 'big')}
-        ${field('Standard orientation', 'layout.orient', 'sel', { options: [['h', 'Horizontal (rows run left – right)'], ['v', 'Vertical (rows run top – bottom)']] })}
-        ${field('Row stagger', 'layout.stagger', 'sel', { options: [['0', 'None (aligned)'], ['0.5', '½ plate'], ['0.3333333333', '⅓ plate'], ['0.25', '¼ plate']], attrs: 'data-num="1"' })}
-        ${field('Centre a row on the tank centreline', 'layout.centerRow', 'bool')}
+        ${field('Rows run', 'layout.orient', 'sel', { options: [['h', 'Left – right (horizontal plates)'], ['v', 'Top – bottom (vertical plates)']] })}
+        ${L.mode === 'custom' ? '<div></div>' : `${field('Row stagger', 'layout.stagger', 'sel', { options: [['0', 'None (aligned)'], ['0.5', '½ plate'], ['0.3333333333', '⅓ plate'], ['0.25', '¼ plate']], attrs: 'data-num="1"' })}
+        ${field('Centre a row on the tank centreline', 'layout.centerRow', 'bool')}`}
         ${field('Annular ring', 'layout.annular', 'bool')}
         ${L.annular ? `${field('Annular width inside shell', 'layout.annW', 'small')}${field('Annular segments', 'layout.annN', 'num')}
           ${field('First segment starts at', 'layout.annStart', 'num', { unit: '°' })}${field('Annular label prefix', 'layout.annPrefix')}` : ''}
@@ -263,8 +265,10 @@ function viewSetup() {
         ${field('Default datum corner for X/Y', 'layout.refCorner', 'sel', { options: [['BL', 'Bottom-left'], ['TL', 'Top-left'], ['BR', 'Bottom-right'], ['TR', 'Top-right']] })}
         ${field('Ignore slivers smaller than', 'layout.minAreaPct', 'num', { unit: '% of plate' })}
         </div>
-        <p class="muted small">Rows are lettered from the ${L.orient === 'v' ? 'left' : 'top'} of the drawing. X is horizontal and Y is vertical on the drawing, from each plate's datum — by default its ${refCornerName(L.refCorner)} corner. Set a different corner, or a plate's measured length, width and orientation, by clicking the plate on the Floor map or on the Plates page.</p>
+        <p class="muted small">${L.mode === 'custom' ? 'Edit the rows in the Floor builder below. New rows use the standard plate size. ' : ''}Rows are lettered from the ${L.orient === 'v' ? 'left' : 'top'} of the drawing. X is horizontal and Y is vertical on the drawing, from each plate's datum — by default its ${refCornerName(L.refCorner)} corner. Set a different corner, or a plate's measured length, width and orientation, by clicking the plate on the Floor map or on the Plates page.</p>
       </section>
+
+      ${L.mode === 'custom' ? `<section class="card" id="builderCard">${builderHTML()}</section>` : ''}
 
       <section class="card"><h2>Equipment</h2><div class="fgrid">
         ${field('MFL scanner make', 'equip.mflMake')}${field('MFL model', 'equip.mflModel')}
@@ -281,6 +285,78 @@ function viewSetup() {
   </div></div>`;
 }
 after.setup = () => refreshSetupPreview();
+
+/* ---------------------------------------------------------- floor builder */
+
+function builderHTML() {
+  const L = S.job.layout, rows = L.rows || [], B = u(S.job).big;
+  const { list } = stackSections(L);
+  const pos = new Map(list.map((x) => [x.sec.id, x]));
+  const Ri = S.layout.Ri;
+  const cov = coverage(S.job);
+  const gapMsg = (g, where) => (g > 25 ? `${fmt(g, 'big', S.job)} of floor not covered at the ${where} — add a row or shift the rows` : '');
+  const msgs = [gapMsg(cov.gapTop, L.orient === 'v' ? 'left' : 'top'), gapMsg(cov.gapBottom, L.orient === 'v' ? 'right' : 'bottom')].filter(Boolean);
+  const f = (r, k, kind, ph = '', extra = '') => `<input data-rowf="${k}" data-row="${r.id}" data-kind="${kind}" ${kind === 'num' ? 'inputmode="numeric"' : 'inputmode="decimal"'} value="${h(kind === 'num' ? r[k] ?? '' : inVal(r[k], kind, S.job))}" placeholder="${h(ph)}" ${extra}>`;
+  let letter = 0;
+  const body = rows.map((r, i) => {
+    const pp = pos.get(r.id), lab = rowLetter(letter++);
+    const sug = pp && r.type === 'row' ? suggestCount(Ri, pp.va, pp.vb, +r.len || L.plateL) : null;
+    const plates = S.layout.plates.filter((p) => p.rowId === r.id).length;
+    return `<tr class="bt-${r.type}">
+      <td><b>${lab}</b></td>
+      <td>${r.type === 'block' ? '<span class="chip blk">Block</span>' : '<span class="chip rw">Row</span>'}</td>
+      <td>${f(r, 'h', 'big', '', 'title="' + (r.type === 'block' ? 'Plate length (block depth)' : 'Row width (plate width)') + '"')}</td>
+      <td><div class="cnt"><button class="btn sm icon" data-act="row-n" data-row="${r.id}" data-d="-1" title="One plate fewer">−</button>${f(r, 'n', 'num')}<button class="btn sm icon" data-act="row-n" data-row="${r.id}" data-d="1" title="One plate more">+</button>${sug && sug !== +r.n ? `<button class="sug" data-act="row-sug" data-row="${r.id}" data-v="${sug}" title="Fits the chord with full plates in the middle">fits ${sug}</button>` : ''}</div></td>
+      <td>${r.type === 'block' ? f(r, 'w', 'big', inVal(L.plateW, 'big', S.job), 'title="Plate width"') : f(r, 'len', 'big', inVal(L.plateL, 'big', S.job), 'title="Full plate length"')}</td>
+      <td>${f(r, 'off', 'big', '0', 'title="Shift plates along the row (stagger)"')}</td>
+      <td>${r.type === 'block' ? `${f(r, 'sideH', 'big', inVal(L.plateW, 'big', S.job), 'title="Side sketch-plate row width" class="sm"')} × ${f(r, 'sideN', 'num', '1', 'title="Plates per side row" class="xs"')}` : '<span class="muted small">—</span>'}</td>
+      <td class="n muted">${plates}</td>
+      <td class="rowacts">
+        <button class="btn sm icon ghost" data-act="row-move" data-row="${r.id}" data-d="-1" ${i === 0 ? 'disabled' : ''} title="Move up">↑</button>
+        <button class="btn sm icon ghost" data-act="row-move" data-row="${r.id}" data-d="1" ${i === rows.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
+        <button class="btn sm icon ghost" data-act="row-add" data-at="${i}" data-type="row" title="Insert a row above">⊕</button>
+        <button class="btn sm icon ghost danger" data-act="row-del" data-row="${r.id}" title="Delete">✕</button></td></tr>`;
+  }).join('');
+  return `<div class="sp-head"><h2>Floor builder</h2><span class="muted small">${S.layout.plates.filter((p) => p.kind === 'floor').length} bottom plates</span></div>
+    <p class="muted small">Sections run ${L.orient === 'v' ? 'left to right' : 'top to bottom'}. A <b>row</b> is a strip of ${L.orient === 'v' ? 'vertical' : 'horizontal'} plates: give the number of plates and the middle ones are full length, with sketch plates at each end cut to the shell. A <b>block</b> is a set of full-length plates laid across the rows (e.g. vertical plates in the centre); the gaps to the shell beside it are filled with sketch-plate rows.</p>
+    <div class="acts builder-tpl"><span class="muted small">Start from:</span>
+      <button class="btn sm" data-act="rows-template" data-t="grid">Standard rows</button>
+      <button class="btn sm" data-act="rows-template" data-t="block">Centre block + sketch plates</button></div>
+    <div class="tblwrap"><table class="grid builder"><thead><tr><th></th><th>Type</th><th title="Row: plate width. Block: plate length.">Width (${B})</th><th>Plates</th><th title="Row: full plate length. Block: plate width.">Length (${B})</th><th title="Shift plates along the row">Offset</th><th title="Block only: side sketch-plate row width × plates per row">Sides</th><th class="n">Drawn</th><th></th></tr></thead>
+    <tbody>${body || '<tr><td colspan="9" class="empty">No rows yet. Pick a starting layout or add a row.</td></tr>'}</tbody></table></div>
+    <div class="acts"><button class="btn sm" data-act="row-add" data-at="${rows.length}" data-type="row">+ Row</button><button class="btn sm" data-act="row-add" data-at="${rows.length}" data-type="block">+ Block</button>
+      <span class="spacer"></span>${field('Shift all rows', 'layout.stackOff', 'big', { cls: 'inline', ph: '0' })}</div>
+    <p class="small ${msgs.length ? 'warn-txt' : 'muted'}">Rows total ${fmt(cov.total, 'big', S.job)} across a ${fmt(cov.span, 'big', S.job)} floor${msgs.length ? ': ' + msgs.join('; ') + '.' : ' — the whole floor is covered (the outer rows are cut to the shell).'}</p>`;
+}
+const rowLetter = (i) => { let s = ''; i += 1; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+
+function refreshBuilder() { const c = $('#builderCard'); if (c) c.innerHTML = builderHTML(); refreshSetupPreview(); }
+
+/** After a layout change, move indications / features whose plate no longer exists onto whatever plate now covers that spot. */
+function relocateOrphans(before) {
+  if (!before?.plates?.length) return 0;
+  let moved = 0, lost = 0;
+  for (const it of [...S.job.indications, ...S.job.features]) {
+    if (!it.plate || S.layout.byKey.has(it.plate) || it.x == null || it.y == null) continue;
+    const f = itemFloor(before, it); if (!f) continue;
+    const p = plateAt(S.layout, f.x, f.y);
+    if (!p) { lost++; continue; }
+    const l = toLocal(S.layout, p, f.x, f.y);
+    it.plate = p.key; it.x = Math.round(l.X * 10) / 10; it.y = Math.round(l.Y * 10) / 10; moved++;
+  }
+  if (moved) { recompute(); scheduleSave(); }
+  if (moved || lost) toast(`${moved ? `${moved} item${moved > 1 ? 's' : ''} moved to the plate now at ${moved > 1 ? 'their' : 'its'} location (X/Y recalculated).` : ''}${lost ? ` ${lost} could not be placed — check them.` : ''}`);
+  return moved;
+}
+
+function builderChange(fn) {
+  const before = S.layout;
+  fn(S.job.layout.rows = S.job.layout.rows || []);
+  commit(); relocateOrphans(before);
+  if (S.view === 'setup') refreshBuilder();
+  if (S.view === 'map') { drawMap(); renderSide(); }
+  renderNav();
+}
 function refreshSetupPreview() {
   const box = $('#spMap'); if (!box) return;
   box.innerHTML = renderMapSVG(S.job, S.layout, { calc: S.calc, floorOf: (ft) => itemFloor(S.layout, ft), plateLabels: true, indLabels: false });
@@ -563,6 +639,11 @@ function plateEditor(key) {
       ${field('UT min (general)', 'utMin', 't', { attr: 'data-pb', value: o.utMin, attrs: `data-key="${key}"` })}
       ${field('Notes', 'notes', 'area', { attr: 'data-pb', value: o.notes, rows: 2, cls: 'span2', attrs: `data-key="${key}"` })}
     </div>
+    ${p.rowId ? (() => { const r = (S.job.layout.rows || []).find((x) => x.id === p.rowId); if (!r) return ''; const cnt = S.layout.plates.filter((q) => q.rowId === r.id && q.part !== 'side').length;
+      return `<fieldset><legend>${r.type === 'block' ? 'Block' : 'Row'} ${h(rowLetter(p.row ?? 0))}</legend><div class="acts row-step">
+        <span>${r.type === 'block' ? 'Full-length plates in block' : 'Plates in this row'}: <b>${r.n}</b>${cnt !== +r.n ? ` <span class="muted small">(${cnt} drawn)</span>` : ''}</span>
+        <button class="btn sm icon" data-act="row-n" data-row="${r.id}" data-d="-1" title="One plate fewer">−</button><button class="btn sm icon" data-act="row-n" data-row="${r.id}" data-d="1" title="One plate more">+</button></div>
+        <p class="muted small">${p.part === 'side' ? 'This is a side sketch plate of the block. ' : ''}Edit row widths, plate lengths and offsets in Tank setup → Floor builder.</p></fieldset>`; })() : ''}
     ${p.kind === 'annular' ? '' : `<fieldset><legend>Plate size &amp; orientation</legend><div class="fgrid g3">
       ${field('Length', 'len', 'big', { attr: 'data-pb', value: o.len, ph: inVal(p.std.len, 'big', S.job), attrs: `data-key="${key}"` })}
       ${field('Width', 'wid', 'big', { attr: 'data-pb', value: o.wid, ph: inVal(p.std.wid, 'big', S.job), attrs: `data-key="${key}"` })}
@@ -773,6 +854,20 @@ document.addEventListener('click', async (e) => {
       if (S.view === 'map') { drawMap(); renderSide(); } return;
     }
     case 'datum-pick': setMode('datum'); return;
+    case 'row-n': return builderChange((rows) => { const r = rows.find((x) => x.id === el.dataset.row); if (r) r.n = Math.max(0, (+r.n || 0) + +el.dataset.d); });
+    case 'row-sug': return builderChange((rows) => { const r = rows.find((x) => x.id === el.dataset.row); if (r) r.n = +el.dataset.v; });
+    case 'row-add': return builderChange((rows) => rows.splice(+el.dataset.at, 0, newRow(S.job, el.dataset.type)));
+    case 'row-del': {
+      const r = S.job.layout.rows.find((x) => x.id === el.dataset.row);
+      const n = S.job.indications.filter((i) => S.layout.byKey.get(i.plate)?.rowId === r?.id).length;
+      if (n && !(await askConfirm(`${n} indication${n > 1 ? 's are' : ' is'} on this row. They will move to whatever plate covers their spot after the row is deleted.`, { ok: 'Delete row', danger: true }))) return;
+      return builderChange((rows) => { const i = rows.findIndex((x) => x.id === el.dataset.row); if (i >= 0) rows.splice(i, 1); });
+    }
+    case 'row-move': return builderChange((rows) => { const i = rows.findIndex((x) => x.id === el.dataset.row), j = i + +el.dataset.d; if (i >= 0 && j >= 0 && j < rows.length) [rows[i], rows[j]] = [rows[j], rows[i]]; });
+    case 'rows-template': {
+      if ((S.job.layout.rows || []).length && !(await askConfirm('Replace the current rows with this starting layout? Indications stay where they are on the floor and are moved onto the new plates.', { ok: 'Replace rows' }))) return;
+      return builderChange(() => { S.job.layout.rows = el.dataset.t === 'block' ? rowsCentreBlock(S.job) : rowsFromGrid(S.job); });
+    }
     case 'plate-size-reset': {
       const o = S.job.plates[el.dataset.key]; if (o) { delete o.len; delete o.wid; delete o.orient; }
       commit(); if (S.view === 'map') { drawMap(); renderSide(); } else refreshPlateTable(); return;
@@ -871,12 +966,21 @@ document.addEventListener('change', async (e) => {
     let v = readInput(el);
     if (el.dataset.num) v = +v;
     if (path === 'layout.annN' && v !== null) v = Math.max(1, Math.round(v));
+    const before = S.layout;
     setPath(S.job, path, v);
+    if (path === 'layout.mode' && v === 'custom' && !(S.job.layout.rows || []).length) { recompute(); S.job.layout.rows = rowsFromGrid(S.job); }
     commit();
-    const structural = path === 'units' || path === 'layout.annular' || path === 'layout.scheme' || path === 'layout.orient' || path === 'layout.refCorner';
-    if (S.view === 'setup') { if (structural) renderView(); else refreshSetupPreview(); renderHeader(); }
+    if (path.startsWith('layout.') || path === 'tank.diameter') relocateOrphans(before);
+    const structural = path === 'units' || path === 'layout.annular' || path === 'layout.scheme' || path === 'layout.orient' || path === 'layout.refCorner' || path === 'layout.mode';
+    if (S.view === 'setup') { if (structural) renderView(); else if (S.job.layout.mode === 'custom' && path.startsWith('layout.')) refreshBuilder(); else refreshSetupPreview(); renderHeader(); }
     else if (S.view === 'api') refreshApi();
     if (path === 'units') renderAll();
+    return;
+  }
+  if (el.matches('[data-rowf]')) {
+    const k = el.dataset.rowf; let v = readInput(el);
+    if (k === 'n' || k === 'sideN') v = v === null ? null : Math.max(k === 'n' ? 0 : 1, Math.round(v));
+    builderChange((rows) => { const r = rows.find((x) => x.id === el.dataset.row); if (!r) return; if (v === null || v === '') { if (k === 'h' || k === 'n') return; delete r[k]; } else r[k] = v; });
     return;
   }
   if (el.matches('[data-ib]')) return onIndField(el);

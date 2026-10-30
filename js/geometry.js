@@ -65,7 +65,8 @@ export function defaultLayout() {
     plateW: 2438.4, plateL: 9144, orient: 'h', centerRow: true, stagger: 0.5,
     annular: false, annW: 609.6, annN: 24, annStart: 0, annPrefix: 'AN',
     scheme: 'letters', sep: '', seqPrefix: 'P', revRows: false, revPlates: false,
-    refCorner: 'BL', minAreaPct: 0
+    refCorner: 'BL', minAreaPct: 0,
+    mode: 'grid', rows: [], stackOff: 0
   };
 }
 
@@ -85,6 +86,8 @@ export function buildLayout(job) {
   // --- centre (sketch / rectangular) plates, generated in local u (along length) / v (across rows)
   const W = L.plateW, Lp = L.plateL;
   const clipCircle = circlePoly(Ri, 720);
+  if (L.mode === 'custom') customPlates(L, Ri, clipCircle, plates);
+  else {
   const v0 = L.centerRow ? -W / 2 : 0;
   const kMin = Math.floor((-Ri - v0) / W) - 1, kMax = Math.ceil((Ri - v0) / W) + 1;
   const rows = [];
@@ -121,6 +124,7 @@ export function buildLayout(job) {
       plates.push(p);
     });
   });
+  }
 
   // --- annular ring segments
   if (Ri < R) {
@@ -173,6 +177,116 @@ export function buildLayout(job) {
   }
   const byKey = new Map(plates.map((p) => [p.key, p]));
   return { R, Ri, plates, byKey, L };
+}
+
+/* ------------------------------------------------------------------ row-by-row floor builder ---
+ * layout.rows: sections stacked across the floor (top → bottom for horizontal rows, left → right
+ * when rows run top – bottom). Each section has a stable id so plate keys survive edits.
+ *   { id, type: 'row',   h, n, len?, off? }   strip of h; n plates: n−2 full plates (len) centred,
+ *                                             sketch plates at both ends out to the shell
+ *   { id, type: 'block', h, n, w, off?, sideH, sideN }   n plates of width w set across the rows
+ *                                             (h long); gaps to the shell at both ends filled with
+ *                                             side rows sideH deep, sideN plates each
+ * Plates are built in local u (along the row) / v (across rows) and mapped to the drawing.
+ */
+export const halfChord = (Ri, va, vb) => {
+  const m = va <= 0 && vb >= 0 ? 0 : Math.min(Math.abs(va), Math.abs(vb));
+  return m >= Ri ? 0 : Math.sqrt(Ri * Ri - m * m);
+};
+
+/** Plates needed for a row so the middle ones are full length and the end sketch plates are ½–1 plate long. */
+export function suggestCount(Ri, va, vb, len) {
+  const c = 2 * halfChord(Ri, va, vb);
+  if (!(c > 0) || !(len > 0)) return 0;
+  return c <= len ? 1 : Math.max(2, Math.ceil(c / len));
+}
+
+/** Where the stacked sections sit across the floor: [{ sec, va, vb }]. */
+export function stackSections(L) {
+  const secs = (L.rows || []).filter((r) => +r.h > 0);
+  const total = secs.reduce((a, r) => a + +r.h, 0);
+  let top = total / 2 + (+L.stackOff || 0);
+  return { total, list: secs.map((sec) => { const vb = top, va = top - sec.h; top = va; return { sec, va, vb }; }) };
+}
+
+function customPlates(L, Ri, clipCircle, out) {
+  const E = Ri + 10; // beyond the shell
+  const toXY = (ua, ub, va, vb) => (L.orient === 'v' ? [-vb, ua, -va, ub] : [ua, va, ub, vb]);
+  const make = (key, ua, ub, va, vb, nominal) => {
+    const [x0, y0, x1, y1] = toXY(ua, ub, va, vb);
+    const poly = clipToRect(clipCircle, x0, y0, x1, y1);
+    if (poly.length < 3) return null;
+    const area = polyArea(poly);
+    if (area < 1e3) return null;
+    const bb = bbox(poly);
+    const full = nominal ?? (ub - ua) * (vb - va);
+    return { key, kind: 'floor', poly, bb, area, fullArea: full, cut: area < full * 0.999,
+      rect: { x0: Math.max(x0, bb.x0), y0: Math.max(y0, bb.y0), x1: Math.min(x1, bb.x1), y1: Math.min(y1, bb.y1) } };
+  };
+  // drawing order inside a row: left → right (h), top → bottom (v)
+  const byPos = (a, b) => (L.orient === 'v' ? (b.bb.y0 + b.bb.y1) - (a.bb.y0 + a.bb.y1) : (a.bb.x0 + a.bb.x1) - (b.bb.x0 + b.bb.x1));
+  const { list } = stackSections(L);
+  const groups = [];
+  for (const { sec, va, vb } of list) {
+    const off = +sec.off || 0;
+    const n = Math.max(0, Math.round(+sec.n || 0));
+    if (sec.type === 'block') {
+      const w = +sec.w > 0 ? +sec.w : L.plateW;
+      const main = [];
+      const u0 = -(n * w) / 2 + off;
+      for (let i = 0; i < n; i++) {
+        const p = make(`${sec.id}-${i}`, u0 + i * w, u0 + (i + 1) * w, va, vb, w * (vb - va));
+        if (p) { p.rowId = sec.id; p.part = 'block'; main.push(p); }
+      }
+      const sideH = +sec.sideH > 0 ? +sec.sideH : L.plateW, sideN = Math.max(1, Math.round(+sec.sideN || 1));
+      const nRows = Math.max(1, Math.ceil((vb - va) / sideH - 1e-6));
+      const sides = { L: [], R: [] };
+      for (let k = 0; k < nRows; k++) {
+        const sb = vb - k * sideH, sa = Math.max(va, sb - sideH);
+        const hc = halfChord(Ri, sa, sb);
+        for (const side of ['L', 'R']) {
+          const [a, b] = side === 'L' ? [-hc, u0] : [u0 + n * w, hc];
+          if (b - a <= 1) continue;
+          const step = (b - a) / sideN;
+          for (let j = 0; j < sideN; j++) {
+            const ua = j === 0 && side === 'L' ? -E : a + j * step, ub = j === sideN - 1 && side === 'R' ? E : a + (j + 1) * step;
+            const p = make(`${sec.id}-${side}${k}-${j}`, ua, ub, sa, sb);
+            if (p) { p.rowId = sec.id; p.part = 'side'; p.side = side; p.sideRow = k; p.sideIdx = j; sides[side].push(p); }
+          }
+        }
+      }
+      groups.push({ sec, main, sides });
+    } else {
+      const len = +sec.len > 0 ? +sec.len : L.plateL;
+      const cuts = [];
+      if (n === 2) cuts.push(off);
+      else if (n >= 3) { const k = n - 2, u0 = -(k * len) / 2 + off; for (let i = 0; i <= k; i++) cuts.push(u0 + i * len); }
+      const edges = [-E, ...cuts, E];
+      const main = [];
+      for (let i = 0; i + 1 < edges.length && n > 0; i++) {
+        const full = i > 0 && i < edges.length - 2 ? len * (vb - va) : undefined;
+        const p = make(`${sec.id}-${i}`, edges[i], edges[i + 1], va, vb, full);
+        if (p) { p.rowId = sec.id; p.part = 'row'; main.push(p); }
+      }
+      groups.push({ sec, main });
+    }
+  }
+  if (L.revRows) groups.reverse();
+  let seq = 0;
+  groups.forEach((g, gi) => {
+    const letter = rowName(gi);
+    g.main.sort(byPos); if (L.revPlates) g.main.reverse();
+    g.main.forEach((p, i) => { seq++; p.row = gi; p.col = i; p.autoLabel = L.scheme === 'sequential' ? `${L.seqPrefix || ''}${seq}` : `${letter}${L.sep || ''}${i + 1}`; out.push(p); });
+    if (g.sides) for (const side of ['L', 'R']) {
+      const tag = L.orient === 'v' ? (side === 'L' ? 'B' : 'T') : side;
+      for (const p of g.sides[side]) {
+        seq++; p.row = gi;
+        const multi = (g.sec.sideN || 1) > 1;
+        p.autoLabel = L.scheme === 'sequential' ? `${L.seqPrefix || ''}${seq}` : `${letter}${tag}${p.sideRow + 1}${multi ? '.' + (p.sideIdx + 1) : ''}`;
+        out.push(p);
+      }
+    }
+  });
 }
 
 function onPlate(p, x, y) {
