@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Tank Floor Inspector</title>
+  <meta name="description" content="Offline tank floor inspection: MFL indications with UT and VT prove-up, plate map, API 653 MRT and reports.">
+  <meta name="theme-color" content="#1d232b">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="icons/icon.svg" alt="" width="26" height="26">
+      <span>Tank Floor Inspector</span>
+    </div>
+    <div class="job-title" id="jobTitle"></div>
+    <div class="top-acts">
+      <span class="file-state" id="fileState" hidden></span>
+      <span class="save-state" id="saveState"></span>
+      <button class="btn sm ghost-inv" id="installBtn" data-act="install" hidden>Install app</button>
+      <button class="btn sm ghost-inv" id="saveFileBtn" data-act="file-save" hidden>Save file…</button>
+      <details class="menu" id="exportMenu" hidden>
+        <summary class="btn sm ghost-inv">Export ▾</summary>
+        <div class="menu-pop">
+          <button data-act="exp-ind">Indications (CSV / Excel)</button>
+          <button data-act="exp-plates">Plate register (CSV / Excel)</button>
+          <button data-act="exp-svg">Floor map (SVG)</button>
+          <button data-act="exp-png">Floor map (PNG)</button>
+          <hr>
+          <button data-act="file-save-as">Save job file as… (JSON + photos)</button>
+        </div>
+      </details>
+      <button class="btn sm primary" data-go="report">Report</button>
+    </div>
+  </header>
+  <nav class="sidenav" id="nav"></nav>
+  <main class="main" id="main"></main>
+
+  <dialog id="dlg" class="dlg"><div id="dlgBody"></div></dialog>
+  <dialog id="confirmDlg" class="dlg dlg-sm"></dialog>
+  <div class="toast" id="toast" hidden role="status"></div>
+
+  <noscript><p style="padding:2rem">This app needs JavaScript enabled.</p></noscript>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
