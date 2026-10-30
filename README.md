@@ -127,6 +127,25 @@ wall loss against nominal and *OK* / *Below t-min*; nozzles below t-min are draw
 and highlighted in the nozzle table, report and CSV. The four clock readings can also be typed
 straight into the Shell nozzles table in Tank setup.
 
+## Shell UT and roll-out
+
+The **Shell UT** page records shell course thickness readings:
+
+- **Shell courses** — course 1 at the bottom; height, nominal thickness and t-min (minimum required
+  thickness, entered by you) for each. Quick start with 5, 6 or 8 courses; *+ Course on top* adds more.
+- **UT locations** — the standard count is the circumference ÷ 32 ft, rounded down, **minimum 4 and
+  maximum 8**, equally spaced from 0° (e.g. a 30 ft tank gets 4, a 60 ft tank 5, 82 ft or larger 8).
+  Override the count or the first location's angle if needed. Readings are stored by angle, so
+  locations that stay put (0°, 90°, 180°, 270°) keep their readings when the count changes.
+- **UT readings** — one reading per course at each location; tab across a course. Each course shows
+  its minimum reading, % loss against nominal and OK / Below t-min.
+- **Shell roll-out** — the shell unwrapped from 0° to 360° looking from outside, courses as bands,
+  locations as dashed lines with each reading at mid-height of its course (red when below t-min),
+  shell nozzles at their angle and elevation, and distance along the circumference. Click a reading
+  to edit it. Horizontal and vertical scales differ.
+- The report has a Shell UT page with the roll-out and the readings table. *Export → Shell UT
+  readings (CSV / Excel)* and *Shell roll-out (SVG)*.
+
 ## Location convention — datum corners
 
 Every indication and feature is located by **plate + X/Y measured from the plate's datum corner**.

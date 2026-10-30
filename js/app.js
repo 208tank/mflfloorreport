@@ -4,13 +4,14 @@ import { u, toMm, inVal, fmt, fmtRate, unitLabel, num, UNITS } from './units.js'
 import { buildLayout, stackSections, suggestCount, halfChord, plateAt, toLocal, itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
 import { api653, RESULTS, RESULT_SHORT, czLimitAuto, plateNominal, NZ_CONN, NZ_CONN_SHORT, UT_CLOCK, nozzleUT } from './calc.js';
 import { renderMapSVG, MapController } from './map.js';
-import { download, indicationsCSV, platesCSV, nozzlesCSV, svgForExport, svgToPng, fileBase } from './export.js';
+import { download, indicationsCSV, platesCSV, nozzlesCSV, shellCSV, svgForExport, svgToPng, fileBase } from './export.js';
 import { buildReport, legendHTML } from './report.js';
 import { newJob, migrate, nextNo, uid, getPath, setPath } from './model.js';
 import { makeDemo } from './demo.js';
+import { defaultShell, autoLocCount, utLocations, coursesWithElev, shellHeight, courseSummary, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '2.0.0';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -31,6 +32,7 @@ const VIEWS = [
   ['inds', 'Indications', 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01'],
   ['plates', 'Plates', 'M3 4h8v7H3zM13 4h8v7h-8zM3 13h8v7H3zM13 13h8v7h-8z'],
   ['api', 'API 653', 'M5 4h14v16H5zM9 8h6M9 12h6M9 16h3'],
+  ['shell', 'Shell UT', 'M4 5h16v14H4zM4 10h16M4 15h16M9 5v14M15 5v14'],
   ['report', 'Report', 'M6 3h9l4 4v14H6zM14 3v5h5']
 ];
 
@@ -136,7 +138,7 @@ function renderNav() {
 function renderView() {
   const main = $('#main');
   main.className = 'main view-' + S.view;
-  const fn = { jobs: viewJobs, setup: viewSetup, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, report: viewReport }[S.view];
+  const fn = { jobs: viewJobs, setup: viewSetup, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, shell: viewShell, report: viewReport }[S.view];
   main.innerHTML = fn();
   after[S.view]?.();
 }
@@ -352,7 +354,7 @@ function refreshBuilder() {
   }, 0);
 }
 function focusSel(el) {
-  const attrs = ['data-rowf', 'data-row', 'data-secf', 'data-sec', 'data-mpf', 'data-pl', 'data-bind', 'data-act'];
+  const attrs = ['data-rowf', 'data-row', 'data-secf', 'data-sec', 'data-mpf', 'data-pl', 'data-shc', 'data-shut', 'data-course', 'data-bind', 'data-act'];
   const parts = attrs.filter((k) => el.hasAttribute(k)).map((k) => `[${k}="${CSS.escape(el.getAttribute(k))}"]`);
   return parts.length ? el.tagName.toLowerCase() + parts.join('') : null;
 }
@@ -951,6 +953,62 @@ function refreshApi() {
     <div class="ind-list">${reps.map((i) => { const a = c.per.get(i.id); return `<button class="ind-row" data-act="open-ind" data-id="${i.id}"><span class="dot r-${i.result}"></span><b>${h(i.no)}</b><span>${h(a.plate?.label)}</span><span class="n">${t(a.rem)}</span><span class="st st-${a.status.replace(/\W+/g, '-')}">${h(a.status)}</span></button>`; }).join('') || '<p class="muted small">No repairs required.</p>'}</div>`;
 }
 
+/* ------------------------------------------------------------- shell UT view */
+
+function viewShell() {
+  return `<div class="page wide shell-page"><div class="page-head"><div><h1>Shell UT</h1><p class="muted">Shell course thickness readings at standard locations around the circumference, drawn on a shell roll-out.</p></div>
+    <div class="acts"><button class="btn" data-act="exp-shell">Export CSV</button><button class="btn" data-act="exp-shell-svg">Roll-out (SVG)</button></div></div>
+    <div id="shellBody">${shellBodyHTML()}</div></div>`;
+}
+
+function shellBodyHTML() {
+  const job = S.job, sh = job.shell || defaultShell(), U = u(job);
+  const courses = coursesWithElev(job), locs = utLocations(job), sum = courseSummary(job);
+  const D = +job.tank?.diameter || 0, C = Math.PI * D, auto = autoLocCount(job);
+  const top = courses.slice().reverse();
+  const cin = (c, k, kind, ph = '') => `<input data-shc="${k}" data-course="${c.id}" data-kind="${kind}" inputmode="decimal" value="${h(inVal(c[k], kind, job))}" placeholder="${h(ph)}">`;
+  const st = (s) => (s.status ? `<span class="st ${s.status === 'OK' ? 'st-OK' : 'st-below-MRT'}">${s.status}</span>` : '');
+  const sm = new Map(sum.map((x) => [x.id, x]));
+  return `<div class="shell-grid">
+    <section class="card"><div class="sp-head"><h2>Shell courses</h2><span class="muted small">${courses.length} course${courses.length === 1 ? '' : 's'} · ${fmt(shellHeight(job), 'big', job)} high</span></div>
+      <div class="tblwrap"><table class="grid courses"><thead><tr><th>Course</th><th>Height (${U.big})</th><th>Nominal t (${U.small})</th><th>t-min (${U.small})</th><th class="n">Min. reading</th><th class="n">Loss</th><th>Status</th><th></th></tr></thead><tbody>
+      ${top.map((c) => { const s = sm.get(c.id); return `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${c.no}</b>${c.no === 1 ? ' <span class="muted small">bottom</span>' : ''}</td><td>${cin(c, 'h', 'big')}</td><td>${cin(c, 'tNom', 't')}</td><td>${cin(c, 'tMin', 't')}</td><td class="n">${s.min != null ? fmt(s.min, 't', job, false) : '—'}<small class="muted"> ${s.count}/${s.of}</small></td><td class="n">${s.lossPct != null ? s.lossPct.toFixed(0) + '%' : '—'}</td><td>${st(s)}</td><td><button class="btn sm icon ghost danger" data-act="course-del" data-course="${c.id}" title="Delete course">✕</button></td></tr>`; }).join('') || `<tr><td colspan="8" class="empty">No courses yet. Add them from the bottom course up, or start with <button class="btn sm" data-act="courses-std" data-n="5">5 courses</button> <button class="btn sm" data-act="courses-std" data-n="6">6 courses</button> <button class="btn sm" data-act="courses-std" data-n="8">8 courses</button></td></tr>`}
+      </tbody></table></div>
+      <div class="acts"><button class="btn sm" data-act="course-add">+ Course on top</button></div>
+      <p class="muted small">Course 1 is the bottom course. t-min is the minimum required thickness for each course (API 653 §4.3), entered by you.</p></section>
+
+    <section class="card"><h2>UT locations</h2>
+      <p class="small">${D > 0 ? `Circumference ${fmt(C, 'big', job)} ÷ ${fmt(SPACING_MM, 'big', job)} = ${(C / SPACING_MM).toFixed(1)} → standard <b>${auto}</b> locations (minimum 4, maximum 8, one per 32 ft of circumference), equally spaced.` : 'Enter the tank diameter in Tank setup.'}</p>
+      <div class="fgrid">${field('Number of locations', 'shell.nLoc', 'num', { ph: `${auto} (standard)`, hint: 'Leave blank for the standard count' })}${field('First location at', 'shell.start', 'num', { unit: '°', ph: '0' })}</div>
+      <div class="loc-list">${locs.map((l) => `<span class="loc-chip"><b>${l.label}</b> ${l.angle.toFixed(1)}° <small>${fmt(l.arc, 'big', job)}</small></span>`).join('')}</div>
+      <p class="muted small">Readings are kept by angle, so changing the count keeps readings at angles that stay the same (e.g. 0°, 90°, 180°, 270°).</p></section>
+  </div>
+
+  ${courses.length ? `<section class="card"><div class="sp-head"><h2>UT readings</h2><span class="muted small">thickness in ${U.small} · tab across a course</span></div>
+    <div class="tblwrap"><table class="grid readings"><thead><tr><th>Course</th>${locs.map((l) => `<th class="n">${l.label}<br><small>${l.angle.toFixed(1)}°</small></th>`).join('')}<th class="n">Min</th><th>Status</th></tr></thead><tbody>
+    ${top.map((c) => { const s = sm.get(c.id); return `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${c.no}</b> <small class="muted">${c.tMin ? 'min ' + fmt(c.tMin, 't', job, false) : ''}</small></td>${locs.map((l) => { const v = sh.ut?.[l.key]?.[c.id]; const bad = v != null && c.tMin > 0 && v < c.tMin - 1e-9; return `<td class="${bad ? 'bad-cell' : ''}"><input data-shut="${l.key}" data-course="${c.id}" data-kind="t" inputmode="decimal" value="${h(inVal(v, 't', job))}"></td>`; }).join('')}<td class="n"><b>${s.min != null ? fmt(s.min, 't', job, false) : '—'}</b></td><td>${st(s)}</td></tr>`; }).join('')}
+    </tbody></table></div></section>` : ''}
+
+  <section class="card"><div class="sp-head"><h2>Shell roll-out</h2><span class="muted small">click a reading to edit it</span></div>
+    <div class="ro-wrap" id="roWrap">${rolloutSVG(job)}</div></section>`;
+}
+
+function refreshShell() {
+  setTimeout(() => {
+    const c = $('#shellBody'); if (!c) return;
+    const a = document.activeElement, key = a && c.contains(a) ? focusSel(a) : null;
+    c.innerHTML = shellBodyHTML();
+    if (key) { const n = c.querySelector(key); if (n) { n.focus(); try { n.select(); } catch { /* */ } } }
+  }, 0);
+}
+
+document.addEventListener('click', (e) => {
+  const g = e.target.closest?.('#roWrap [data-cell]'); if (!g) return;
+  const [key, cid] = g.dataset.cell.split('|');
+  const inp = $(`#shellBody input[data-shut="${CSS.escape(key)}"][data-course="${CSS.escape(cid)}"]`);
+  if (inp) { inp.scrollIntoView({ block: 'center', behavior: 'smooth' }); inp.focus(); inp.select(); }
+});
+
 /* ------------------------------------------------------------ report view */
 
 function viewReport() {
@@ -1115,6 +1173,28 @@ document.addEventListener('click', async (e) => {
       const c = $('#nozzleCard'); if (c) { c.innerHTML = nozzleTableHTML(); refreshSetupPreview(); }
       return;
     }
+    case 'exp-shell': return download(fileBase(S.job) + '_shell-ut.csv', shellCSV(S.job), 'text/csv');
+    case 'exp-shell-svg': return download(fileBase(S.job) + '_shell-rollout.svg', rolloutSVG(S.job, { print: true }).replace(/(<svg[^>]*>)/, '$1' + SHELL_SVG_STYLE), 'image/svg+xml');
+    case 'course-add': {
+      const sh = (S.job.shell = S.job.shell || defaultShell()); sh.courses = sh.courses || [];
+      const last = sh.courses[sh.courses.length - 1];
+      const c = { id: uid(), h: last?.h ?? (S.job.units === 'metric' ? 2400 : 2438.4), tNom: last?.tNom ?? null, tMin: last?.tMin ?? null };
+      sh.courses.push(c); commit(); refreshShell(); return;
+    }
+    case 'course-del': {
+      const sh = S.job.shell; const c = sh?.courses?.find((x) => x.id === el.dataset.course); if (!c) return;
+      const n = Object.values(sh.ut || {}).filter((m) => m[c.id] != null).length;
+      if (n && !(await askConfirm(`Delete this course and its ${n} UT reading${n > 1 ? 's' : ''}?`, { ok: 'Delete', danger: true }))) return;
+      sh.courses = sh.courses.filter((x) => x.id !== c.id); for (const m of Object.values(sh.ut || {})) delete m[c.id];
+      commit(); refreshShell(); return;
+    }
+    case 'courses-std': {
+      const sh = (S.job.shell = S.job.shell || defaultShell());
+      const hTot = shellHeight(S.job);
+      const n = Math.max(1, Math.round(+el.dataset.n || 5)), ch = S.job.units === 'metric' ? 2400 : 2438.4;
+      if ((sh.courses || []).length && !(await askConfirm('Replace the current courses?', { ok: 'Replace' }))) return;
+      sh.courses = Array.from({ length: n }, () => ({ id: uid(), h: ch, tNom: null, tMin: null })); commit(); refreshShell(); return;
+    }
     case 'exp-noz': return download(fileBase(S.job) + '_nozzles.csv', nozzlesCSV(S.job), 'text/csv');
     case 'feature-del': {
       S.job.features = S.job.features.filter((f) => f.id !== S.selFeature); S.selFeature = null; commit(); drawMap(); renderSide(); return;
@@ -1174,8 +1254,24 @@ document.addEventListener('change', async (e) => {
     const structural = path === 'units' || path === 'layout.annular' || path === 'layout.scheme' || path === 'layout.orient' || path === 'layout.refCorner' || path === 'layout.mode';
     if (S.view === 'setup') { if (structural) renderView(); else if (S.job.layout.mode !== 'grid' && path.startsWith('layout.')) refreshBuilder(); else refreshSetupPreview(); renderHeader(); }
     else if (S.view === 'api') refreshApi();
+    else if (S.view === 'shell') refreshShell();
     if (path === 'units') renderAll();
     return;
+  }
+  if (el.matches('[data-shc]')) {
+    const c = S.job.shell?.courses?.find((x) => x.id === el.dataset.course); if (!c) return;
+    const v = readInput(el); const k = el.dataset.shc;
+    if (v !== null && v < 0) { toast('Values can’t be negative.'); return; }
+    if (v === null) { if (k === 'h') return; delete c[k]; } else c[k] = v;
+    commit(); refreshShell(); return;
+  }
+  if (el.matches('[data-shut]')) {
+    const sh = (S.job.shell = S.job.shell || defaultShell()); sh.ut = sh.ut || {};
+    const m = (sh.ut[el.dataset.shut] = sh.ut[el.dataset.shut] || {});
+    const v = readInput(el);
+    if (v !== null && v < 0) { toast('Readings can’t be negative.'); return; }
+    if (v === null) delete m[el.dataset.course]; else m[el.dataset.course] = v;
+    commit(); refreshShell(); return;
   }
   if (el.matches('[data-nb]')) {
     const nz = (S.job.nozzles || []).find((x) => x.id === el.dataset.id); if (!nz) return;

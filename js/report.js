@@ -2,6 +2,7 @@
 import { fmt, fmtRate, u } from './units.js';
 import { RESULTS, RESULT_SHORT, nozzleUT, NZ_CONN_SHORT, UT_CLOCK } from './calc.js';
 import { renderMapSVG, COLORS } from './map.js';
+import { rolloutSVG, utLocations, courseSummary, autoLocCount } from './shell.js';
 import { itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
 
 const h = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -145,6 +146,16 @@ export function buildReport(job, layout, calc, company, photos, opts) {
     <table class="sig"><tr>${[['MFL operator', I.mflTech], ['UT technician', I.utTech], ['API 653 inspector', I.inspector]].map(([r, n]) => `<td><div class="line"></div><b>${h(n || '')}</b><br>${r} · Date</td>`).join('')}</tr></table>
   </section>
 
+  ${(() => {
+    const cs = courseSummary(job); if (!cs.length) return '';
+    const locs = utLocations(job), top = cs.slice().reverse(), sh = job.shell || {};
+    return `<section class="pb"><h2>Shell UT</h2>
+      <div class="ro-print">${rolloutSVG(job, { print: true })}</div>
+      <p class="note">${locs.length} reading locations equally spaced from ${(+sh.start || 0).toFixed(1)}°${+sh.nLoc > 0 ? '' : ` (standard: one per 32 ft of circumference, minimum 4, maximum 8)`}. Readings at mid-height of each course. Thickness in ${U.small}.</p>
+      <table class="grid small"><thead><tr><th>Course</th><th class="n">Height</th><th class="n">Nominal</th><th class="n">t-min</th>${locs.map((l) => `<th class="n">${l.label}<br>${l.angle.toFixed(0)}°</th>`).join('')}<th class="n">Min</th><th class="n">Loss</th><th>Status</th></tr></thead><tbody>
+      ${top.map((c) => `<tr class="${c.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${c.no}</b></td><td class="n">${fmt(c.h, 'big', job, false)}</td><td class="n">${fmt(c.tNom, 't', job, false)}</td><td class="n">${fmt(c.tMin, 't', job, false)}</td>${locs.map((l) => { const v = sh.ut?.[l.key]?.[c.id]; return `<td class="n">${v != null ? (c.tMin > 0 && v < c.tMin - 1e-9 ? '<b>' + fmt(v, 't', job, false) + '</b>' : fmt(v, 't', job, false)) : '—'}</td>`; }).join('')}<td class="n"><b>${c.min != null ? fmt(c.min, 't', job, false) : '—'}</b></td><td class="n">${c.lossPct != null ? c.lossPct.toFixed(0) + '%' : '—'}</td><td>${c.status === 'Below t-min' ? '<b>Below t-min</b>' : h(c.status)}</td></tr>`).join('')}
+      </tbody></table></section>`;
+  })()}
   ${platesBlock}
   ${photoBlock}
   <footer class="rp-foot">${job.rev ? `${h(I.tankId || '')} Rev ${job.rev} (${h(new Date(job.savedAt).toLocaleDateString())}). ` : ''}${h(company.footer || '')} Calculation per API 653 §4.4.7 as configured in this report; verify limits against the edition and tank design in force.</footer>

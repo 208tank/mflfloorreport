@@ -55,6 +55,14 @@ export function makeDemo() {
     { id: uid(), mark: 'N3', type: 'Water draw / drain', angle: 182, size: 4 * IN, elev: 6 * IN, service: 'Water draw to sump', conn: 'THD', sched: 'Sch 80', tNom: 0.337 * IN, tMin: 0.2 * IN, ut12: 0.301 * IN, ut3: 0.255 * IN, ut6: 0.188 * IN, ut9: 0.262 * IN, utx: [{ id: uid(), loc: '6 o’clock at shell weld', t: 0.176 * IN }] },
     { id: uid(), mark: 'CO1', type: 'Clean-out door', angle: 270, size: 48 * IN, elev: 24 * IN, service: 'Flush clean-out' }
   ];
+  // shell: 5 courses of 8 ft, readings at the 8 standard locations (377 ft circumference)
+  const nom = [0.5, 0.4375, 0.375, 0.3125, 0.25], tmin = [0.39, 0.31, 0.24, 0.16, 0.1];
+  job.shell = { courses: nom.map((t, i) => ({ id: uid(), h: 8 * FT, tNom: t * IN, tMin: tmin[i] * IN })), nLoc: null, start: 0, ut: {}, notes: '' };
+  const wear = [[0.012, 0.018, 0.031, 0.015, 0.02, 0.026, 0.124, 0.017], [0.01, 0.014, 0.02, 0.012, 0.016, 0.011, 0.019, 0.013], [0.008, 0.01, 0.012, 0.009, 0.014, 0.01, 0.011, 0.009], [0.006, 0.008, 0.007, 0.01, 0.006, 0.009, 0.008, 0.007], [0.005, 0.007, 0.006, 0.004, 0.006, 0.005, 0.007, 0.006]];
+  for (let q = 0; q < 8; q++) {
+    const key = (q * 45).toFixed(1); job.shell.ut[key] = {};
+    job.shell.courses.forEach((c, i) => { job.shell.ut[key][c.id] = Math.round((nom[i] - wear[i][q]) * 1000) / 1000 * IN; });
+  }
   const sump = layout.plates.find((p) => p.key === job.features[0].plate);
   if (sump) job.plates[sump.key] = { scan: 'partial', notes: 'Around sump not scannable' };
   const p2 = at(18, 112).plate; job.plates[p2] = { ...(job.plates[p2] || {}), scan: 'partial', notes: 'Patch plate' };

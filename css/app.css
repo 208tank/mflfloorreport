@@ -317,6 +317,31 @@ button.sug { border: 1px dashed var(--accent); background: none; color: var(--ac
 .grid.nozzles input.sch { width: 70px; }
 .grid.nozzles tr.is-bad { background: var(--bad-soft); }
 
+/* shell UT */
+.shell-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; }
+.grid.courses input { width: 84px; min-height: 28px; padding: 3px 6px; text-align: right; font-size: 13px; }
+.grid.readings input { width: 70px; min-height: 28px; padding: 3px 6px; text-align: right; font-size: 13px; }
+.grid.readings td.bad-cell input { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); font-weight: 600; }
+.loc-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.loc-chip { border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: 12.5px; background: var(--panel2); }
+.loc-chip b { color: var(--accent); margin-right: 4px; } .loc-chip small { color: var(--muted); margin-left: 4px; }
+.ro-wrap { overflow-x: auto; } .ro-wrap svg { width: 100%; min-width: 760px; height: auto; display: block; }
+.rollout .ro-course { fill: var(--panel); stroke: var(--plate-line); stroke-width: .8; } .rollout .ro-course.alt { fill: var(--panel2); } .rollout .ro-course.bad { fill: var(--bad-soft); }
+.rollout .ro-frame { fill: none; stroke: var(--ink); stroke-width: 1.6; }
+.rollout text { font-family: var(--font); } .rollout .ro-cl { fill: var(--ink); font-weight: 700; } .rollout .ro-cs, .rollout .ro-arc, .rollout .ro-note, .rollout .ro-la { fill: var(--muted); }
+.rollout .ro-deg { fill: var(--ink2); } .rollout .ro-deg.big { fill: var(--ink); font-weight: 700; } .rollout .ro-tick { stroke: var(--ink); }
+.rollout .ro-loc { stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 5 3; } .rollout .ro-ll { fill: var(--accent); font-weight: 700; }
+.rollout .ro-r { cursor: pointer; } .rollout .ro-r rect { fill: var(--panel); stroke: var(--accent); stroke-width: 1; } .rollout .ro-r text { fill: var(--ink); font-weight: 600; }
+.rollout .ro-r.bad rect { fill: var(--bad-soft); stroke: var(--bad); } .rollout .ro-r.bad text { fill: var(--bad); }
+.rollout .ro-r.empty rect { stroke: var(--line); stroke-dasharray: 2 2; } .rollout .ro-r.empty text { fill: var(--muted); font-weight: 400; }
+.rollout .ro-r:hover rect { stroke-width: 2; }
+.rollout .ro-noz circle { fill: var(--plate-ann); stroke: var(--ink2); stroke-width: 1.2; } .rollout .ro-noz text { fill: var(--ink); font-weight: 700; } .rollout .ro-noz.bad circle { stroke: var(--bad); }
+.rollout .ro-empty { fill: var(--muted); }
+.report .ro-print svg { width: 100%; height: auto; display: block; }
+.report .rollout .ro-course { fill: #fff; stroke: #9aa3ad; } .report .rollout .ro-course.alt { fill: #f4f6f8; } .report .rollout .ro-course.bad { fill: #fdecec; }
+.report .rollout .ro-r rect { fill: #fff; } .report .rollout .ro-r.bad rect { fill: #fde8e8; }
+@media (max-width: 1100px) { .shell-grid { grid-template-columns: 1fr; } }
+
 /* datums */
 .floormap .datums { pointer-events: none; }
 .floormap .datum { fill: var(--accent); opacity: .5; stroke: none; }

@@ -1,6 +1,7 @@
 // CSV / JSON / image exports.
 import { fromMm, u, fmt } from './units.js';
 import { RESULTS, nozzleUT, NZ_CONN_SHORT, UT_CLOCK } from './calc.js';
+import { utLocations, courseSummary } from './shell.js';
 import { angleOf, toLocal, datumName, orientName } from './geometry.js';
 
 export function download(name, data, type) {
@@ -77,6 +78,16 @@ export function nozzlesCSV(job) {
     const s = nozzleUT(n);
     rows.push([n.mark ?? '', n.type ?? '', NZ_CONN_SHORT[n.conn] || '', n.service ?? '', n.angle ?? '', r(fromMm(n.size, 'small', job), d), r(fromMm(n.elev, 'small', job), d), n.sched ?? '', t(n.tNom), t(n.tMin),
       ...UT_CLOCK.map(([k]) => t(n[k])), (n.utx || []).filter((x) => x.t != null).map((x) => `${x.loc || 'other'}: ${t(x.t)}`).join('; '), t(s.min), r(s.lossPct, 1), s.status, n.notes ?? '']);
+  }
+  return toCSV(rows);
+}
+
+export function shellCSV(job) {
+  const U = u(job), td = U.tDec + 1, t = (mm) => r(fromMm(mm, 't', job), td);
+  const locs = utLocations(job);
+  const rows = [['Course', `Height (${U.big})`, `Nominal t (${U.small})`, `t-min (${U.small})`, ...locs.map((l) => `${l.label} ${l.angle.toFixed(1)}° (${U.small})`), `Min (${U.small})`, 'Wall loss (%)', 'Status']];
+  for (const c of courseSummary(job).slice().reverse()) {
+    rows.push([c.no, r(fromMm(c.h, 'big', job), U.bigDec + 1), t(c.tNom), t(c.tMin), ...locs.map((l) => t(job.shell?.ut?.[l.key]?.[c.id])), t(c.min), r(c.lossPct, 1), c.status]);
   }
   return toCSV(rows);
 }
