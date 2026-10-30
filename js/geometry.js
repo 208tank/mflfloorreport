@@ -86,7 +86,7 @@ export function buildLayout(job) {
   // --- centre (sketch / rectangular) plates, generated in local u (along length) / v (across rows)
   const W = L.plateW, Lp = L.plateL;
   const clipCircle = circlePoly(Ri, 720);
-  if (L.mode === 'custom') customPlates(L, Ri, clipCircle, plates);
+  if (L.mode === 'custom' || L.mode === 'measured') customPlates(L, Ri, clipCircle, plates);
   else {
   const v0 = L.centerRow ? -W / 2 : 0;
   const kMin = Math.floor((-Ri - v0) / W) - 1, kMax = Math.ceil((Ri - v0) / W) + 1;
@@ -202,8 +202,11 @@ export function suggestCount(Ri, va, vb, len) {
 }
 
 /** Where the stacked sections sit across the floor: [{ sec, va, vb }]. */
+/** Sections used by the current layout method: row-by-row (rows) or plate-by-plate (mrows). */
+export const sectionsOf = (L) => (L.mode === 'measured' ? L.mrows : L.rows) || [];
+
 export function stackSections(L) {
-  const secs = (L.rows || []).filter((r) => +r.h > 0);
+  const secs = sectionsOf(L).filter((r) => +r.h > 0);
   const total = secs.reduce((a, r) => a + +r.h, 0);
   let top = total / 2 + (+L.stackOff || 0);
   return { total, list: secs.map((sec) => { const vb = top, va = top - sec.h; top = va; return { sec, va, vb }; }) };
@@ -226,6 +229,7 @@ function customPlates(L, Ri, clipCircle, out) {
   // drawing order inside a row: left → right (h), top → bottom (v)
   const byPos = (a, b) => (L.orient === 'v' ? (b.bb.y0 + b.bb.y1) - (a.bb.y0 + a.bb.y1) : (a.bb.x0 + a.bb.x1) - (b.bb.x0 + b.bb.x1));
   const { list } = stackSections(L);
+  const measured = L.mode === 'measured';
   const groups = [];
   for (const { sec, va, vb } of list) {
     const off = +sec.off || 0;
@@ -233,10 +237,24 @@ function customPlates(L, Ri, clipCircle, out) {
     if (sec.type === 'block') {
       const w = +sec.w > 0 ? +sec.w : L.plateW;
       const main = [];
-      const u0 = -(n * w) / 2 + off;
-      for (let i = 0; i < n; i++) {
-        const p = make(`${sec.id}-${i}`, u0 + i * w, u0 + (i + 1) * w, va, vb, w * (vb - va));
-        if (p) { p.rowId = sec.id; p.part = 'block'; main.push(p); }
+      let u0 = -(n * w) / 2 + off, uEnd = u0 + n * w;
+      if (measured) {
+        // plates side by side, each its own width; length runs across the rows from the block's top edge
+        const pls = sec.plates || [];
+        const tot = pls.reduce((a, pl) => a + (+pl.wid > 0 ? +pl.wid : L.plateW), 0);
+        u0 = -tot / 2 + off; uEnd = u0 + tot;
+        let ua = u0;
+        for (const pl of pls) {
+          const pw = +pl.wid > 0 ? +pl.wid : L.plateW, pd = +pl.len > 0 ? +pl.len : vb - va;
+          const p = make(`${sec.id}-${pl.id}`, ua, ua + pw, vb - pd, vb, pw * pd);
+          if (p) { p.rowId = sec.id; p.plId = pl.id; p.part = 'mblock'; main.push(p); }
+          ua += pw;
+        }
+      } else {
+        for (let i = 0; i < n; i++) {
+          const p = make(`${sec.id}-${i}`, u0 + i * w, u0 + (i + 1) * w, va, vb, w * (vb - va));
+          if (p) { p.rowId = sec.id; p.part = 'block'; main.push(p); }
+        }
       }
       const sideH = +sec.sideH > 0 ? +sec.sideH : L.plateW, sideN = Math.max(1, Math.round(+sec.sideN || 1));
       const nRows = Math.max(1, Math.ceil((vb - va) / sideH - 1e-6));
@@ -245,7 +263,7 @@ function customPlates(L, Ri, clipCircle, out) {
         const sb = vb - k * sideH, sa = Math.max(va, sb - sideH);
         const hc = halfChord(Ri, sa, sb);
         for (const side of ['L', 'R']) {
-          const [a, b] = side === 'L' ? [-hc, u0] : [u0 + n * w, hc];
+          const [a, b] = side === 'L' ? [-hc, u0] : [uEnd, hc];
           if (b - a <= 1) continue;
           const step = (b - a) / sideN;
           for (let j = 0; j < sideN; j++) {
@@ -256,6 +274,19 @@ function customPlates(L, Ri, clipCircle, out) {
         }
       }
       groups.push({ sec, main, sides });
+    } else if (measured) {
+      // plates end to end along the row, each its own length; width hangs from the row's top edge
+      const pls = sec.plates || [];
+      const tot = pls.reduce((a, pl) => a + (+pl.len > 0 ? +pl.len : L.plateL), 0);
+      let ua = -tot / 2 + off;
+      const main = [];
+      for (const pl of pls) {
+        const pl_ = +pl.len > 0 ? +pl.len : L.plateL, pw = +pl.wid > 0 ? +pl.wid : vb - va;
+        const p = make(`${sec.id}-${pl.id}`, ua, ua + pl_, vb - pw, vb, pl_ * pw);
+        if (p) { p.rowId = sec.id; p.plId = pl.id; p.part = 'mrow'; main.push(p); }
+        ua += pl_;
+      }
+      groups.push({ sec, main });
     } else {
       const len = +sec.len > 0 ? +sec.len : L.plateL;
       const cuts = [];

@@ -87,6 +87,15 @@ one `.json` file holding all the job data and its photos.
     moves the whole stack. The builder warns if part of the floor isn't covered.
   - **Add plates from the map:** click any plate and use the **− / +** buttons to change the number
     of plates in its row or block.
+- **Plate by plate** — for floors you have measured. Each row lists its plates in order with their
+  **length × width**; plates are laid end to end and centred on the floor (Offset slides them), and
+  end plates longer than the floor are cut at the shell. Each block lists its plates' **width ×
+  length** side by side, with sketch-plate rows filling the gaps beside it. Blank sizes use the row
+  width / standard length (or block depth). *Copy from automatic / row-by-row layout* fills every
+  row with the sizes from the current drawing so you only correct the numbers; **+ Plate** copies
+  the previous plate's size. Each row shows its total length against the floor width there and
+  flags plates that end up outside the shell. On the Floor map, click a plate to edit its length
+  and width, insert a plate before or after it, or remove it.
 - When a layout change removes the plate an indication or feature was on, it is moved to whichever
   plate now covers that spot (X/Y recalculated from the new plate's datum).
 

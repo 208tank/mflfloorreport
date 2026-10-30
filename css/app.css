@@ -281,6 +281,22 @@ button.sug { border: 1px dashed var(--accent); background: none; color: var(--ac
 .grid.builder td.rowacts { white-space: nowrap; text-align: right; }
 .grid.builder td.rowacts .btn { width: 24px; }
 
+/* plate-by-plate builder */
+.msecs { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.msec { border: 1px solid var(--line2); border-radius: 8px; padding: 8px 10px; background: var(--panel); }
+.msec.blk { background: color-mix(in srgb, var(--accent-soft) 45%, var(--panel)); }
+.msec-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12.5px; color: var(--muted); }
+.msec-head .lt { font-size: 15px; color: var(--ink); min-width: 18px; }
+.msec-head label { display: inline-flex; align-items: center; gap: 5px; }
+.msec-head input, .pchip input { width: 58px; min-height: 26px; padding: 2px 6px; font-size: 13px; text-align: right; }
+.msec-head input.xs { width: 38px; }
+.msec-head .tot { margin-left: auto; } .msec-head .rowacts { white-space: nowrap; } .msec-head .rowacts .btn { width: 24px; }
+.pchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
+.pchip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel2); font-size: 12px; }
+.pchip b { min-width: 24px; color: var(--ink2); } .pchip i { font-style: normal; color: var(--muted); }
+.pchip.out { border-style: dashed; border-color: var(--warn); opacity: .75; }
+.pchip .x { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 3px; font-size: 12px; } .pchip .x:hover { color: var(--bad); }
+
 /* datums */
 .floormap .datums { pointer-events: none; }
 .floormap .datum { fill: var(--accent); opacity: .5; stroke: none; }

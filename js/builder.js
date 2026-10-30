@@ -1,5 +1,5 @@
 // Starting layouts for the row-by-row floor builder.
-import { suggestCount, halfChord } from './geometry.js';
+import { suggestCount, halfChord, buildLayout, sectionsOf } from './geometry.js';
 import { uid } from './model.js';
 
 const innerRadius = (job) => {
@@ -43,10 +43,44 @@ export function rowsCentreBlock(job) {
 
 /** Coverage check: how far the stacked sections fall short of / overrun the floor across the rows. */
 export function coverage(job) {
-  const rows = (job.layout?.rows || []).filter((r) => +r.h > 0);
+  const rows = sectionsOf(job.layout || {}).filter((r) => +r.h > 0);
   const total = rows.reduce((a, r) => a + +r.h, 0);
   const span = 2 * innerRadius(job);
   const off = +job.layout?.stackOff || 0;
   const gapTop = span / 2 - (total / 2 + off), gapBottom = span / 2 - (total / 2 - off);
   return { total, span, gapTop, gapBottom };
+}
+
+/* ------------------------------------------------------------- plate by plate (measured) --- */
+
+export const newPlate = (len = null, wid = null) => ({ id: uid(), len, wid });
+
+export function newMeasuredSection(job, type = 'row') {
+  const L = job.layout;
+  return type === 'block'
+    ? { id: uid(), type: 'block', h: L.plateL, off: 0, sideH: L.plateW, sideN: 1, plates: [newPlate(), newPlate(), newPlate()] }
+    : { id: uid(), type: 'row', h: L.plateW, off: 0, plates: [newPlate(), newPlate(), newPlate()] };
+}
+
+/**
+ * Turn the current drawing (automatic grid or row-by-row) into plate-by-plate sections, with each
+ * plate's length and width taken from the drawing, so the crew only has to correct the numbers.
+ */
+export function measuredFromDrawing(job) {
+  const L0 = job.layout || {};
+  const rows = L0.mode === 'custom' && (L0.rows || []).length ? L0.rows : rowsFromGrid(job);
+  const j = { ...job, layout: { ...L0, mode: 'custom', rows } };
+  const lay = buildLayout(j);
+  const v = L0.orient === 'v';
+  const along = (p) => (v ? p.bb.y1 - p.bb.y0 : p.bb.x1 - p.bb.x0);
+  const uPos = (p) => (v ? p.bb.y0 + p.bb.y1 : p.bb.x0 + p.bb.x1);
+  const step = job.units === 'metric' ? 10 : 25.4, r1 = (x) => Math.round(x / step) * step; // nearest inch / 10 mm
+  return rows.map((sec) => {
+    const mains = lay.plates.filter((p) => p.rowId === sec.id && p.part !== 'side').sort((a, b) => uPos(a) - uPos(b));
+    if (sec.type === 'block') {
+      return { id: uid(), type: 'block', h: sec.h, off: +sec.off || 0, sideH: sec.sideH ?? L0.plateW, sideN: sec.sideN ?? 1,
+        plates: mains.map((p) => newPlate(null, r1(along(p)))) };
+    }
+    return { id: uid(), type: 'row', h: sec.h, off: 0, plates: mains.map((p) => newPlate(r1(along(p)), null)) };
+  });
 }
