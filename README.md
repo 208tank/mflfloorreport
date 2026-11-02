@@ -28,6 +28,15 @@ Installed copies pick up the new version and show a *Reload* prompt.
 **Local testing:** service workers need `http://localhost` or HTTPS, so run
 `python3 -m http.server 8000` in this folder and open `http://localhost:8000`.
 
+## Repairs
+
+Open an indication (Floor → NDE → Indications, or click it on the floor map) and fill in **Repair & remarks**:
+Repair (auto / yes / no), Repair method, **Repair / patch plate length and width**, **Patch plate thickness**
+and a **Repair ID** (e.g. P-1; use the same ID when one patch covers several indications). The report's
+Repairs table lists the indication size and the repair / patch size (L × W × t) separately; the CSV
+includes them. Existing patches already on the floor are drawn with the floor feature *Patch plate / repair*
+(Floor map → + Feature).
+
 ## Organisation of the app (v3)
 
 The sidebar follows the parts of the tank:

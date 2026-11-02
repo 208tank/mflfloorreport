@@ -20,7 +20,7 @@ import { designBasis, courseDesigns, fillFromT, annularReq, defaultJoint, shellY
 import { SECTIONS, SEC, CHILDREN, viewPlace, childView, findings, allDefs, numberDefs, STATUS_TEXT, NDE_METHODS, NDE_RESULTS, CONDITIONS, PRIORITIES, PRIORITY_LABEL, STATUSES, typicalNDE, typicalObs, newObs, newNDE, newRec, defaultSummary } from './sections.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '3.0.0';
+const APP_VERSION = '3.0.1';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -698,6 +698,8 @@ function indEditor(ind, where) {
     <div class="ed-sum" data-part="sum">${summaryBox(a)}</div>
     <fieldset><legend>Repair &amp; remarks</legend><div class="fgrid">
       ${f('Repair', 'repair', 'sel', { options: [['auto', 'Auto (API 653 calc)'], ['yes', 'Yes'], ['no', 'No']] })}${f('Repair method', 'repairMethod', 'sel', { options: REPAIR_METHOD })}
+      ${f('Repair / patch plate length', 'repLen', 'small')}${f('Repair / patch plate width', 'repWid', 'small')}
+      ${f('Patch plate thickness', 'repT', 't')}${f('Repair ID / patch no.', 'repId', 'text', { ph: 'e.g. P-3, or shared patch' })}
       ${f('Comments', 'comments', 'area', { rows: 2, cls: 'span2' })}
     </div></fieldset>
     <fieldset><legend>Photos</legend>

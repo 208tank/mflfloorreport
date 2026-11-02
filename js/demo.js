@@ -28,7 +28,7 @@ export function makeDemo() {
   const ind = (no, r, a, o) => ({ id: uid(), no, ...at(r, a), result: 'pending', repair: 'auto', created: Date.now(), ...o });
   const t = (v) => v * IN;
   job.indications = [
-    ind('001', 10, 40, { mflPct: 35, mflSignal: '62', len: t(1.5), wid: t(1.2), result: 'ss', utMin: t(0.168), utMethod: 'A-scan', vtCond: 'None visible' }),
+    ind('001', 10, 40, { mflPct: 35, mflSignal: '62', len: t(1.5), wid: t(1.2), result: 'ss', utMin: t(0.168), utMethod: 'A-scan', vtCond: 'None visible', repairMethod: 'Patch plate (lap welded)', repLen: t(12), repWid: t(12), repT: t(0.25), repId: 'P-1' }),
     ind('002', 22, 75, { mflPct: 25, mflSignal: '41', len: t(0.8), wid: t(0.8), result: 'ps', vtDepth: t(0.06), vtCond: 'Isolated pit' }),
     ind('003', 35, 130, { mflPct: 45, mflSignal: '88', len: t(3), wid: t(2), result: 'ss', utMin: t(0.12), utMethod: 'B-scan', vtCond: 'None visible' }),
     ind('004', 41, 200, { mflPct: 20, mflSignal: '35', result: 'nri', comments: 'Mill scale / debris' }),

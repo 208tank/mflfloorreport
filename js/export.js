@@ -37,7 +37,7 @@ export function indicationsCSV(job, layout, calc) {
     'MFL signal', 'MFL est. loss (%)', 'MFL scan ref', `Length (${S})`, `Width (${S})`,
     'Prove-up result', `Nominal t (${S})`, `UT min remaining (${S})`, 'UT method', `VT pit depth (${S})`, 'VT condition', 'Coating condition',
     `Remaining t used (${S})`, 'Remaining t source', `Wall loss (${S})`, 'Wall loss (%)', `Projected t at next insp. (${S})`, `MRT limit (${S})`, 'API 653 status',
-    'Repair setting', 'Repair method', 'Comments'];
+    'Repair setting', 'Repair method', `Repair length (${U.small})`, `Repair width (${U.small})`, `Patch t (${U.small})`, 'Repair ID', 'Comments'];
   const rows = [head];
   for (const ind of job.indications || []) {
     const a = calc.per.get(ind.id) || {};
@@ -49,7 +49,7 @@ export function indicationsCSV(job, layout, calc) {
       ind.mflSignal ?? '', ind.mflPct ?? '', ind.scanRef ?? '', sm(ind.len), sm(ind.wid),
       RESULTS[ind.result || 'pending'], t(a.tNom), t(ind.utMin), ind.utMethod ?? '', t(ind.vtDepth), ind.vtCond ?? '', ind.coating ?? '',
       t(a.rem), a.src ?? '', t(a.loss), r(a.lossPct, 1), t(a.projected), t(a.limit), a.status ?? '',
-      ind.repair || 'auto', ind.repairMethod ?? '', ind.comments ?? ''
+      ind.repair || 'auto', ind.repairMethod ?? '', r(fromMm(ind.repLen, 'small', job), 3), r(fromMm(ind.repWid, 'small', job), 3), r(fromMm(ind.repT, 't', job), 3), ind.repId ?? '', ind.comments ?? ''
     ]);
   }
   return toCSV(rows);
