@@ -2,7 +2,7 @@
 import { db, requestPersistence } from './db.js';
 import { u, toMm, inVal, fmt, fmtRate, unitLabel, num, UNITS } from './units.js';
 import { buildLayout, stackSections, suggestCount, halfChord, plateAt, toLocal, itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
-import { api653, RESULTS, RESULT_SHORT, czLimitAuto, plateNominal, NZ_CONN, NZ_CONN_SHORT, UT_CLOCK, nozzleUT } from './calc.js';
+import { api653, RESULTS, RESULT_SHORT, czLimitAuto, plateNominal, NZ_CONN, NZ_CONN_SHORT, UT_CLOCK, nozzleUT, nozzleWall } from './calc.js';
 import { renderMapSVG, MapController } from './map.js';
 import { ROOF_TYPES, FIXED_TYPES, FIXED_SUPPORT, FLOAT_TYPES, PT5, PT5_SHORT, PONT_COND, hasFixed, hasFloating, floatingLayout, roofDiameter, autoPontCount, plateUT, pointStatus, floatingSVG, fixedSVG } from './roof.js';
 import { download, indicationsCSV, platesCSV, nozzlesCSV, shellCSV, roofCSV, settleCSV, svgForExport, svgToPng, fileBase } from './export.js';
@@ -12,10 +12,14 @@ import { makeDemo } from './demo.js';
 import { defaultShell, defaultZones, autoLocCount, autoPlateCount, utLocations, coursesWithElev, courseAt, coursePlates, shellHeight, courseSummary, readingElevations, zoneCount, getReading, fmtElev, zKey, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
 import { buildLoader, readLoader, loaderAreas } from './loader.js';
 import { SEAL_STDS, PRIMARY_TYPES, SECONDARY_TYPES, SEAL_CHECKS, newGap, gapSummary, cm2mToIn2ft, sealEval, activeStds, nextDue } from './seal.js';
+import { settleYE, kRoofFixed, edgeCurve } from './settle.js';
+import { edgeAllow as edgeAllowT } from './tables.js';
 import { WELDS, ELEV_UNITS, PSI_PER_MPA, DEP_K, newEdge, newDep, epOffsets, xKey, profileEval, profileSVG, curveAt, stations, stationCount, autoN, settleHeight, settleCalc, slopeText, edgeEval, depEval, EDGE_NOTE, settlePlanSVG, settleChartSVG } from './settle.js';
+import { MATERIALS, MAT, CODES, editionsFor, supplementsFor, jointOptions, jointLabel, JE_42, JE_43, JE_NOTES, EDGE_D, EDGE_BEW, EDGE_BE, K_TABLE, T45, T51B, NOZZLE_PIPE, NOZZLE_WALL_BY_SHELL, CODE_SCHED, E_DEFAULT, PSI_MPA, TABLES_SOURCE } from './tables.js';
+import { designBasis, courseDesigns, fillFromT, annularReq, defaultJoint, shellYE } from './design.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '2.7.0';
+const APP_VERSION = '2.8.0';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -39,6 +43,7 @@ const VIEWS = [
   ['shell', 'Shell UT', 'M4 5h16v14H4zM4 10h16M4 15h16M9 5v14M15 5v14'],
   ['roof', 'Roof', 'M3 11l9-7 9 7M5 10v9h14v-9M9 19v-5h6v5'],
   ['settle', 'Settlement', 'M3 7h18M3 7l3 11h12l3-11M8 12l8 3'],
+  ['ref', 'Code tables', 'M4 4h16v16H4zM4 9h16M4 14h16M9 4v16'],
   ['report', 'Report', 'M6 3h9l4 4v14H6zM14 3v5h5']
 ];
 
@@ -144,7 +149,7 @@ function renderNav() {
 function renderView() {
   const main = $('#main');
   main.className = 'main view-' + S.view;
-  const fn = { jobs: viewJobs, setup: viewSetup, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, shell: viewShell, roof: viewRoof, settle: viewSettle, report: viewReport }[S.view];
+  const fn = { jobs: viewJobs, setup: viewSetup, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, shell: viewShell, roof: viewRoof, settle: viewSettle, ref: viewRef, report: viewReport }[S.view];
   main.innerHTML = fn();
   after[S.view]?.();
 }
@@ -263,6 +268,15 @@ function viewSetup() {
         ${field('Cathodic protection', 'tank.cp', 'bool')}${field('Leak detection / release prevention barrier', 'tank.rpb', 'bool')}
       </div></section>
 
+      <section class="card"><h2>Construction &amp; design</h2><div class="fgrid">
+        ${field('Construction code', 'tank.code', 'sel', { options: CODES })}
+        ${field('Code edition', 'tank.edition', 'sel', { options: ['', ...editionsFor(S.job.tank.code || 'Unknown')].map((x) => [x, x || '—']) })}
+        ${field('Supplement / revision / addendum', 'tank.supp', 'sel', { options: ['', ...supplementsFor(S.job.tank.edition)].map((x) => [x, x || '—']) })}
+        ${field('Product specific gravity G', 'tank.sg', 'num', { ph: 'e.g. 0.85', hint: 'Needed for the shell t-min calculation (highest SG stored)' })}
+        ${field('Maximum fill height', 'tank.fillH', 'big', { ph: shellHeight(S.job) ? fmt(shellHeight(S.job), 'big', S.job, false) + ' (shell height)' : '' })}
+        <p class="muted small span2">The code and edition set the joint efficiencies offered for the shell courses (API 653 Table 4.2: ${h(jointOptions(S.job.tank.code, S.job.tank.edition).group)}). Materials, stresses and Young's modulus come from the reference tables (<button class="linkbtn" data-go="ref">Code tables</button>).</p>
+      </div></section>
+
       <section class="card"><h2>Plate layout</h2>
         ${hasInd ? '<p class="callout warn">This job has indications. They are stored as plate + X/Y, so changing the layout or numbering moves them on the map. Check them afterwards.</p>' : ''}
         <div class="fgrid">
@@ -360,7 +374,7 @@ function refreshBuilder() {
   }, 0);
 }
 function focusSel(el) {
-  const attrs = ['data-rowf', 'data-row', 'data-secf', 'data-sec', 'data-mpf', 'data-pl', 'data-shc', 'data-shut', 'data-course', 'data-z', 'data-zf', 'data-zone', 'data-rut', 'data-pt', 'data-rpt', 'data-f', 'data-rpc', 'data-sg', 'data-gid', 'data-sck', 'data-sckn', 'data-st', 'data-se', 'data-sd', 'data-eid', 'data-sts', 'data-ep', 'data-x', 'data-eps', 'data-epz', 'data-zid', 'data-cv', 'data-cid', 'data-bind', 'data-act'];
+  const attrs = ['data-rowf', 'data-row', 'data-secf', 'data-sec', 'data-mpf', 'data-pl', 'data-shc', 'data-shut', 'data-course', 'data-z', 'data-zf', 'data-zone', 'data-rut', 'data-pt', 'data-rpt', 'data-f', 'data-rpc', 'data-sg', 'data-gid', 'data-sck', 'data-sckn', 'data-st', 'data-se', 'data-sd', 'data-eid', 'data-sts', 'data-ep', 'data-x', 'data-eps', 'data-epz', 'data-zid', 'data-cv', 'data-cid', 'data-shs', 'data-bind', 'data-act'];
   const parts = attrs.filter((k) => el.hasAttribute(k)).map((k) => `[${k}="${CSS.escape(el.getAttribute(k))}"]`);
   return parts.length ? el.tagName.toLowerCase() + parts.join('') : null;
 }
@@ -719,7 +733,7 @@ function nozzleEditor() {
       ${f('Notes', 'notes', 'area', { rows: 2, cls: 'span2' })}
     </div>
     <fieldset><legend>Neck UT</legend><div class="fgrid g3">
-      ${f('Schedule / class', 'sched', 'text', { ph: 'e.g. Sch 40, STD, XS' })}${f('Nominal wall', 'tNom', 't')}${f('t-min (required)', 'tMin', 't')}
+      ${f('Schedule / class', 'sched', 'text', { ph: 'e.g. Sch 40, STD, XS' })}${(() => { const w = nozzleWall({ ...nz, tNom: null, tMin: null }, S.job); return f('Nominal wall', 'tNom', 't', { ph: w.tNom ? inVal(w.tNom, 't', S.job) : '', hint: w.tNom ? 'Blank = ' + w.src : '' }) + f('t-min (required)', 'tMin', 't', { ph: w.tMin ? inVal(w.tMin, 't', S.job) : '', hint: w.tMin ? 'Blank = nominal less 12.5 % mill tolerance' : '' }); })()}
     </div>
     <div class="ut-clock">${UT_CLOCK.map(([k, lab]) => field(`${lab} o’clock`, k, 't', { attr: 'data-nb', value: nz[k], attrs: `data-id="${nz.id}"` })).join('')}</div>
     <div class="ut-extra">${(nz.utx || []).map((r) => `<div class="utx-row"><input data-nbx="loc" data-id="${nz.id}" data-rid="${r.id}" data-kind="text" value="${h(r.loc || '')}" placeholder="Location, e.g. flange side 12"><span class="ctl"><input data-nbx="t" data-id="${nz.id}" data-rid="${r.id}" data-kind="t" inputmode="decimal" value="${h(inVal(r.t, 't', S.job))}"><i class="unit">${u(S.job).small}</i></span><button class="btn sm icon ghost danger" data-act="utx-del" data-id="${nz.id}" data-rid="${r.id}" title="Remove reading">✕</button></div>`).join('')}
@@ -732,17 +746,17 @@ function nozzleEditor() {
 
 function refreshNozzleUT(nz) {
   const b = $(`[data-ed="nozzle"][data-id="${nz.id}"] [data-part="nzut"]`); if (b) b.innerHTML = nozzleUTBox(nz);
-  const r = nozzleUT(nz);
+  const r = nozzleUT(nz, S.job);
   const m = $(`[data-part="min-${nz.id}"]`); if (m) m.textContent = r.count ? fmt(r.min, 't', S.job, false) : '—';
   const st = $(`[data-part="st-${nz.id}"]`); if (st) { st.innerHTML = `<span class="st ${r.status === 'OK' ? 'st-OK' : r.status ? 'st-below-MRT' : ''}">${r.status || ''}</span>`; st.closest('tr')?.classList.toggle('is-bad', r.status === 'Below t-min'); }
 }
 
 function nozzleUTBox(nz) {
-  const r = nozzleUT(nz);
+  const r = nozzleUT(nz, S.job);
   if (!r.count) return '<span class="muted small">No UT readings yet.</span>';
   return `<div class="sum-grid three"><div><span>Min. reading</span><b>${fmt(r.min, 't', S.job)}</b><small>${r.count} reading${r.count > 1 ? 's' : ''}</small></div>
-    <div><span>Wall loss</span><b>${r.lossPct != null ? r.lossPct.toFixed(0) + '%' : '—'}</b><small>${nz.tNom ? 'vs ' + fmt(nz.tNom, 't', S.job) : 'enter nominal'}</small></div>
-    <div><span>Status</span><b class="${r.status === 'OK' ? 'ok' : r.status ? 'bad' : ''}">${r.status || '—'}</b><small>${nz.tMin ? 't-min ' + fmt(nz.tMin, 't', S.job) : 'enter t-min'}</small></div></div>`;
+    <div><span>Wall loss</span><b>${r.lossPct != null ? r.lossPct.toFixed(0) + '%' : '—'}</b><small>${(() => { const w = nozzleWall(nz, S.job); return w.tNom ? 'vs ' + fmt(w.tNom, 't', S.job) + (w.nomTbl ? ' (table)' : '') : 'enter nominal'; })()}</small></div>
+    <div><span>Status</span><b class="${r.status === 'OK' ? 'ok' : r.status ? 'bad' : ''}">${r.status || '—'}</b><small>${(() => { const w = nozzleWall(nz, S.job); return w.tMin ? 't-min ' + fmt(w.tMin, 't', S.job) + (w.minTbl ? ' (table)' : '') : 'enter t-min'; })()}</small></div></div>`;
 }
 
 function nozzleTableHTML() {
@@ -752,11 +766,11 @@ function nozzleTableHTML() {
     ? `<select data-nb="${k}" data-id="${n.id}" data-kind="text">${NZ_TYPES.map((t) => `<option ${n[k] === t ? 'selected' : ''}>${t}</option>`).join('')}</select>`
     : kind === 'conn'
       ? `<select data-nb="${k}" data-id="${n.id}" data-kind="text">${NZ_CONN.map(([v, l]) => `<option value="${v}" ${(n[k] || '') === v ? 'selected' : ''}>${v ? NZ_CONN_SHORT[v] : '—'}</option>`).join('')}</select>`
-      : `<input data-nb="${k}" data-id="${n.id}" data-kind="${kind}" ${kind !== 'text' ? 'inputmode="decimal" class="num"' : ''} value="${h(kind === 'small' || kind === 't' ? inVal(n[k], kind, S.job) : n[k] ?? '')}" ${extra}>`;
+      : `<input data-nb="${k}" data-id="${n.id}" data-kind="${kind}" ${kind !== 'text' ? 'inputmode="decimal" class="num"' : ''} value="${h(kind === 'small' || kind === 't' ? inVal(n[k], kind, S.job) : n[k] ?? '')}" ${(k === 'tNom' || k === 'tMin') && !(n[k] > 0) ? (() => { const w = nozzleWall(n, S.job); const v = k === 'tNom' ? w.tNom : w.tMin; return v ? `placeholder="${inVal(v, 't', S.job)}" title="From the nozzle table: ${h(w.src)}"` : ''; })() : ''} ${extra}>`;
   return `<div class="sp-head"><h2>Shell nozzles</h2><span class="muted small">${list.length} on the shell</span></div>
     <p class="muted small">Angle is clockwise from 0° (${h(S.job.info.zeroRef || 'the 0° reference')}). Neck UT readings at 12, 3, 6 and 9 o’clock; add more readings by clicking the nozzle on the Floor map. Thickness in ${U.small}.</p>
     <div class="tblwrap"><table class="grid nozzles"><thead><tr><th>Mark</th><th>Type</th><th>Connection</th><th>Angle (°)</th><th>Size (${U.small})</th><th>Elev. (${U.small})</th><th>Schedule</th><th>Nom. wall</th><th>t-min</th>${UT_CLOCK.map(([, l]) => `<th>${l}:00</th>`).join('')}<th>Min</th><th>Status</th><th>Service / description</th><th></th></tr></thead><tbody>
-    ${list.slice().sort((a, b) => (+a.angle || 0) - (+b.angle || 0)).map((n) => { const r = nozzleUT(n); return `<tr class="${r.status === 'Below t-min' ? 'is-bad' : ''}"><td>${inp(n, 'mark', 'text', 'class="mk"')}</td><td>${inp(n, 'type', 'sel')}</td><td>${inp(n, 'conn', 'conn')}</td><td>${inp(n, 'angle', 'num')}</td><td>${inp(n, 'size', 'small')}</td><td>${inp(n, 'elev', 'small')}</td><td>${inp(n, 'sched', 'text', 'class="sch"')}</td><td>${inp(n, 'tNom', 't')}</td><td>${inp(n, 'tMin', 't')}</td>${UT_CLOCK.map(([k]) => `<td>${inp(n, k, 't')}</td>`).join('')}<td class="n" data-part="min-${n.id}">${r.count ? fmt(r.min, 't', S.job, false) + ((n.utx || []).length ? `<sup title="Includes ${(n.utx || []).length} extra reading(s)">+${(n.utx || []).length}</sup>` : '') : '—'}</td><td data-part="st-${n.id}"><span class="st ${r.status === 'OK' ? 'st-OK' : r.status ? 'st-below-MRT' : ''}">${r.status || ''}</span></td><td>${inp(n, 'service', 'text')}</td><td><button class="btn sm icon ghost danger" data-act="nozzle-del" data-id="${n.id}" title="Delete">✕</button></td></tr>`; }).join('') || '<tr><td colspan="17" class="empty">No nozzles yet.</td></tr>'}
+    ${list.slice().sort((a, b) => (+a.angle || 0) - (+b.angle || 0)).map((n) => { const r = nozzleUT(n, S.job); return `<tr class="${r.status === 'Below t-min' ? 'is-bad' : ''}"><td>${inp(n, 'mark', 'text', 'class="mk"')}</td><td>${inp(n, 'type', 'sel')}</td><td>${inp(n, 'conn', 'conn')}</td><td>${inp(n, 'angle', 'num')}</td><td>${inp(n, 'size', 'small')}</td><td>${inp(n, 'elev', 'small')}</td><td>${inp(n, 'sched', 'text', 'class="sch"')}</td><td>${inp(n, 'tNom', 't')}</td><td>${inp(n, 'tMin', 't')}</td>${UT_CLOCK.map(([k]) => `<td>${inp(n, k, 't')}</td>`).join('')}<td class="n" data-part="min-${n.id}">${r.count ? fmt(r.min, 't', S.job, false) + ((n.utx || []).length ? `<sup title="Includes ${(n.utx || []).length} extra reading(s)">+${(n.utx || []).length}</sup>` : '') : '—'}</td><td data-part="st-${n.id}"><span class="st ${r.status === 'OK' ? 'st-OK' : r.status ? 'st-below-MRT' : ''}">${r.status || ''}</span></td><td>${inp(n, 'service', 'text')}</td><td><button class="btn sm icon ghost danger" data-act="nozzle-del" data-id="${n.id}" title="Delete">✕</button></td></tr>`; }).join('') || '<tr><td colspan="17" class="empty">No nozzles yet.</td></tr>'}
     </tbody></table></div>
     <div class="acts"><button class="btn sm" data-act="nozzle-add">+ Nozzle</button><button class="btn sm" data-act="exp-noz">Export CSV</button></div>`;
 }
@@ -924,6 +938,7 @@ function viewApi() {
       ${f('Corrosion rate basis', 'years', 'num', { unit: 'yr', hint: 'Years in service, or since the last baseline' })}
       ${f('Min. remaining — bottom plates', 'mrtBottom', 't')}
       ${f('Min. remaining — annular plates', 'mrtAnnular', 't', { hint: 'See Table 4.5 where annular plates are required' })}
+      ${(() => { const a = annularReq(S.job); if (!a) return '<p class="muted small span2">Annular plate minimum (API 653 Table 4.5 / API 650 Table 5.1b): enter the shell courses (course 1 nominal t), the maximum fill height and the product SG to calculate it.</p>'; return `<p class="small span2 ann-req">${h(a.table)}: S<sub>b</sub> = ${Math.round(a.Sb).toLocaleString()} psi with course 1 t = ${fmt(+S.job.shell.courses[0].tNom, 't', S.job)} → minimum annular plate <b>${a.over ? 'beyond the table — engineering evaluation' : fmt(a.tmm, 't', S.job)}</b> ${!a.over ? `<button class="btn sm" data-act="ann-apply" data-v="${a.tmm}">Use for annular plates</button>` : ''}<br><span class="muted">${(S.job.tank.sg ?? 1) >= 1 ? 'SG ≥ 1: S<sub>b</sub> = 2.6 D (H − 1) G / t' : 'SG &lt; 1: S<sub>b</sub> = 2.34 D (H − 1) / t'}, interpolated between stress columns.</span></p>`; })()}
       <div class="span2 presets"><span class="muted small">Bottom limit presets:</span>
         <button class="btn sm" data-act="mrt-preset" data-v="2.54">${v(2.54)} — no leak detection / containment</button>
         <button class="btn sm" data-act="mrt-preset" data-v="1.27">${v(1.27)} — with leak detection &amp; containment</button>
@@ -1189,7 +1204,7 @@ function shellBodyHTML() {
   const courses = coursesWithElev(job), locs = utLocations(job), sum = courseSummary(job);
   const D = +job.tank?.diameter || 0, C = Math.PI * D, auto = autoLocCount(job), H = shellHeight(job);
   const top = courses.slice().reverse();
-  const cin = (c, k, kind, ph = '', cls = '') => `<input data-shc="${k}" data-course="${c.id}" data-kind="${kind}" inputmode="decimal" value="${h(kind === 'num' ? c[k] ?? '' : inVal(c[k], kind, job))}" placeholder="${h(ph)}" class="${cls}">`;
+  const cin = (c, k, kind, ph = '', cls = '') => { const raw = k === 'tMin' ? c.tMinSet : c[k]; if (k === 'tMin' && !ph && c.tMinCalc) ph = inVal(c.tMinCalc, 't', job); return `<input data-shc="${k}" data-course="${c.id}" data-kind="${kind}" inputmode="decimal" value="${h(kind === 'num' ? raw ?? '' : inVal(raw, kind, job))}" placeholder="${h(ph)}" class="${cls}" ${k === 'tMin' && c.tMinCalc && !c.tMinSet ? 'title="Calculated: API 653 4.3.3.1 — type a value to override"' : ''}>`; };
   const st = (s) => (s.status ? `<span class="st ${s.status === 'OK' ? 'st-OK' : 'st-below-MRT'}">${s.status}</span>` : '');
   const sm = new Map(sum.map((x) => [x.id, x]));
   const zs = readingElevations(job);
@@ -1220,7 +1235,7 @@ function shellBodyHTML() {
       ${top.map((c, k) => { const s = sm.get(c.id); const cp = coursePlates(job, c, c.no - 1); return `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${c.no}</b>${c.no === 1 ? ' <span class="muted small">bottom</span>' : ''}</td><td>${cin(c, 'h', 'big')}</td><td>${cin(c, 'tNom', 't')}</td><td>${cin(c, 'tMin', 't')}</td><td>${cin(c, 'pn', 'num', String(c.plen ? cp.n : autoN), 'xs')}</td><td>${cin(c, 'seam0', 'num', (Math.round(cp.seam0 * 10) / 10).toString(), 'xs')}</td><td>${cin(c, 'plen', 'big', fmt(cp.plates[0]?.len, 'big', job, false))}</td><td class="n">${s.min != null ? fmt(s.min, 't', job, false) : '—'}<small class="muted"> ${s.count}</small></td><td>${st(s)}</td><td><button class="btn sm icon ghost danger" data-act="course-del" data-course="${c.id}" title="Delete course">✕</button></td></tr>`; }).join('') || `<tr><td colspan="10" class="empty">No courses yet. Add them from the bottom course up, or start with <button class="btn sm" data-act="courses-std" data-n="5">5 courses</button> <button class="btn sm" data-act="courses-std" data-n="6">6 courses</button> <button class="btn sm" data-act="courses-std" data-n="8">8 courses</button></td></tr>`}
       </tbody></table></div>
       <div class="acts"><button class="btn sm" data-act="course-add">+ Course on top</button></div>
-      <p class="muted small">Course 1 is the bottom course. Plates: give the number of plates (equal lengths), or a plate length (full plates from the first seam, the last one is the closure plate). Blank first seam staggers alternate courses by half a plate. t-min is the minimum required thickness you enter for each course.</p></section>
+      <p class="muted small">Course 1 is the bottom course. Plates: give the number of plates (equal lengths), or a plate length (full plates from the first seam, the last one is the closure plate). Blank first seam staggers alternate courses by half a plate. t-min is calculated to API 653 4.3.3.1 (grey) once the product SG is entered — see the shell evaluation below; type a value to override it.</p></section>
 
     <div class="shell-side">
     <section class="card"><h2>UT stations</h2>
@@ -1241,8 +1256,46 @@ function shellBodyHTML() {
   ${courses.length ? `<section class="card"><div class="sp-head"><h2>UT readings</h2><span class="muted small">thickness in ${U.small} · Tab moves across, Enter moves up the station</span></div>
     <div class="tblwrap rd-wrap"><table class="grid readings"><thead><tr><th>Elevation</th>${locs.map((l) => `<th class="n">${l.label}<br><small>${l.angle.toFixed(1)}°</small></th>`).join('')}<th class="n">Row min</th></tr></thead><tbody>${grid || `<tr><td colspan="${locs.length + 2}" class="empty">Set up reading elevations to start.</td></tr>`}</tbody></table></div></section>` : ''}
 
+  ${shellEvalHTML()}
+
   <section class="card"><div class="sp-head"><h2>Shell roll-out</h2><span class="muted small">plates, UT stations, dimensions and nozzles</span></div>
     <div class="ro-wrap" id="roWrap">${rolloutSVG(job)}</div></section>`;
+}
+
+/** API 653 4.3.3 shell evaluation card: material, joint efficiency, allowable stresses, t-min, fill and hydrotest heights. */
+function shellEvalHTML() {
+  const job = S.job, U = u(job), met = job.units === 'metric', B = designBasis(job), sh = job.shell || {};
+  const courses = coursesWithElev(job); if (!courses.length) return '';
+  const sm = new Map(courseSummary(job).map((x) => [x.id, x]));
+  const jo = jointOptions(job.tank.code, job.tank.edition), dj = defaultJoint(job);
+  const ps = (psi) => (psi == null ? '—' : met ? (psi / PSI_MPA).toFixed(0) : Math.round(psi).toLocaleString());
+  const su = met ? 'MPa' : 'psi';
+  const matSel = (val, attrs, blank) => `<select ${attrs} data-kind="text">${blank ? `<option value="">${blank}</option>` : ''}${MATERIALS.map((m) => `<option ${val === m[0] ? 'selected' : ''}>${h(m[0])}</option>`).join('')}</select>`;
+  const jSel = (val, attrs, blank) => `<select ${attrs} data-kind="text">${blank ? `<option value="">${blank}</option>` : ''}${jo.options.map(([k, l]) => `<option value="${k}" ${val === k ? 'selected' : ''}>${h(l)}</option>`).join('')}</select>`;
+  const sIn = (c, k, val) => `<input data-shs="${k}" data-course="${c.id}" inputmode="decimal" class="xs" value="${c[k] != null ? (met ? +(c[k] / PSI_MPA).toFixed(1) : c[k]) : ''}" placeholder="${ps(val)}">`;
+  let prodMin = null, hydMin = null;
+  const rows = courses.slice().reverse().map((c) => {
+    const d = c.d, s = sm.get(c.id), f = s.min != null ? fillFromT(job, d, s.min) : { prod: null, hydro: null };
+    if (f.prod != null && (prodMin === null || f.prod < prodMin.v)) prodMin = { v: f.prod, c: c.no };
+    if (f.hydro != null && (hydMin === null || f.hydro < hydMin.v)) hydMin = { v: f.hydro, c: c.no };
+    return `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${c.no}</b></td><td>${matSel(c.matl || '', `data-shc="matl" data-course="${c.id}"`, 'Same as all')}</td>
+      <td>${jSel(c.joint || '', `data-shc="joint" data-course="${c.id}"`, 'Same as all')}</td><td class="n">${d.Ej}</td>
+      <td>${sIn(c, 'Y', d.Y)}</td><td>${sIn(c, 'T', d.T)}</td><td class="n">${ps(d.Sd)}</td><td class="n">${ps(d.St)}</td>
+      <td class="n">${fmt(Math.max(0, B.fill - c.z0), 'big', job, false)}</td><td class="n">${c.tMinCalc ? fmt(c.tMinCalc, 't', job, false) : '—'}</td><td class="n"><b>${c.tMin ? fmt(c.tMin, 't', job, false) : '—'}</b>${c.tMinSet ? '<sup title="Entered">E</sup>' : ''}</td>
+      <td class="n">${s.min != null ? fmt(s.min, 't', job, false) : '—'}</td><td>${s.status ? `<span class="st ${s.status === 'OK' ? 'st-OK' : 'st-below-MRT'}">${s.status}</span>` : ''}</td>
+      <td class="n">${f.prod != null ? fmt(f.prod, 'big', job, false) : '—'}</td><td class="n">${f.hydro != null ? fmt(f.hydro, 'big', job, false) : '—'}</td></tr>`;
+  }).join('');
+  return `<section class="card shell-eval"><div class="sp-head"><h2>Shell evaluation — API 653 4.3.3</h2><span class="muted small">${h(job.tank.code || 'Code not set')}${job.tank.edition ? ', ' + h(job.tank.edition) : ''} · G ${B.G ?? '—'} · fill ${fmt(B.fill, 'big', job)} · D ${fmt(B.D, 'big', job)}</span></div>
+    ${!(B.G > 0) ? '<p class="callout warn">Enter the product specific gravity (and the maximum fill height if it is not the full shell height) in Tank setup → Construction &amp; design to calculate t-min.</p>' : ''}
+    <div class="fgrid g4">
+      <label class="fld"><span class="lbl">Shell material (all courses)</span><span class="ctl">${matSel(sh.matl || '', 'data-bind="shell.matl"', 'Unknown (30,000 / 55,000 psi)')}</span></label>
+      <label class="fld span2"><span class="lbl">Joint (all courses) — ${h(jo.group)}</span><span class="ctl">${jSel(sh.joint || '', 'data-bind="shell.joint"', `Default: ${jointLabel(dj)}`)}</span></label>
+      ${field('Product SG', 'tank.sg', 'num')}
+    </div>
+    <div class="tblwrap"><table class="grid seval"><thead><tr><th>Course</th><th>Material</th><th>Joint</th><th class="n">E</th><th>Y (${su})</th><th>T (${su})</th><th class="n">Sd (${su})</th><th class="n">St (${su})</th><th class="n">Liquid above course (${U.big})</th><th class="n">t-min calc</th><th class="n">t-min used</th><th class="n">Min. reading</th><th>Status</th><th class="n" title="Product fill height this course's minimum reading supports">Max fill (${U.big})</th><th class="n" title="API 653 4.3.3.2 hydrostatic test height from this course's minimum reading">Hydrotest Ht (${U.big})</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="small">${prodMin ? `Maximum product fill height from the minimum readings: <b>${fmt(prodMin.v, 'big', job)}</b> (course ${prodMin.c})` : ''}${hydMin ? ` · hydrostatic test height: <b>${fmt(hydMin.v, 'big', job)}</b> (course ${hydMin.c})` : ''}${prodMin && prodMin.v < B.fill - 1 ? ` · <b class="bad">below the maximum fill height ${fmt(B.fill, 'big', job)}</b>` : ''}</p>
+    <p class="muted small">t-min = 2.6 (H − 1) D G / (S E), not less than 0.100 in (API 653 4.3.3.1). S = product design stress from Table 4.1 — lower two courses use the smaller of 0.80Y / 0.429T, upper courses 0.88Y / 0.472T; riveted 21,000 psi. E from Table 4.2 (welded, by code and edition) or Table 4.3 (riveted). Hydrotest Ht = St E t / (2.6 D) + 1 (4.3.3.2). Fill and test heights use each course's minimum reading and are measured from the tank bottom. Y / T: type to override the table. Stresses in ${su}.</p>
+  </section>`;
 }
 
 function refreshShell() {
@@ -1280,24 +1333,30 @@ function settleBodyHTML() {
       ${res('… API 650 new-construction tolerance', `${fS(F.plumb)} ${sU}`, `${fS(F.plumb650)} ${sU}`, null, 'API 650 §7.5.2: 1/200 of height — reference only')}
       ${res('Max out-of-plane deflection |S|', F.maxS !== null ? `${fS(Math.abs(F.maxS))} ${sU} <small class="muted">(stn ${F.maxAt})</small>` : '—', c.Smax !== null ? `≤ ${fS(c.Smax)} ${sU}` : '<span class="muted">needs H, Y, E</span>', c.oopOk, 'B.3.2.1: Smax = 11·L²·Y / (2·E·H)')}
       ${res('Max measured difference (high − low)', `${fS(F.diff)} ${sU}`, '', null, 'Information')}
-    </tbody></table>` : '<p class="muted">Enter at least 4 station readings to evaluate the shell settlement.</p>';
+    </tbody></table>
+    ${c.arcs?.arcs?.length ? `<h3>B.3.2.2 arc method${c.valid ? ' <span class="muted small">(for information — the cosine fit is valid)</span>' : ''}</h3>
+    <table class="grid sres settle-res"><thead><tr><th>Arc (stations)</th><th class="n">Arc length</th><th class="n">Max. settlement</th><th class="n">Allowable</th><th></th></tr></thead><tbody>
+    ${c.arcs.arcs.map((a) => `<tr class="${a.ok === false ? 'is-bad' : ''}"><td>${a.from} → ${a.to} <small class="muted">${a.n} spaces${a.at ? ', max at stn ' + a.at : ''}</small></td><td class="n">${fmt(a.Sarc, 'big', job)}</td><td class="n"><b>${fS(Math.abs(a.maxDef))} ${sU}</b></td><td class="n">${a.allow != null ? '≤ ' + fS(a.allow) + ' ' + sU : '—'}</td><td>${a.ok === true ? '<span class="st st-OK">OK</span>' : a.ok === false ? '<span class="st st-below-MRT">Fails</span>' : ''}</td></tr>`).join('')}
+    </tbody></table>
+    <p class="muted small">Arcs run between successive high points of the measured elevations${c.arcs.manual ? ' (as entered)' : ''}; settlement is the drop below the straight line joining the arc ends. Allowable = min(K · S<sub>arc</sub> · (D / H) · (Y / E), 4 in) with K = ${c.arcs.K ?? 'n/a'} (${c.arcs.fixed ? 'fixed roof' : 'open top'}, D ${fmt(c.D, 'big', job)}), Y = lowest course yield. ${c.arcs.K === null ? '<b>No K value for this diameter and roof type — engineering evaluation required.</b>' : ''}</p>` : ''}` : '<p class="muted">Enter at least 4 station readings to evaluate the shell settlement.</p>';
   const warn = c.warnings.length ? `<div class="warnbox">${c.warnings.map((w) => `<p>${h(w)}</p>`).join('')}</div>` : '';
 
   const ein = (x, k, kind, extra = '') => `<input data-se="edge" data-eid="${x.id}" data-f="${k}" data-kind="${kind}" ${kind === 'text' ? '' : 'inputmode="decimal"'} value="${h(kind === 'num' || kind === 'text' ? x[k] ?? '' : inVal(x[k], kind, job))}" ${extra}>`;
   const din = (x, k, kind, extra = '') => `<input data-se="dep" data-eid="${x.id}" data-f="${k}" data-kind="${kind}" ${kind === 'text' ? '' : 'inputmode="decimal"'} value="${h(kind === 'num' || kind === 'text' ? x[k] ?? '' : inVal(x[k], kind, job))}" ${extra}>`;
   const stt = (s) => `<span class="st ${s === 'Acceptable' ? 'st-OK' : s === 'Exceeds' ? 'st-below-MRT' : s === 'NDE required' ? 'st-warn' : ''}">${s}</span>`;
-  const edgeRows = st.edge.map((x, i) => { const ev = edgeEval(x); return `<tr class="${ev.status === 'Exceeds' ? 'is-bad' : ev.status === 'NDE required' ? 'is-warn' : ''}"><td><b>E${i + 1}</b></td><td>${ein(x, 'angle', 'num')}</td><td>${ein(x, 'arc', 'big', 'placeholder="opt."')}</td><td>${ein(x, 'R', 'big')}</td><td>${ein(x, 'B', 'small')}</td>
+  const edgeRows = st.edge.map((x, i) => { const ev = edgeEval(x, S.job); return `<tr class="${ev.status === 'Exceeds' ? 'is-bad' : ev.status === 'NDE required' ? 'is-warn' : ''}"><td><b>E${i + 1}</b></td><td>${ein(x, 'angle', 'num')}</td><td>${ein(x, 'arc', 'big', 'placeholder="opt."')}</td><td>${ein(x, 'R', 'big')}</td><td>${ein(x, 'B', 'small')}</td>
     <td><select data-se="edge" data-eid="${x.id}" data-f="weld" data-kind="text">${WELDS.map(([k, l]) => `<option value="${k}" ${x.weld === k ? 'selected' : ''}>${h(l)}</option>`).join('')}</select></td><td>${x.weld === 'angle' ? ein(x, 'alpha', 'num', 'placeholder="0–90"') : '<span class="muted">—</span>'}</td>
-    <td>${ein(x, 'Bew', 'small')}</td><td>${ein(x, 'Be', 'small', x.weld === 'par' ? 'placeholder="opt."' : '')}</td><td class="n"><b>${ev.allow != null ? fmt(ev.allow, 'small', job, false) : '—'}</b></td><td class="n">${ev.pct != null ? ev.pct.toFixed(0) + '%' : '—'}</td><td title="${h(ev.basis)}">${stt(ev.status)}</td><td>${ein(x, 'notes', 'text', 'class="note"')}</td><td><button class="btn sm icon ghost danger" data-act="se-del" data-k="edge" data-eid="${x.id}" title="Remove">✕</button></td></tr>`; }).join('') || '<tr><td colspan="14" class="empty">No edge settlement recorded.</td></tr>';
-  const edgeNotes = [...new Set(st.edge.map((x) => edgeEval(x).status).filter((s) => s === 'NDE required' || s === 'Exceeds'))].map((s) => `<p class="small"><b>${s}:</b> ${h(EDGE_NOTE[s])}</p>`).join('');
+    ${(() => { const cv = edgeCurve(job, +x.R || 0); return `<td>${ein(x, 'Bew', 'small', cv.Bew != null ? `placeholder="${fS(cv.Bew)}"` : '')}</td><td>${ein(x, 'Be', 'small', cv.Be != null ? `placeholder="${fS(cv.Be)}"` : x.weld === 'par' ? 'placeholder="opt."' : '')}</td>`; })()}<td class="n"><b>${ev.allow != null ? fmt(ev.allow, 'small', job, false) : '—'}</b></td><td class="n">${ev.pct != null ? ev.pct.toFixed(0) + '%' : '—'}</td><td title="${h(ev.basis)}">${stt(ev.status)}</td><td>${ein(x, 'notes', 'text', 'class="note"')}</td><td><button class="btn sm icon ghost danger" data-act="se-del" data-k="edge" data-eid="${x.id}" title="Remove">✕</button></td></tr>`; }).join('') || '<tr><td colspan="14" class="empty">No edge settlement recorded.</td></tr>';
+  const edgeNotes = [...new Set(st.edge.map((x) => edgeEval(x, S.job).status).filter((s) => s === 'NDE required' || s === 'Exceeds'))].map((s) => `<p class="small"><b>${s}:</b> ${h(EDGE_NOTE[s])}</p>`).join('');
   const depRows = st.dep.map((x, i) => { const ev = depEval(x); return `<tr class="${ev.status === 'Exceeds' ? 'is-bad' : ''}"><td><b>D${i + 1}</b></td><td>${din(x, 'angle', 'num')}</td><td>${din(x, 'r', 'big')}</td><td>${din(x, 'R', 'big')}</td><td>${din(x, 'B', 'small')}</td><td class="n"><b>${ev.allow != null ? fmt(ev.allow, 'small', job, false) : '—'}</b></td><td class="n">${ev.pct != null ? ev.pct.toFixed(0) + '%' : '—'}</td><td>${stt(ev.status)}</td><td>${din(x, 'notes', 'text', 'class="note"')}</td><td><button class="btn sm icon ghost danger" data-act="se-del" data-k="dep" data-eid="${x.id}" title="Remove">✕</button></td></tr>`; }).join('') || '<tr><td colspan="10" class="empty">No bottom depressions recorded.</td></tr>';
 
   return `<section class="card"><div class="sp-head"><h2>Shell settlement survey</h2><span class="muted small">${c.n}/${c.N} stations read · <b class="${stCls}">${c.status}</b></span></div>
     <div class="fgrid g4">${field('Survey date', 'settle.date', 'date')}${field('Surveyed by', 'settle.surveyor')}${field('Instrument', 'settle.instrument', 'text', { ph: 'e.g. level, total station' })}${field('Benchmark', 'settle.benchmark')}
       ${field('Liquid level at survey', 'settle.level', 'text', { ph: 'e.g. empty / 32 ft' })}${field('Number of stations', 'settle.n', 'num', { ph: `${autoN(job)} (API 653)`, hint: `N = D/10 ft, even, ≥ 8, spacing ≤ 32 ft · spacing now ${c.L ? fmt(c.L, 'big', job) : '—'}` })}${field('Station 1 at', 'settle.start', 'num', { unit: '°', ph: '0' })}${field('Reading units', 'settle.eu', 'sel', { options: met ? [['mm', 'mm'], ['m', 'm']] : [['in', 'inches'], ['ft', 'feet (decimal)'], ['mm', 'mm']] })}
       ${field('Readings are rod readings (larger = lower)', 'settle.rod', 'bool')}${field('Shell height H', 'settle.H', 'big', { ph: shH ? fmt(shH, 'big', job, false) + ' (shell courses)' : '' })}
-      <label class="fld"><span class="lbl">Shell yield strength Y</span><span class="ctl"><input data-sts="Y" inputmode="decimal" value="${stress(st.Y)}"><i class="unit">${met ? 'MPa' : 'psi'}</i></span><small>Lowest course; 30,000 psi (207 MPa) if unknown</small></label>
-      <label class="fld"><span class="lbl">Elastic modulus E</span><span class="ctl"><input data-sts="E" inputmode="decimal" value="${stress(st.E)}"><i class="unit">${met ? 'MPa' : 'psi'}</i></span></label>
+      ${field('Y and E from the shell course 1 material (Table 4.1)', 'settle.yeAuto', 'bool', { value: st.yeAuto !== false })}${field('B.3.2.2 K value for', 'settle.kRoof', 'sel', { options: [['auto', `Auto — ${kRoofFixed(job) ? 'fixed roof' : 'open top / floating roof'}`], ['open', 'Open top / floating roof'], ['fixed', 'Fixed roof']] })}
+      <label class="fld"><span class="lbl">Shell yield strength Y</span><span class="ctl"><input data-sts="Y" inputmode="decimal" value="${st.yeAuto !== false ? '' : stress(st.Y)}" placeholder="${stress(c.Y)}" ${st.yeAuto !== false ? 'disabled' : ''}><i class="unit">${met ? 'MPa' : 'psi'}</i></span><small>${st.yeAuto !== false ? h(c.Ysrc) : '30,000 psi (207 MPa) if unknown'}</small></label>
+      <label class="fld"><span class="lbl">Young's modulus E</span><span class="ctl"><input data-sts="E" inputmode="decimal" value="${st.yeAuto !== false ? '' : stress(st.E)}" placeholder="${stress(c.E)}" ${st.yeAuto !== false ? 'disabled' : ''}><i class="unit">${met ? 'MPa' : 'psi'}</i></span><small>Table 4.1: 29,400,000 psi (202,706 MPa)</small></label>
       ${field('Notes', 'settle.notes', 'text', { cls: 'span2' })}</div>
     ${warn}
     <div class="settle-grid">
@@ -1313,10 +1372,10 @@ function settleBodyHTML() {
   </section>
   ${edgeSurveyHTML(c)}
   <section class="card"><div class="sp-head"><h2>Other edge settlement areas</h2><span class="muted small">Areas found between stations · API 653 B.2.3 / B.3.4 · tank diameter ${fmt(D, 'big', job)}</span></div>
-    <div class="tblwrap"><table class="grid sedge"><thead><tr><th></th><th>Angle (°)</th><th title="Length of the settled area along the shell (drawing only)">Arc (${U.big})</th><th title="Radial width of the settled area from the shell">R (${U.big})</th><th title="Settlement measured per Fig. B.6 / B.7">B (${sU})</th><th>Bottom weld in area</th><th title="Weld angle to the tank radius: 0° = perpendicular to shell, 90° = parallel">α (°)</th><th title="Read from Fig. B.11 at R for this tank diameter">Bew (${sU})</th><th title="Read from Fig. B.12 at R for this tank diameter">Be (${sU})</th><th class="n">Allowable</th><th class="n">B / allow</th><th>Status</th><th>Notes</th><th></th></tr></thead><tbody>${edgeRows}</tbody></table></div>
+    <div class="tblwrap"><table class="grid sedge"><thead><tr><th></th><th>Angle (°)</th><th title="Length of the settled area along the shell (drawing only)">Arc (${U.big})</th><th title="Radial width of the settled area from the shell">R (${U.big})</th><th title="Settlement measured per Fig. B.6 / B.7">B (${sU})</th><th>Bottom weld in area</th><th title="Weld angle to the tank radius: 0° = perpendicular to shell, 90° = parallel">α (°)</th><th title="Blank = from the Fig. B.11 table at R">Bew (${sU})</th><th title="Blank = from the Fig. B.12 table at R">Be (${sU})</th><th class="n">Allowable</th><th class="n">B / allow</th><th>Status</th><th>Notes</th><th></th></tr></thead><tbody>${edgeRows}</tbody></table></div>
     <div class="acts row-acts"><button class="btn sm" data-act="se-add" data-k="edge">+ Edge settlement area</button></div>
     ${edgeNotes}
-    <p class="muted small">Measure B from a projection of the unsettled bottom (Fig. B.6; for cone-up / cone-down bottoms follow Fig. B.7), over the radial width R. Read <b>Bew</b> from Fig. B.11 (bottom lap weld within ±20° of parallel to the shell) and <b>Be</b> from Fig. B.12 (no weld, butt welds, or lap weld within ±20° of perpendicular) at R for this tank diameter. Lap welds at another angle: B = Be − (Be − Bew)·sin α (B.3.4.4). Any area may be screened against Bew first. At 75 % of the allowable or more, examine the welds by VT and MT/PT (B.3.4.1). The curves assume 1/4 in (6 mm) bottoms and apply to 5/16–3/8 in (8–10 mm).</p>
+    <p class="muted small">Measure B from a projection of the unsettled bottom (Fig. B.6; for cone-up / cone-down bottoms follow Fig. B.7), over the radial width R. <b>Bew</b> (Fig. B.11, bottom lap weld within ±20° of parallel to the shell) and <b>Be</b> (Fig. B.12, no weld, butt welds, or lap weld within ±20° of perpendicular) come from the built-in table at R for this tank diameter when left blank (grey). Lap welds at another angle α to the tank radius: B = Be − (Be − Bew)·sin α (B.3.4.4). Any area may be screened against Bew first. At 75 % of the allowable or more, examine the welds by VT and MT/PT (B.3.4.1). The curves assume 1/4 in (6 mm) bottoms and apply to 5/16–3/8 in (8–10 mm).</p>
   </section>
   <section class="card"><div class="sp-head"><h2>Bottom depressions / bulges</h2><span class="muted small">API 653 B.2.5 / B.3.3 · remote from the shell</span></div>
     <div class="tblwrap"><table class="grid sedge"><thead><tr><th></th><th>Angle (°)</th><th>From centre (${U.big})</th><th title="Radius of the inscribed circle of the depression">R (${U.big})</th><th>Depth B (${sU})</th><th class="n">Allowable 0.37·R</th><th class="n">B / allow</th><th>Status</th><th>Notes</th><th></th></tr></thead><tbody>${depRows}</tbody></table></div>
@@ -1352,7 +1411,7 @@ function edgeSurveyHTML(c) {
     return `<tr class="${p.status === 'Exceeds' ? 'is-bad' : p.status === 'NDE required' ? 'is-warn' : ''}${S.epSel === t.i ? ' sel' : ''}"><td><button class="linkbtn" data-act="ep-sel" data-i="${t.i}">${t.i}</button></td><td class="n">${t.angle.toFixed(1)}°</td>
       <td>${sel(t.i, 'Rov', rOpts, o.Rov ?? '')}</td><td class="n"><b>${p.R > 0 ? fS(p.B) : p.status === 'No edge settlement' ? '0' : '—'}</b></td>
       <td>${sel(t.i, 'weld', WELDS, o.weld || 'par')}</td><td>${(o.weld || 'par') === 'angle' ? sin(t.i, 'alpha', 'num', '0–90') : '<span class="muted">—</span>'}</td>
-      <td>${sin(t.i, 'Bew', 'small', p.Bew != null && p.BewSrc === 'curve' ? fS(p.Bew) : '')}</td><td>${sin(t.i, 'Be', 'small', p.Be != null && p.BeSrc === 'curve' ? fS(p.Be) : '')}</td>
+      <td>${sin(t.i, 'Bew', 'small', p.Bew != null && p.BewSrc && p.BewSrc !== 'entered' ? fS(p.Bew) : '')}</td><td>${sin(t.i, 'Be', 'small', p.Be != null && p.BeSrc && p.BeSrc !== 'entered' ? fS(p.Be) : '')}</td>
       <td class="n"><b>${p.ev?.allow != null ? fS(p.ev.allow) : '—'}</b></td><td class="n">${p.ev?.pct != null ? p.ev.pct.toFixed(0) + '%' : '—'}</td><td>${stt(p.status)}</td><td>${sin(t.i, 'notes', 'text', '', 'note')}</td></tr>`;
   }).join('');
   const cur = P.get(S.epSel);
@@ -1367,10 +1426,13 @@ function edgeSurveyHTML(c) {
         <p class="muted small">${offs.length} readings per station: ${offs.map(fmtOff).join(', ')}${met ? ' mm' : ''}. Readings use the same units as the shell survey (${eu[1]}${st.rod ? ', rod readings' : ''}).</p>
       </div>
       <div><h3>Allowable edge settlement for this tank</h3>
+        ${field('Bew / Be from', 'settle.curveMode', 'sel', { options: [['api', 'Built-in API 653 Fig. B.11 / B.12 table'], ['manual', 'My own values (enter below)']] })}
+        ${(st.curveMode || 'api') === 'api' ? (() => { const Dft = (+job.tank.diameter || 0) / 304.8, Rs = [1.5, 2, 3, 4, 5, 6]; const v = (R, k) => { const a = edgeAllowT(Dft, R); return a[k] == null ? '—' : fS(a[k] * 25.4); }; return `<table class="grid epz"><thead><tr><th>R (ft)</th>${Rs.map((R) => `<th class="n">${R}</th>`).join('')}</tr></thead><tbody><tr><td>Bew (${sU})</td>${Rs.map((R) => `<td class="n">${v(R, 'Bew')}</td>`).join('')}</tr><tr><td>Be (${sU})</td>${Rs.map((R) => `<td class="n">${v(R, 'Be')}</td>`).join('')}</tr></tbody></table>
+          <p class="muted small">Values for a ${fmt(+job.tank.diameter || 0, 'big', job)} tank from the tabulated Fig. B.11 (Bew, lap weld ∥ shell) and Fig. B.12 (Be, ⊥ shell / butt / no weld) curves for D = 20–160 ft, interpolated in D and R; 2 in up to R = 1.5 ft; D over 160 ft uses the 160 ft curve; R over 6 ft is beyond the curves (enter values for that station). Values typed in a station row override the table.</p>`; })() : `
         <table class="grid epz"><thead><tr><th>R (${U.big})</th><th>Bew (${sU})</th><th>Be (${sU})</th><th></th></tr></thead><tbody>${curveRows}</tbody></table>
         <div class="acts row-acts"><button class="btn sm" data-act="cv-add">+ R value</button></div>
         ${field('Source', 'settle.curveSrc', 'text', { ph: 'e.g. API 653 5th ed. Add. 3, Fig. B.11 / B.12' })}
-        <p class="muted small">Read Bew (Fig. B.11) and Be (Fig. B.12) once for a ${fmt(+job.tank.diameter || 0, 'big', job)} tank at a few values of R; the app interpolates them at each station's R. Values typed in a station row override the curve.</p>
+        <p class="muted small">Read Bew (Fig. B.11) and Be (Fig. B.12) for a ${fmt(+job.tank.diameter || 0, 'big', job)} tank at a few values of R; the app interpolates them at each station's R. Values typed in a station row override the curve.</p>`}
       </div>
     </div>
     <h3>Readings (${eu[1]})</h3>
@@ -1381,7 +1443,7 @@ function edgeSurveyHTML(c) {
       <p class="muted small">The unsettled bottom is the straight line through the outer readings, so a cone-up or cone-down slope is allowed for (Fig. B.7). Walking in toward the shell, the breakover is the last reading within the tolerance of that line; <b>R</b> is its distance from the shell and <b>B</b> is the largest drop of the bottom below the projected line between the shell and the breakover (Fig. B.6). Pick a different breakover in the table if the automatic one is wrong.</p></div>
     <h3>Results by station</h3>
     <div class="tblwrap"><table class="grid sedge epres"><thead><tr><th>Stn</th><th class="n">Angle</th><th>Breakover R</th><th class="n">B (${sU})</th><th>Bottom weld in area</th><th>α (°)</th><th>Bew (${sU})</th><th>Be (${sU})</th><th class="n">Allowable</th><th class="n">B / allow</th><th>Status</th><th>Notes</th></tr></thead><tbody>${res}</tbody></table></div>
-    <p class="muted small">Grey values in Bew / Be come from the curve above. NDE required: 75 % of allowable or more — VT and MT/PT of the shell-to-bottom and bottom welds in the area, VT of welds within 12 in (300 mm) of the breakover (B.3.4.1–2).</p>
+    <p class="muted small">Grey values in Bew / Be come from the table / curve above; for angled lap welds α is the weld's angle to the tank radius (≤ 20° → Be, ≥ 70° → Bew, between: B = Be − (Be − Bew)·sin α). NDE required: 75 % of allowable or more — VT and MT/PT of the shell-to-bottom and bottom welds in the area, VT of welds within 12 in (300 mm) of the breakover (B.3.4.1–2).</p>
   </section>`;
 }
 
@@ -1394,6 +1456,45 @@ function refreshSettle() {
     c.innerHTML = settleBodyHTML();
     if (key) { const n = c.querySelector(key); if (n && typed !== null && n.value !== typed) { n.value = typed; n.dataset.restored = '1'; } if (n) { n.focus({ preventScroll: true }); try { if (typed === null) n.select(); else n.setSelectionRange(n.value.length, n.value.length); } catch { /* */ } } }
   }, 0);
+}
+
+/* ------------------------------------------------------------ code tables view */
+
+function viewRef() {
+  const met = S.job?.units === 'metric', su = met ? 'MPa' : 'psi';
+  const ps = (psi, mpa) => (met ? (mpa == null ? 'N/A' : mpa.toLocaleString()) : psi.toLocaleString());
+  const ed650 = editionsFor('API 650').filter((e) => e !== 'Unknown'), ed12 = editionsFor('API 12C').filter((e) => e !== 'Unknown');
+  const sup = (e) => supplementsFor(e).filter((x) => x !== 'Unknown' && x !== 'N/A').join('; ') || '—';
+  const grid = (tbl, k) => `<table class="grid small reft"><thead><tr><th>R (ft)</th>${EDGE_D.map((d) => `<th class="n">D ${d}</th>`).join('')}</tr></thead><tbody>${tbl.map((r) => `<tr><td>${r[0]}</td>${r.slice(1).map((v) => `<td class="n">${(+v).toFixed(2)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  const ann = (T, title) => `<h3>${title}</h3><table class="grid small reft"><thead><tr><th>Course 1 t (in)</th>${T.stress.map((x) => `<th class="n">S<sub>b</sub> ≤ ${x.toLocaleString()}</th>`).join('')}</tr></thead><tbody>${T.rows.map((r, i) => `<tr><td>${r[0] > 100 ? '> ' + T.rows[i - 1][0] : '≤ ' + r[0]}</td>${r.slice(1).map((v) => `<td class="n">${v}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  return `<div class="page wide ref-page"><div class="page-head"><div><h1>Code tables</h1><p class="muted">Reference values used by the calculations, taken from the inspection workbook (${h(TABLES_SOURCE)}). Read-only — check them against the editions in force.</p></div></div>
+  <section class="card"><h2>Materials and allowable stresses — API 653 Table 4.1</h2>
+    <div class="tblwrap"><table class="grid small reft"><thead><tr><th rowspan="2">Specification</th><th class="n" rowspan="2">Y (${su})</th><th class="n" rowspan="2">T (${su})</th><th class="c" colspan="2">Product design stress Sd (${su})</th><th class="c" colspan="2">Hydrotest stress St (${su})</th><th class="n" rowspan="2">Young's modulus (${su})</th></tr><tr><th class="n">Lower two courses</th><th class="n">Upper courses</th><th class="n">Lower two courses</th><th class="n">Upper courses</th></tr></thead><tbody>
+    ${MATERIALS.map((m) => `<tr><td>${h(m[0])}</td><td class="n">${ps(m[1], m[8])}</td><td class="n">${ps(m[2], m[9])}</td><td class="n">${ps(m[3], m[10])}</td><td class="n">${ps(m[4], m[11])}</td><td class="n">${ps(m[5], m[12])}</td><td class="n">${ps(m[6], m[13])}</td><td class="n">${ps(m[7], m[14])}</td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="muted small">Riveted tanks: 21,000 psi product and hydrotest stress. Materials not listed: Sd = smaller of 0.80Y / 0.429T (lower two courses) or 0.88Y / 0.472T (upper); St = smaller of 0.88Y / 0.472T (lower) or 0.90Y / 0.519T (upper); T not more than 80,000 psi; unknown material 30,000 / 55,000 psi.</p></section>
+  <div class="grid2">
+    <section class="card"><h2>Joint efficiency — API 653 Table 4.2 (welded)</h2><table class="grid small reft"><thead><tr><th>Standard / edition</th><th>Joint</th><th class="n">E</th><th>Applicability / limits</th></tr></thead><tbody>
+      ${Object.values(JE_42).map(([lab, rows]) => rows.map((r, i) => `<tr><td>${i ? '' : h(lab)}</td><td>${h(r[0])}</td><td class="n">${r[1]}</td><td>${h(r[2])}</td></tr>`).join('')).join('')}
+      </tbody></table><p class="muted small">${Object.entries(JE_NOTES).map(([k, v]) => `(${k}) ${h(v)}`).join(' ')}</p></section>
+    <section class="card"><h2>Joint efficiency — API 653 Table 4.3 (riveted)</h2><table class="grid small reft"><thead><tr><th>Joint</th><th class="n">Rows of rivets</th><th class="n">E</th></tr></thead><tbody>${JE_43.map((r) => `<tr><td>${r[0]}</td><td class="n">${r[1]}</td><td class="n">${r[2]}</td></tr>`).join('')}</tbody></table>
+      <h2 style="margin-top:16px">B.3.2.2 K values</h2><table class="grid small reft"><thead><tr><th>Diameter (ft)</th><th class="n">Open top</th><th class="n">Fixed roof</th></tr></thead><tbody>${K_TABLE.map((r) => `<tr><td>${r[1] > 1e6 ? '> ' + r[0] : r[0] + ' – ' + r[1]}</td><td class="n">${r[2] ?? 'N/A'}</td><td class="n">${r[3] ?? 'N/A'}</td></tr>`).join('')}</tbody></table>
+      <p class="muted small">Allowable = min(K · S<sub>arc</sub> · (D / H) · (Y / E), 4 in).</p></section>
+  </div>
+  <section class="card"><h2>Construction codes and editions</h2>
+    <p class="small">Codes: ${CODES.map(h).join(', ')}.</p>
+    <div class="grid2"><div><h3>API 650 (and Annexes A, J, S)</h3><table class="grid small reft"><thead><tr><th>Edition</th><th>Supplements / revisions / addenda</th><th>Table 4.2 group</th></tr></thead><tbody>${ed650.map((e, i) => `<tr><td>${h(e)}</td><td>${h(sup(e))}</td><td>${i >= 6 ? '7th and later' : '1st to 6th'}</td></tr>`).join('')}</tbody></table></div>
+    <div><h3>API 12C</h3><table class="grid small reft"><thead><tr><th>Edition</th><th>Supplements</th><th>Table 4.2 group</th></tr></thead><tbody>${ed12.map((e, i) => `<tr><td>${h(e)}</td><td>${h(sup(e))}</td><td>${i >= 13 ? '14th and 15th' : i >= 2 ? '3rd to 13th' : '1st and 2nd'}</td></tr>`).join('')}</tbody></table></div></div></section>
+  <section class="card"><h2>Edge settlement allowables — API 653 Fig. B.11 / B.12 (inches)</h2>
+    <h3>Bew — bottom lap weld approximately parallel to the shell (Fig. B.11)</h3><div class="tblwrap">${grid(EDGE_BEW)}</div>
+    <h3>Be — no weld, butt welds, or lap weld approximately perpendicular to the shell (Fig. B.12)</h3><div class="tblwrap">${grid(EDGE_BE)}</div>
+    <p class="muted small">Linear interpolation in R and between diameters; D under 20 ft uses the 20 ft curve and over 160 ft the 160 ft curve; 2 in allowed up to R = 1.5 ft; R over 6 ft is beyond the curves.</p></section>
+  <div class="grid2">
+    <section class="card"><h2>Annular plate thickness (in)</h2>${ann(T45, 'API 653 Table 4.5 — product SG < 1 (S<sub>b</sub> = 2.34 D (H − 1) / t)')}${ann(T51B, 'API 650 Table 5.1b — product SG ≥ 1 (S<sub>b</sub> = 2.6 D (H − 1) G / t)')}</section>
+    <section class="card"><h2>Nozzle necks (in)</h2><table class="grid small reft"><thead><tr><th class="n">NPS</th><th class="n">Sch XS</th><th class="n">XS − 12.5 %</th><th class="n">Sch STD</th><th class="n">STD − 12.5 %</th></tr></thead><tbody>${NOZZLE_PIPE.map((r) => `<tr>${r.map((v) => `<td class="n">${v}</td>`).join('')}</tr>`).join('')}</tbody></table>
+      <h3>NPS 26 and larger — neck wall by shell thickness</h3><table class="grid small reft"><thead><tr><th class="n">Shell t up to</th><th class="n">Neck wall</th></tr></thead><tbody>${NOZZLE_WALL_BY_SHELL.map((r) => `<tr><td class="n">${r[0]}</td><td class="n">${r[1]}</td></tr>`).join('')}</tbody></table>
+      <p class="muted small">Schedule by construction code: ${Object.entries(CODE_SCHED).map(([k, v]) => `${h(k)} ${v === 2 ? 'XS' : 'STD'}`).join(', ')}.</p></section>
+  </div></div>`;
 }
 
 /* ------------------------------------------------------------ report view */
@@ -1674,6 +1775,7 @@ document.addEventListener('click', async (e) => {
     case 'photo-view': { const p = S.photos.find((x) => x.id === id); if (p) { const w = window.open(); w?.document.write(`<title>${h(p.caption || 'Photo')}</title><img src="${p.dataUrl}" style="max-width:100%">`); } return; }
     case 'sort': { const k = el.dataset.k; S.sort = { key: k, dir: S.sort.key === k ? -S.sort.dir : 1 }; renderView(); return; }
     case 'scan-all': { if (!(await askConfirm('Mark every plate as scanned?', { ok: 'Mark all scanned' }))) return; for (const p of S.layout.plates) { S.job.plates[p.key] = { ...(S.job.plates[p.key] || {}), scan: 'scanned' }; } commit(); refreshPlateTable(); return; }
+    case 'ann-apply': S.job.calc.mrtAnnular = +el.dataset.v; commit(); renderView(); return;
     case 'mrt-preset': S.job.calc.mrtBottom = +el.dataset.v; commit(); renderView(); return;
     case 'print': window.print(); return;
     case 'exp-ind': return download(fileBase(S.job) + '_indications.csv', indicationsCSV(S.job, S.layout, S.calc), 'text/csv');
@@ -1719,7 +1821,9 @@ document.addEventListener('change', async (e) => {
     if (path === 'layout.mode' && v === 'custom' && !(S.job.layout.rows || []).length) { recompute(); S.job.layout.rows = rowsFromGrid(S.job); }
     commit();
     if (path.startsWith('layout.') || path === 'tank.diameter') relocateOrphans(before);
-    const structural = path === 'units' || path === 'layout.annular' || path === 'layout.scheme' || path === 'layout.orient' || path === 'layout.refCorner' || path === 'layout.mode';
+    if (path === 'tank.code' && !editionsFor(v || 'Unknown').includes(S.job.tank.edition)) { S.job.tank.edition = ''; S.job.tank.supp = ''; }
+    if (path === 'tank.edition' && !supplementsFor(v).includes(S.job.tank.supp)) S.job.tank.supp = '';
+    const structural = path === 'tank.code' || path === 'tank.edition' || path === 'units' || path === 'layout.annular' || path === 'layout.scheme' || path === 'layout.orient' || path === 'layout.refCorner' || path === 'layout.mode';
     if (S.view === 'setup') { if (structural) renderView(); else if (S.job.layout.mode !== 'grid' && path.startsWith('layout.')) refreshBuilder(); else refreshSetupPreview(); renderHeader(); }
     else if (S.view === 'api') refreshApi();
     else if (S.view === 'shell') refreshShell();
@@ -1809,6 +1913,18 @@ document.addEventListener('change', async (e) => {
     if (k === 'angle' && v !== null) v = ((v % 360) + 360) % 360;
     if (k === 'r' && v !== null && v > (+S.job.tank.diameter || 0) / 2) { toast('That is further from the centre than the shell.'); return; }
     pt[k] = v; commit(); refreshRoof(); return;
+  }
+  if (el.matches('[data-shs]')) {
+    const c = S.job.shell?.courses?.find((x) => x.id === el.dataset.course); if (!c) return;
+    const v = num(el.value), k = el.dataset.shs;
+    if (v !== null && v <= 0) { toast('Enter a positive stress.'); return; }
+    if (v === null) delete c[k]; else c[k] = S.job.units === 'metric' ? v * PSI_MPA : v;
+    commit(); refreshShell(); return;
+  }
+  if (el.matches('[data-shc="matl"]') || el.matches('[data-shc="joint"]')) {
+    const c = S.job.shell?.courses?.find((x) => x.id === el.dataset.course); if (!c) return;
+    if (el.value) c[el.dataset.shc] = el.value; else delete c[el.dataset.shc];
+    commit(); refreshShell(); return;
   }
   if (el.matches('[data-shc]')) {
     const c = S.job.shell?.courses?.find((x) => x.id === el.dataset.course); if (!c) return;

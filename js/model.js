@@ -12,7 +12,7 @@ export function newJob(units = 'imperial') {
   return {
     id: uid(), app: 'tank-floor-inspector', schema: 2, created: Date.now(), updated: Date.now(), units,
     info: { client: '', site: '', tankId: '', product: '', reportNo: '', workOrder: '', inspDate: today, zeroRef: 'N', mflTech: '', utTech: '', inspector: '', notes: '' },
-    tank: { diameter: null, tBottom: units === 'metric' ? 6 : 6.35, tAnnular: null, bottomType: 'Lap welded', coating: 'None', cp: false, rpb: false, yearBuilt: '', lastInternal: '' },
+    tank: { diameter: null, tBottom: units === 'metric' ? 6 : 6.35, tAnnular: null, bottomType: 'Lap welded', coating: 'None', cp: false, rpb: false, yearBuilt: '', lastInternal: '', code: 'API 650', edition: '', supp: '', sg: null, fillH: null },
     layout: units === 'metric' ? { ...defaultLayout(), plateW: 2400, plateL: 9000, annW: 600 } : defaultLayout(),
     equip: {},
     calc: units === 'metric' ? { ...defaultCalc(), czDist: 75 } : defaultCalc(),

@@ -78,7 +78,7 @@ export function nozzlesCSV(job) {
   const rows = [['Mark', 'Type', 'Connection', 'Service / description', 'Angle (deg)', `Size (${U.small})`, `Elevation to centreline (${U.small})`, 'Schedule', `Nominal wall (${U.small})`, `t-min (${U.small})`,
     `UT 12 o'clock (${U.small})`, `UT 3 o'clock (${U.small})`, `UT 6 o'clock (${U.small})`, `UT 9 o'clock (${U.small})`, 'Other UT readings', `Min UT (${U.small})`, 'Wall loss (%)', 'Status', 'Notes']];
   for (const n of (job.nozzles || []).slice().sort((a, b) => (+a.angle || 0) - (+b.angle || 0))) {
-    const s = nozzleUT(n);
+    const s = nozzleUT(n, job);
     rows.push([n.mark ?? '', n.type ?? '', NZ_CONN_SHORT[n.conn] || '', n.service ?? '', n.angle ?? '', r(fromMm(n.size, 'small', job), d), r(fromMm(n.elev, 'small', job), d), n.sched ?? '', t(n.tNom), t(n.tMin),
       ...UT_CLOCK.map(([k]) => t(n[k])), (n.utx || []).filter((x) => x.t != null).map((x) => `${x.loc || 'other'}: ${t(x.t)}`).join('; '), t(s.min), r(s.lossPct, 1), s.status, n.notes ?? '']);
   }
@@ -153,7 +153,7 @@ export function settleCSV(job) {
   const eu = ELEV_UNITS[st.eu] || ELEV_UNITS.in;
   const rows = [['Settlement survey — API 653 Annex B'], ['Date', st.date || ''], ['Surveyed by', st.surveyor || ''], ['Instrument', st.instrument || ''], ['Benchmark', st.benchmark || ''], ['Liquid level', st.level || ''],
     [`Tank diameter (${U.big})`, bg(c.D)], [`Shell height H (${U.big})`, bg(c.H)], ['Stations N', c.N], [`Arc spacing L (${U.big})`, bg(c.L)],
-    [`Yield Y (${met ? 'MPa' : 'psi'})`, st.Y == null ? '' : met ? r(+st.Y, 1) : Math.round(st.Y * PSI_PER_MPA)], [`E (${met ? 'MPa' : 'psi'})`, st.E == null ? '' : met ? r(+st.E, 0) : Math.round(st.E * PSI_PER_MPA)], ['Readings', st.rod ? 'Rod readings (larger = lower)' : 'Elevations'], []];
+    [`Yield Y (${met ? 'MPa' : 'psi'})`, c.Y == null ? '' : met ? r(+c.Y, 1) : Math.round(c.Y * PSI_PER_MPA), c.Ysrc || ''], [`E (${met ? 'MPa' : 'psi'})`, c.E == null ? '' : met ? r(+c.E, 0) : Math.round(c.E * PSI_PER_MPA)], ['Readings', st.rod ? 'Rod readings (larger = lower)' : 'Elevations'], []];
   rows.push(['Station', 'Angle (deg)', `Reading (${eu[1]})`, `Cosine fit (${U.small}, rel. mean)`, `Measured (${U.small}, rel. mean)`, `U (${U.small})`, `S (${U.small})`, 'Status']);
   for (const p of c.pts) rows.push([p.i, r(p.angle, 2), p.raw == null ? '' : r(p.raw / eu[0], eu[2]), F && p.fit !== undefined ? sm(p.fit - F.a) : '', F && p.z !== null ? sm(p.z - F.a) : '', p.U !== undefined ? sm(p.U) : '', p.S != null ? sm(p.S) : '', p.ok === false ? 'Exceeds Smax' : p.ok ? 'OK' : '']);
   rows.push([]);
@@ -177,7 +177,7 @@ export function settleCSV(job) {
     rows.push([]);
   }
   rows.push(['Edge settlement', 'Angle (deg)', `R (${U.big})`, `B (${U.small})`, 'Weld', 'Alpha (deg)', `Bew (${U.small})`, `Be (${U.small})`, `Allowable (${U.small})`, 'B/allow (%)', 'Status', 'Notes']);
-  st.edge.forEach((x, i) => { const ev = edgeEval(x); rows.push([`E${i + 1}`, x.angle ?? '', bg(x.R), sm(x.B), x.weld, x.alpha ?? '', sm(x.Bew), sm(x.Be), sm(ev.allow), r(ev.pct, 0), ev.status, x.notes || '']); });
+  st.edge.forEach((x, i) => { const ev = edgeEval(x, job); rows.push([`E${i + 1}`, x.angle ?? '', bg(x.R), sm(x.B), x.weld, x.alpha ?? '', sm(ev.Bew), sm(ev.Be), sm(ev.allow), r(ev.pct, 0), ev.status, x.notes || '']); });
   rows.push([]);
   rows.push(['Depression', 'Angle (deg)', `From centre (${U.big})`, `R (${U.big})`, `Depth B (${U.small})`, `Allowable 0.37R (${U.small})`, 'B/allow (%)', 'Status', 'Notes']);
   st.dep.forEach((x, i) => { const ev = depEval(x); rows.push([`D${i + 1}`, x.angle ?? '', bg(x.r), bg(x.R), sm(x.B), sm(ev.allow), r(ev.pct, 0), ev.status, x.notes || '']); });

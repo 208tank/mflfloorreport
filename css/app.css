@@ -555,3 +555,13 @@ b.ok { color: var(--ok); }
 .report .prof-grid svg { width: 100%; height: auto; display: block; border: 1px solid #d9dde3; }
 .report .grid.epr td, .report .grid.epr th { padding: 2px 3px; text-align: center; font-size: 10px; }
 @media (max-width: 1100px) { .ep-top, .ep-mid { grid-template-columns: 1fr; } }
+/* code tables + shell evaluation */
+.grid.reft th, .grid.reft td { padding: 3px 8px; font-size: 12.5px; }
+.grid.reft th.c { text-align: center; }
+.ref-page .card { margin-bottom: 16px; }
+.grid.seval select { min-height: 28px; padding: 2px 6px; font-size: 12.5px; max-width: 190px; }
+.grid.seval input.xs { width: 72px; min-height: 28px; padding: 3px 6px; text-align: right; font-size: 12.5px; }
+.grid.seval td { padding: 3px 6px; }
+.shell-eval .fgrid select { width: 100%; }
+.ann-req { padding: 8px 10px; border: 1px dashed var(--line); border-radius: 6px; }
+.grid.seval select[data-shc="matl"] { min-width: 150px; } .grid.seval select[data-shc="joint"] { min-width: 170px; }

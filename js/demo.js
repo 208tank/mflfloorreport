@@ -12,7 +12,7 @@ export function makeDemo() {
     client: 'Demo Energy Ltd.', site: 'Example Terminal', tankId: 'TK-101', product: 'Diesel', reportNo: 'DEMO-001', workOrder: 'WO-2026-114',
     zeroRef: 'N', mflTech: 'A. Operator', utTech: 'B. Technician', inspector: 'C. Inspector', notes: 'Demonstration data only.'
   });
-  Object.assign(job.tank, { diameter: 120 * FT, tBottom: 0.25 * IN, tAnnular: 0.3125 * IN, coating: 'None', cp: false, rpb: false, yearBuilt: '2001' });
+  Object.assign(job.tank, { code: 'API 650', edition: 'Tenth, November 1998', supp: 'Addendum 1, Mar. 2000', sg: 0.85, fillH: 38 * FT, diameter: 120 * FT, tBottom: 0.25 * IN, tAnnular: 0.3125 * IN, coating: 'None', cp: false, rpb: false, yearBuilt: '2001' });
   Object.assign(job.layout, { plateW: 8 * FT, plateL: 30 * FT, annular: true, annW: 24 * IN, annN: 32, annStart: 0, stagger: 0.5, refCorner: 'BL' });
   Object.assign(job.equip, { mflMake: 'MFL', mflModel: 'Floor scanner', mflSerial: 'SN-0000', mflThreshold: '20', mflRef: 'Reference plate 0.25 in', utMake: 'UT', utModel: 'Flaw detector', utProbe: '5 MHz dual 10 mm', utBlock: 'Step wedge 0.1–0.5 in', vtTools: 'Pit gauge, light, mirror' });
   Object.assign(job.calc, { years: 25, Or: 10 });
@@ -59,8 +59,8 @@ export function makeDemo() {
   ];
   // shell: 5 courses of 8 ft, 13 plates per course, readings at the 8 standard stations using the
   // standard pattern (every 1 in up to 2 ft, then every 1 ft to the top)
-  const nom = [0.5, 0.4375, 0.375, 0.3125, 0.25], tmin = [0.39, 0.31, 0.24, 0.16, 0.1];
-  job.shell = { courses: nom.map((t, i) => ({ id: uid(), h: 8 * FT, tNom: t * IN, tMin: tmin[i] * IN, pn: 13 })), nLoc: null, start: 0, rd: {}, zones: defaultZones('imperial'), extraZ: [], notes: '' };
+  const nom = [0.5, 0.4375, 0.375, 0.3125, 0.25]; // t-min is calculated (API 653 4.3.3.1, A36, G 0.85, fill 38 ft)
+  job.shell = { courses: nom.map((t, i) => ({ id: uid(), h: 8 * FT, tNom: t * IN, pn: 13 })), matl: 'ASTM A36', joint: '', nLoc: null, start: 0, rd: {}, zones: defaultZones('imperial'), extraZ: [], notes: '' };
   const zs = [];
   for (let k = 1; k <= 24; k++) zs.push(k * IN);
   for (let k = 3; k <= 40; k++) zs.push(k * FT);
@@ -114,7 +114,7 @@ export function makeDemo() {
     // radial edge readings at each station: bottom elevation (in) with a 1 in / 10 ft cone-up slope,
     // settled zones at stations 7 and 8
     const offs = [0, 6, 12, 18, 24, 36, 48, 60, 72, 84, 96, 108, 120];
-    const set = { 7: [0.75, 24], 8: [1.3, 36] };
+    const set = { 7: [0.75, 24], 8: [2.9, 36] };
     for (let i = 1; i <= N; i++) {
       const base = el[i] / IN + 0.5, m = {};
       offs.forEach((x, k) => {
@@ -125,8 +125,7 @@ export function makeDemo() {
       job.settle.ep.rd[i] = m;
     }
     job.settle.ep.st = { 8: { weld: 'par', notes: 'Annular lap weld parallel to shell' } };
-    job.settle.curve = [{ id: uid(), R: 1 * FT, Bew: 0.9 * IN, Be: 1.8 * IN }, { id: uid(), R: 3 * FT, Bew: 1.5 * IN, Be: 3.0 * IN }, { id: uid(), R: 5 * FT, Bew: 2.0 * IN, Be: 4.0 * IN }];
-    job.settle.curveSrc = 'DEMO VALUES ONLY — read the real values from API 653 Fig. B.11 / B.12';
+    job.settle.curveMode = 'api';
     job.settle.dep = [{ id: uid(), angle: 300, r: 30 * FT, R: 4 * FT, B: 1.1 * IN, notes: 'Smooth dish, no creasing' }];
   }
   return job;

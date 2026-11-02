@@ -104,7 +104,7 @@ export function renderMapSVG(job, layout, opts = {}) {
       const fl = [P(L2, -sz / 2 - s * 0.7), P(L2 + s * 0.9, -sz / 2 - s * 0.7), P(L2 + s * 0.9, sz / 2 + s * 0.7), P(L2, sz / 2 + s * 0.7)];
       const d = (q) => 'M' + q.map(([x, y]) => `${f(x)} ${f(-y)}`).join('L') + 'Z';
       const [lx, ly] = polar(L2 + s * 3, a);
-      const bad = nozzleUT(nz).status === 'Below t-min';
+      const bad = nozzleUT(nz, job).status === 'Below t-min';
       out.push(`<g class="nozzle${big ? ' mw' : ''}${bad ? ' bad' : ''}${opts.selNozzle === nz.id ? ' sel' : ''}" data-nozzle="${esc(nz.id)}"><path d="${d(pts)}"/><path class="fl" d="${d(fl)}"/>` +
         `<text x="${f(lx)}" y="${f(-ly)}" font-size="${f(s * 2.3)}" text-anchor="middle" dominant-baseline="central">${esc(nz.mark || '')}</text></g>`);
     }

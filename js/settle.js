@@ -3,12 +3,16 @@
 //    deflection Si = Ui − ½(Ui−1 + Ui+1) against Smax = 11·L²·Y / (2·E·H)  (B.2.2.4, B.3.2.1).
 //  - Planar tilt: tilt across the diameter and out-of-plumbness at the top of the shell, compared with
 //    API 653 §10.5.2.1 (1/100 of shell height, max 5 in) and, for reference, API 650 (1/200).
-//  - Edge settlement (B.2.3 / B.3.4): B against Bew (Fig. B.11) / Be (Fig. B.12) read by the inspector,
-//    interpolated for lap welds at an angle: B = Be − (Be − Bew)·sin α; 75 % NDE trigger.
+//  - Edge settlement (B.2.3 / B.3.4): B against Bew (Fig. B.11) / Be (Fig. B.12) from the tabulated curves
+//    (tables.js) or the inspector's values; lap welds at an angle: B = Be − (Be − Bew)·sin α; 75 % NDE trigger.
+//  - B.3.2.2 arc method when the cosine fit is poor: settlement within each arc between high points,
+//    allowable = min(K · Sarc · (D/H) · (Y/E), 4 in), K from the B.3.2.2 table (open top / fixed roof).
 //  - Localized bottom depressions remote from the shell (B.3.3): BB = 0.37·R (in, ft).
 // All lengths stored in mm. Y and E stored in MPa.
 import { polar } from './geometry.js';
 import { shellHeight } from './shell.js';
+import { shellYE, toMPa } from './design.js';
+import { edgeAllow, kFor } from './tables.js';
 
 const IN = 25.4, FT = 304.8, DEG = Math.PI / 180;
 const uidS = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -31,7 +35,7 @@ export function defaultSettle(units = 'imperial') {
   return {
     date: '', surveyor: '', instrument: '', benchmark: '', level: '', notes: '',
     n: null, start: 0, eu: units === 'metric' ? 'mm' : 'in', rod: false, el: {},
-    Y: units === 'metric' ? 207 : 30000 / PSI_PER_MPA, E: units === 'metric' ? 200000 : 29e6 / PSI_PER_MPA, H: null,
+    Y: null, E: null, yeAuto: true, H: null, curveMode: 'api', kRoof: 'auto', arcs: null,
     edge: [], dep: [],
     ep: defaultEP(units), curve: [], curveSrc: ''
   };
@@ -48,7 +52,15 @@ export function defaultEP(units = 'imperial') {
 export function migrateSettle(s, units) {
   const b = defaultSettle(units);
   if (!s) return b;
-  return { ...b, ...s, el: s.el || {}, edge: s.edge || [], dep: s.dep || [], curve: s.curve || [], ep: { ...b.ep, ...(s.ep || {}), rd: s.ep?.rd || {}, st: s.ep?.st || {} } };
+  const out = { ...b, ...s, el: s.el || {}, edge: s.edge || [], dep: s.dep || [], curve: s.curve || [], ep: { ...b.ep, ...(s.ep || {}), rd: s.ep?.rd || {}, st: s.ep?.st || {} } };
+  // v2.8: Y / E default to the shell course 1 material; Bew / Be default to the built-in Fig. B.11 / B.12 table
+  if (s.yeAuto === undefined) {
+    const oldDefault = (y, e) => (y == null || Math.abs(y - 206.84) < 0.5 || Math.abs(y - 207) < 0.5 || Math.abs(y - 30000 / PSI_PER_MPA) < 0.5) && (e == null || Math.abs(e - 199948) < 5 || Math.abs(e - 200000) < 5 || Math.abs(e - 29e6 / PSI_PER_MPA) < 5);
+    out.yeAuto = oldDefault(s.Y, s.E);
+    if (out.yeAuto) { out.Y = null; out.E = null; }
+  }
+  if (s.curveMode === undefined) out.curveMode = (s.curve || []).length ? 'manual' : 'api';
+  return out;
 }
 export const newEdge = () => ({ id: uidS(), angle: null, arc: null, R: null, B: null, weld: 'par', alpha: null, Bew: null, Be: null, notes: '' });
 export const newDep = () => ({ id: uidS(), angle: null, r: null, R: null, B: null, notes: '' });
@@ -96,9 +108,9 @@ export function settleCalc(job) {
   const pts = st.map((x) => { const v = num(s.el?.[x.i]); return { ...x, raw: v, z: v === null ? null : s.rod ? -v : v }; });
   const have = pts.filter((p) => p.z !== null);
   const L = D > 0 ? (Math.PI * D) / N : null;
-  const Y = num(s.Y), E = num(s.E);
+  const ye = settleYE(job), Y = ye.Y, E = ye.E;
   const Smax = L && H > 0 && Y && E ? (11 * L * L * Y) / (2 * E * H) : null;
-  const out = { N, pts, n: have.length, D, H, L, Y, E, Smax, fit: null, warnings: [] };
+  const out = { N, pts, n: have.length, D, H, L, Y, E, Ysrc: ye.src, Smax, fit: null, warnings: [] };
   if (N < 8) out.warnings.push(`Only ${N} stations: API 653 asks for at least 8.`);
   if (L && L > 32 * FT + 1) out.warnings.push(`Station spacing ${(L / FT).toFixed(1)} ft is more than the 32 ft (9.8 m) maximum.`);
   if (have.length < 4) { out.status = have.length ? 'Incomplete' : 'No survey'; return out; }
@@ -139,9 +151,60 @@ export function settleCalc(job) {
   if (!out.valid) out.warnings.push(`R² = ${R2.toFixed(3)} is below 0.90: the cosine fit is not valid for the out-of-plane check (B.2.2.4). Take more readings, use a rigorous fit, or evaluate by B.3.2.2 / an engineer.`);
   out.oopOk = Smax === null || maxS === null ? null : out.valid ? Math.abs(maxS) <= Smax + 1e-9 : null;
   out.tiltOk = plumb === null ? null : plumb <= plumbLim + 1e-9;
+  out.arcs = arcEval(job, pts, out);
+  if (!out.valid && out.arcs.ok !== null) out.oopOk = out.arcs.ok;
   out.status = out.oopOk === false || out.tiltOk === false ? 'Not acceptable'
-    : !out.valid ? 'Engineering evaluation required'
+    : !out.valid && out.arcs.ok === null ? 'Engineering evaluation required'
       : out.oopOk === null || out.tiltOk === null || have.length < N ? 'Incomplete' : 'Acceptable';
+  if (!out.valid && out.arcs.ok !== null) out.warnings.push(`Out-of-plane settlement evaluated by the B.3.2.2 arc method instead: ${out.arcs.ok ? 'all arcs within the allowable' : 'one or more arcs exceed the allowable'}.`);
+  return out;
+}
+
+/** Y and E (MPa) for the settlement formulas: shell course 1 material (Table 4.1) unless entered. */
+export function settleYE(job) {
+  const s = job.settle || {}, ye = shellYE(job);
+  if (s.yeAuto !== false) return { Y: toMPa(ye.Y1), E: toMPa(ye.E1), Ymin: toMPa(ye.Ymin), src: ye.src, auto: true };
+  const Y = num(s.Y) ?? toMPa(ye.Y1), E = num(s.E) ?? toMPa(ye.E1);
+  return { Y, E, Ymin: Y, src: 'entered', auto: false };
+}
+
+/** Roof type for the B.3.2.2 K value: fixed roof or open top (external floating roof / no roof). */
+export function kRoofFixed(job) {
+  const k = job.settle?.kRoof || 'auto';
+  if (k === 'fixed') return true; if (k === 'open') return false;
+  return ['fixed', 'fixed-ifr'].includes(job.roof?.type);
+}
+
+/**
+ * B.3.2.2: arcs run between successive high points of the measured elevations (or between the stations
+ * the inspector chooses). Settlement in an arc = the drop of each station below the straight line joining
+ * the arc's end elevations; allowable = min(K · Sarc · (D / H) · (Y / E), 4 in) with Sarc and D, H in ft.
+ */
+export function arcEval(job, pts, c) {
+  const N = pts.length, D = c.D, H = c.H;
+  const out = { arcs: [], K: null, ok: null, fixed: kRoofFixed(job) };
+  if (N < 4 || pts.some((p) => p.z === null) || !(D > 0) || !(H > 0)) return out;
+  const K = kFor(D / FT, out.fixed); out.K = K;
+  const ye = settleYE(job), Y = ye.Ymin, E = ye.E;
+  let ends = (job.settle?.arcs || []).filter((a) => a && a.from >= 1 && a.to >= 1 && a.from !== a.to).map((a) => [a.from - 1, a.to - 1]);
+  out.manual = ends.length > 0;
+  if (!ends.length) {
+    const hi = [];
+    for (let i = 0; i < N; i++) { const z = pts[i].z, zp = pts[(i - 1 + N) % N].z, zn = pts[(i + 1) % N].z; if (z >= zp - 1e-9 && z > zn + 1e-9 || (z > zp + 1e-9 && z >= zn - 1e-9)) hi.push(i); }
+    if (!hi.length) return out;
+    ends = hi.length === 1 ? [[hi[0], hi[0]]] : hi.map((h, k) => [h, hi[(k + 1) % hi.length]]);
+  }
+  for (const [a, b] of ends) {
+    const n = ((b - a + N) % N) || N; if (n < 2) continue;
+    let maxDef = 0, at = null;
+    for (let k = 1; k < n; k++) {
+      const i = (a + k) % N, chord = pts[a].z + ((pts[b].z - pts[a].z) * k) / n, d = chord - pts[i].z;
+      if (Math.abs(d) > Math.abs(maxDef)) { maxDef = d; at = pts[i].i; }
+    }
+    const Sarc = n * c.L, allow = K === null || !Y || !E ? null : Math.min(K * (Sarc / FT) * (D / H) * (Y / E), 4) * IN;
+    out.arcs.push({ from: pts[a].i, to: pts[b].i, n, Sarc, maxDef, at, allow, ok: allow === null ? null : Math.abs(maxDef) <= allow + 1e-9 });
+  }
+  if (out.arcs.length && out.arcs.every((x) => x.ok !== null)) out.ok = out.arcs.every((x) => x.ok);
   return out;
 }
 
@@ -154,26 +217,38 @@ export function slopeText(slope, job) {
 
 /* ---------------------------------------------------------------------- edge ---- */
 
-export function edgeEval(e) {
-  const B = num(e.B), Be = num(e.Be), Bew = num(e.Bew), w = e.weld || 'par';
+/** Bew / Be (mm) for a settled width R (mm): the built-in Fig. B.11 / B.12 table, or the inspector's curve. */
+export function edgeCurve(job, R) {
+  if (!(R > 0)) return { Bew: null, Be: null, src: null };
+  if ((job.settle?.curveMode || 'api') === 'manual') return { Bew: curveAt(job, R, 'Bew'), Be: curveAt(job, R, 'Be'), src: 'curve' };
+  const a = edgeAllow((+job.tank?.diameter || 0) / FT, R / FT);
+  return { Bew: a.Bew === null ? null : a.Bew * IN, Be: a.Be === null ? null : a.Be * IN, src: 'table', beyond: a.Bew === null && R > 6 * FT };
+}
+
+export function edgeEval(e, job) {
+  const B = num(e.B), w = e.weld || 'par';
+  let Be = num(e.Be), Bew = num(e.Bew);
+  if (job && (Be === null || Bew === null)) { const cv = edgeCurve(job, num(e.R)); Bew = Bew ?? cv.Bew; Be = Be ?? cv.Be; }
   let allow = null, basis = '';
   if (w === 'par') { allow = Bew; basis = 'Bew (Fig. B.11)'; }
   else if (w === 'angle') {
     const al = num(e.alpha);
-    if (Be !== null && Bew !== null && al !== null) { allow = Be - (Be - Bew) * Math.sin(Math.min(90, Math.max(0, al)) * DEG); basis = `Be − (Be − Bew)·sin ${al}° (B.3.4.4)`; }
+    if (al !== null && al >= 70) { allow = Bew; basis = `Bew — weld within 20° of parallel (α ${al}°)`; }
+    else if (al !== null && al <= 20) { allow = Be; basis = `Be — weld within 20° of perpendicular (α ${al}°)`; }
+    else if (Be !== null && Bew !== null && al !== null) { allow = Be - (Be - Bew) * Math.sin(al * DEG); basis = `Be − (Be − Bew)·sin ${al}° (B.3.4.4)`; }
   } else { allow = Be; basis = 'Be (Fig. B.12)'; }
   // screening: every area may first be checked against Bew (the lower curve)
   if (allow === null && Bew !== null && B !== null && B <= Bew + 1e-9) { allow = Bew; basis = 'Bew screening (B.3.4)'; }
-  if (B === null || allow === null || !(allow > 0)) return { B, allow, basis, pct: null, status: 'Incomplete' };
+  if (B === null || allow === null || !(allow > 0)) return { B, allow, basis, pct: null, status: 'Incomplete', Bew, Be };
   const pct = (B / allow) * 100;
   const status = B > allow + 1e-9 ? 'Exceeds' : pct >= 75 - 1e-9 ? 'NDE required' : 'Acceptable';
-  return { B, allow, basis, pct, status };
+  return { B, allow, basis, pct, status, Bew, Be };
 }
 export const EDGE_NOTE = {
   'Acceptable': 'Within allowable.',
   'NDE required': 'Over 75 % of allowable: examine shell-to-bottom and bottom welds in the settled area visually and by MT or PT, and welds within 12 in (300 mm) of the breakover visually (B.3.4.1–2).',
   'Exceeds': 'Over allowable: repair (re-level / replace bottom) or rigorous engineering evaluation (B.3.4, B.4).',
-  'Incomplete': 'Enter B, R and the allowable read from Fig. B.11 / B.12.'
+  'Incomplete': 'Enter B and R (and the weld angle α for angled lap welds). R over 6 ft is beyond the tabulated Fig. B.11 / B.12 curves — enter Bew / Be.'
 };
 
 export function depEval(d) {
@@ -186,7 +261,7 @@ export function depEval(d) {
 /** Overall settlement result for summaries. */
 export function settleSummary(job) {
   const c = settleCalc(job), s = job.settle || {};
-  const ed = [...(s.edge || []).map(edgeEval), ...stations(job).map((x) => profileEval(job, x.i).ev).filter(Boolean)], dp = (s.dep || []).map(depEval);
+  const ed = [...(s.edge || []).map((e) => edgeEval(e, job)), ...stations(job).map((x) => profileEval(job, x.i).ev).filter(Boolean)], dp = (s.dep || []).map(depEval);
   const bad = c.status === 'Not acceptable' || ed.some((x) => x.status === 'Exceeds') || dp.some((x) => x.status === 'Exceeds');
   const nde = ed.some((x) => x.status === 'NDE required');
   return { c, ed, dp, bad, nde };
@@ -260,8 +335,8 @@ export function profileEval(job, i) {
   out.dev = Math.max(0, ...pts.map((p) => line.at(p.x) - p.z));
   if (R === null || !(R > 0)) { out.R = null; out.B = 0; out.status = 'No edge settlement'; return out; }
   out.R = R; out.B = B; out.xB = xB;
-  const Bew = num(so.Bew) ?? curveAt(job, R, 'Bew'), Be = num(so.Be) ?? curveAt(job, R, 'Be');
-  out.Bew = Bew; out.Be = Be; out.BewSrc = num(so.Bew) !== null ? 'entered' : Bew !== null ? 'curve' : null; out.BeSrc = num(so.Be) !== null ? 'entered' : Be !== null ? 'curve' : null;
+  const cv = edgeCurve(job, R), Bew = num(so.Bew) ?? cv.Bew, Be = num(so.Be) ?? cv.Be;
+  out.Bew = Bew; out.Be = Be; out.BewSrc = num(so.Bew) !== null ? 'entered' : Bew !== null ? cv.src : null; out.BeSrc = num(so.Be) !== null ? 'entered' : Be !== null ? cv.src : null; out.beyond = cv.beyond;
   out.ev = edgeEval({ B, Bew, Be, weld: so.weld || 'par', alpha: so.alpha });
   out.status = out.ev.status;
   return out;
@@ -381,7 +456,7 @@ export function settlePlanSVG(job, c, opts = {}) {
     const a = num(e.angle), w = num(e.R); if (a === null || !(w > 0)) continue;
     const arc = num(e.arc), half = arc > 0 ? (arc / (Math.PI * D)) * 180 : 4, Ri = Math.max(0, R - w);
     const p = [polar(R, a - half), polar(R, a + half), polar(Ri, a + half), polar(Ri, a - half)];
-    const ev = edgeEval(e), [lx, ly] = polar(Ri - s * 6, a);
+    const ev = edgeEval(e, job), [lx, ly] = polar(Ri - s * 6, a);
     o.push(`<g class="sp-edge ${ev.status === 'Exceeds' ? 'bad' : ev.status === 'NDE required' ? 'warn' : ''}"><path d="M${f(p[0][0])} ${f(-p[0][1])}A${f(R)} ${f(R)} 0 0 1 ${f(p[1][0])} ${f(-p[1][1])}L${f(p[2][0])} ${f(-p[2][1])}A${f(Ri)} ${f(Ri)} 0 0 0 ${f(p[3][0])} ${f(-p[3][1])}Z" stroke-width="${f(s * 0.4)}"/><text x="${f(lx)}" y="${f(-ly)}" font-size="${f(s * 5)}" text-anchor="middle" dominant-baseline="central">E${i + 1}</text></g>`);
   }
   // radial survey results at stations

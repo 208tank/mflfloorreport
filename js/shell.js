@@ -1,6 +1,7 @@
 // Shell UT: courses, shell plates / vertical seams, UT stations, reading elevations and the roll-out.
 import { fmt, fromMm, u } from './units.js';
 import { nozzleUT } from './calc.js';
+import { courseDesigns } from './design.js';
 
 export const SPACING_MM = 32 * 304.8; // one UT station per 32 ft of circumference
 const STD_PLATE_MM = 30 * 304.8;      // used only to suggest a plate count
@@ -64,8 +65,12 @@ export function utLocations(job) {
 /* -------------------------------------------------------------------------- courses --- */
 
 export function coursesWithElev(job) {
-  let z = 0;
-  return (job.shell?.courses || []).map((c, i) => { const h = +c.h > 0 ? +c.h : 0; const o = { ...c, no: i + 1, z0: z, z1: z + h }; z += h; return o; });
+  let z = 0; const ds = courseDesigns(job);
+  return (job.shell?.courses || []).map((c, i) => {
+    const h = +c.h > 0 ? +c.h : 0, d = ds[i], set = +c.tMin > 0 ? +c.tMin : null;
+    const o = { ...c, no: i + 1, z0: z, z1: z + h, d, tMinSet: set, tMinCalc: d?.tmin ?? null, tMin: set ?? d?.tmin ?? null, tMinSrc: set ? 'entered' : d?.tmin ? 'API 653 4.3.3.1' : '' };
+    z += h; return o;
+  });
 }
 
 export function shellHeight(job) {
@@ -275,7 +280,7 @@ export function rolloutSVG(job, opts = {}) {
     const x = X(+n.angle), y = Y(+n.elev);
     const mw = /manway|door/i.test(n.type || '');
     const r = Math.max(mw ? 7 : 3.5, ((+n.size || 0) / 2) * kx);
-    const bad = nozzleUT(n).status === 'Below t-min';
+    const bad = nozzleUT(n, job).status === 'Below t-min';
     let ty = y - r - 24;
     while (placed.some((p) => Math.abs(p.x - x) < 26 && Math.abs(p.y - ty) < 22)) ty -= 22;
     placed.push({ x, y: ty });

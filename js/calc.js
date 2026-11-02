@@ -1,3 +1,5 @@
+import { courseDesigns } from './design.js';
+import { nozzleNeck } from './tables.js';
 // Indication analysis and API 653 bottom MRT calculation (API 653, 4.4.7).
 // MRT = min(RTbc, RTip) − Or × (StPr + UPr)
 // All thickness values in mm, rates in mm/yr.
@@ -43,7 +45,8 @@ export function czLimitAuto(job) {
   const C = { ...defaultCalc(), ...job.calc };
   const tOrig = job.layout?.annular && n(job.tank?.tAnnular) !== null ? +job.tank.tAnnular : n(job.tank?.tBottom);
   let lim = tOrig !== null ? tOrig / 2 : Infinity;
-  if (n(C.shellTmin) !== null) lim = Math.min(lim, C.shellTmin / 2);
+  const c1 = (job.shell?.courses || [])[0], st = n(C.shellTmin) ?? (n(c1?.tMin) > 0 ? +c1.tMin : courseDesigns(job)[0]?.tmin ?? null);
+  if (st !== null) lim = Math.min(lim, st / 2);
   if (!Number.isFinite(lim)) lim = 2.54;
   return Math.max(2.54, lim);
 }
@@ -203,11 +206,21 @@ export const NZ_CONN_SHORT = { RFWN: 'RFWN', THD: 'Threaded', SO: 'Slip-on', SW:
 export const UT_CLOCK = [['ut12', '12'], ['ut3', '3'], ['ut6', '6'], ['ut9', '9']];
 
 /** Neck UT summary: min reading, % loss against nominal, and status against t-min. */
-export function nozzleUT(n) {
+/** Nozzle neck nominal / minimum: entered values, else the pipe table for the construction code (tables.js). */
+export function nozzleWall(n, job) {
+  const tNom = n.tNom > 0 ? +n.tNom : null, tMin = n.tMin > 0 ? +n.tMin : null;
+  if ((tNom && tMin) || !job || !(+n.size > 0)) return { tNom, tMin, src: tNom || tMin ? 'entered' : '' };
+  const nps = +n.size / 25.4, ds = courseDesigns(job);
+  const c = (job.shell?.courses || []).find((_, i) => n.elev != null && +n.elev >= (ds[i]?.z0 ?? 0) && +n.elev < (ds[i]?.z1 ?? 0)) || (job.shell?.courses || [])[0];
+  const r = nozzleNeck(nps, job.tank?.code || 'Unknown', c?.tNom > 0 ? +c.tNom / 25.4 : null);
+  if (!r) return { tNom, tMin, src: tNom || tMin ? 'entered' : '' };
+  return { tNom: tNom ?? r.nom * 25.4, tMin: tMin ?? r.min * 25.4, src: `table (NPS ${r.nps} ${r.sched})`, nomTbl: !tNom, minTbl: !tMin };
+}
+export function nozzleUT(n, job) {
   const vals = [...UT_CLOCK.map(([k]) => n[k]), ...(n.utx || []).map((r) => r.t)].map((v) => (v === null || v === undefined || v === '' ? null : +v)).filter((v) => Number.isFinite(v));
   if (!vals.length) return { count: 0, min: null, lossPct: null, status: '' };
   const min = Math.min(...vals);
-  const tNom = n.tNom > 0 ? +n.tNom : null, tMin = n.tMin > 0 ? +n.tMin : null;
+  const w = nozzleWall(n, job), tNom = w.tNom, tMin = w.tMin;
   const lossPct = tNom ? Math.max(0, ((tNom - min) / tNom) * 100) : null;
   const status = tMin ? (min < tMin - 1e-9 ? 'Below t-min' : 'OK') : '';
   return { count: vals.length, min, lossPct, status };

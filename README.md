@@ -222,6 +222,43 @@ Limits are from 40 CFR 60.113b, 40 CFR 63.1063 and SOR/2025-88 (ss. 64–65, 73�
 Schedule 4) as published in 2025–2026. Check them against the rules, permit or approval that apply
 to the tank and the product stored.
 
+### Code tables, materials and shell evaluation
+
+The reference tables come from the inspection workbook (AcuTank) so the app uses the same values. They
+are shown read-only on the **Code tables** page:
+
+- **API 653 Table 4.1 materials**: minimum yield and tensile strength, product design stress Sd and
+  hydrotest stress St for the lower two courses and the upper courses, and Young's modulus
+  (29,400,000 psi / 202,706 MPa) for 34 plate specifications plus Unknown (30,000 / 55,000 psi).
+  Riveted tanks use 21,000 psi. Materials not listed use 0.80Y / 0.429T and 0.88Y / 0.472T (product),
+  0.88Y / 0.472T and 0.90Y / 0.519T (hydrotest).
+- **Construction code, edition and supplement** lists (API 12A–12F, 620, 650 and Annexes A / J / S,
+  653, AWWA D100, NFPA 22, UL 142; API 650 1st–13th editions with their supplements, revisions and
+  addenda; API 12C 1st–15th editions). Added beyond the workbook: API 650 13th edition Errata 1 (2021)
+  and the 14th edition (date to confirm).
+- **API 653 Tables 4.2 / 4.3 joint efficiencies**, by code and edition (welded) or rivet rows (riveted).
+- **API 653 Fig. B.11 / B.12 edge-settlement curves** tabulated for D = 20–160 ft and R = 0–6 ft.
+- **B.3.2.2 K values** (open top / fixed roof by diameter).
+- **API 653 Table 4.5 and API 650 Table 5.1b** annular plate thickness.
+- **Nozzle neck walls**: Sch XS / STD by NPS (less 12.5 % mill tolerance for the minimum) and the neck
+  wall for NPS 26 and larger by shell thickness; the schedule follows the construction code.
+
+**Tank setup → Construction & design**: construction code, edition, supplement, product specific
+gravity G and maximum fill height (blank = shell height).
+
+**Shell UT → Shell evaluation (API 653 4.3.3)**: pick the shell material and joint for all courses (or
+per course), override Y / T if needed. For each course the app shows E, Sd, St, the liquid height above
+the course, **t-min = 2.6 (H − 1) D G / (S E)** (not less than 0.100 in), the t-min used (a value typed in
+the course table overrides the calculation), the minimum reading and status, the **maximum product fill
+height** the minimum reading supports, and the **hydrostatic test height** Ht = St E t / (2.6 D) + 1. The
+report includes the table.
+
+**Nozzles**: when nominal wall or t-min is left blank, the nozzle neck table value for the size and
+construction code is used (shown grey, marked T in the report).
+
+**API 653 page**: the annular plate minimum from Table 4.5 (SG < 1, Sb = 2.34 D (H − 1) / t) or
+Table 5.1b (SG ≥ 1, Sb = 2.6 D (H − 1) G / t) with course 1 nominal thickness, and a button to use it.
+
 ### Settlement (API 653 Annex B)
 
 The **Settlement** page evaluates a settlement survey to API 653 Annex B.
@@ -238,9 +275,12 @@ elevations or as rod readings (larger = lower); press Enter to move to the next 
   is compared with API 653 §10.5.2.1 (1/100 of shell height, 5 in max), with API 650's 1/200 shown
   for reference;
 - computes U = measured − cosine curve and S = U − ½(U of the stations either side) at each
-  station and checks |S| ≤ Smax = 11·L²·Y / (2·E·H) (B.3.2.1), L = πD/N, Y = shell yield strength
-  (30,000 psi / 207 MPa if unknown), E = 29,000,000 psi / 200,000 MPa, H = shell height (from the
-  shell courses unless entered);
+  station and checks |S| ≤ Smax = 11·L²·Y / (2·E·H) (B.3.2.1), L = πD/N, Y and E from the shell
+  course 1 material (Table 4.1; unknown 30,000 psi and 29,400,000 psi) unless entered, H = shell
+  height (from the shell courses unless entered);
+- runs the **B.3.2.2 arc method** between successive high points: settlement below the line joining
+  the arc ends against min(K · Sarc · (D / H) · (Y / E), 4 in), K from the B.3.2.2 table for the
+  diameter and roof type. When R² < 0.90 this replaces the B.3.2.1 out-of-plane check;
 - draws a plan (stations, elevation relative to the mean plane, tilt arrow to the low side, edge
   settlement areas and depressions) and a chart of the measured points against the cosine curve
   with the S bars and ±Smax.
@@ -266,9 +306,10 @@ the app fits a straight line through the outer readings (the unsettled bottom, s
 cone-down slope is allowed for, Fig. B.7), walks in toward the shell to find the **breakover** (the
 last reading within the breakover tolerance, default 1/8 in / 3 mm, of that line), and takes
 **R** = shell to breakover and **B** = the largest drop of the bottom below the projected line inside R
-(Fig. B.6). The inspector can pick a different breakover. Enter Bew (Fig. B.11) and Be (Fig. B.12)
-once for the tank at a few values of R and the app interpolates them at each station's R (values
-typed for a station override the curve). Each station shows R, B, the allowable for the bottom weld
+(Fig. B.6). The inspector can pick a different breakover. Bew and Be come from the built-in
+Fig. B.11 / B.12 table for the tank diameter (or the inspector's own curve), interpolated at each
+station's R; values typed for a station override them. α for angled lap welds is the weld's angle to
+the tank radius: ≤ 20° uses Be, ≥ 70° uses Bew, between uses Be − (Be − Bew)·sin α. Each station shows R, B, the allowable for the bottom weld
 in the area, B / allowable and the status, and a profile chart; the plan marks the settled zones.
 The report has the station results, a profile for every station and the readings table.
 
