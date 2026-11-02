@@ -257,6 +257,24 @@ status is *Acceptable*, *NDE required* (75 % of allowable or more: VT and MT/PT 
 and bottom welds, B.3.4.1) or *Exceeds*. The app does not reproduce the curves of Fig. B.11 / B.12 —
 the inspector reads them from their copy of API 653.
 
+**Edge settlement survey (radial readings at every station).** At each settlement station, record
+bottom readings radially inward from the shell. The default spacing is a reading at the shell, every
+6 in to 2 ft, then every foot to 10 ft (metric: 150 mm to 600 mm, then every 300 mm to 3 m); change
+the spacing bands as needed. Readings use the same units and rod/elevation setting as the shell
+survey, and Enter moves down the station's readings and then to the next station. For each station
+the app fits a straight line through the outer readings (the unsettled bottom, so a cone-up /
+cone-down slope is allowed for, Fig. B.7), walks in toward the shell to find the **breakover** (the
+last reading within the breakover tolerance, default 1/8 in / 3 mm, of that line), and takes
+**R** = shell to breakover and **B** = the largest drop of the bottom below the projected line inside R
+(Fig. B.6). The inspector can pick a different breakover. Enter Bew (Fig. B.11) and Be (Fig. B.12)
+once for the tank at a few values of R and the app interpolates them at each station's R (values
+typed for a station override the curve). Each station shows R, B, the allowable for the bottom weld
+in the area, B / allowable and the status, and a profile chart; the plan marks the settled zones.
+The report has the station results, a profile for every station and the readings table.
+
+**Other edge settlement areas.** Areas found between stations can still be entered individually
+with their own R, B, weld and Bew / Be.
+
 **Bottom depressions / bulges (B.3.3).** Angle, distance from centre, inscribed radius R and depth B,
 checked against BB = 0.37·R (BB in inches, R in feet).
 

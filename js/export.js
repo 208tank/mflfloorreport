@@ -3,7 +3,7 @@ import { fromMm, u, fmt } from './units.js';
 import { RESULTS, nozzleUT, NZ_CONN_SHORT, UT_CLOCK } from './calc.js';
 import { floatingLayout, plateUT, pointStatus, PT5, hasFixed, hasFloating } from './roof.js';
 import { sealEval, activeStds } from './seal.js';
-import { settleCalc, edgeEval, depEval, ELEV_UNITS, PSI_PER_MPA } from './settle.js';
+import { settleCalc, edgeEval, depEval, ELEV_UNITS, PSI_PER_MPA, hasEP, epOffsets, xKey, profileEval, stations as setStations } from './settle.js';
 import { utLocations, courseSummary, coursesWithElev, courseAt, readingElevations, getReading, fmtElev } from './shell.js';
 import { angleOf, toLocal, datumName, orientName } from './geometry.js';
 
@@ -164,6 +164,16 @@ export function settleCSV(job) {
     rows.push([`Out-of-plumbness at top (${U.small})`, sm(F.plumb), sm(F.plumbLim), c.tiltOk ? 'OK' : c.tiltOk === false ? 'Fails' : '']);
     rows.push([`Max out-of-plane |S| (${U.small})`, F.maxS == null ? '' : sm(Math.abs(F.maxS)), c.Smax == null ? '' : sm(c.Smax), c.oopOk ? 'OK' : c.oopOk === false ? 'Fails' : '']);
     rows.push(['Shell settlement', c.status]);
+    rows.push([]);
+  }
+  if (hasEP(job)) {
+    const sts = setStations(job), offs = epOffsets(job);
+    rows.push([`Edge settlement survey — readings (${eu[1]})`]);
+    rows.push([`From shell (${U.small})`, ...sts.map((t) => `Stn ${t.i} (${r(t.angle, 1)} deg)`)]);
+    for (const x of offs) rows.push([r(fromMm(x, 'small', job), 2), ...sts.map((t) => { const v = st.ep.rd?.[t.i]?.[xKey(x)]; return v == null ? '' : r(v / eu[0], eu[2]); })]);
+    rows.push([]);
+    rows.push(['Station', 'Angle (deg)', `Breakover R (${U.small})`, `B (${U.small})`, 'Weld', 'Alpha (deg)', `Bew (${U.small})`, `Be (${U.small})`, `Allowable (${U.small})`, 'B/allow (%)', 'Status', 'Notes']);
+    for (const t of sts) { const p = profileEval(job, t.i), o = st.ep.st?.[t.i] || {}; if (!p.n) continue; rows.push([t.i, r(t.angle, 1), p.R > 0 ? sm(p.R) : '', p.R > 0 ? sm(p.B) : p.status === 'No edge settlement' ? 0 : '', o.weld || 'par', o.alpha ?? '', sm(p.Bew), sm(p.Be), sm(p.ev?.allow), r(p.ev?.pct, 0), p.status, o.notes || '']); }
     rows.push([]);
   }
   rows.push(['Edge settlement', 'Angle (deg)', `R (${U.big})`, `B (${U.small})`, 'Weld', 'Alpha (deg)', `Bew (${U.small})`, `Be (${U.small})`, `Allowable (${U.small})`, 'B/allow (%)', 'Status', 'Notes']);

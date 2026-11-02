@@ -32,20 +32,30 @@ export function defaultSettle(units = 'imperial') {
     date: '', surveyor: '', instrument: '', benchmark: '', level: '', notes: '',
     n: null, start: 0, eu: units === 'metric' ? 'mm' : 'in', rod: false, el: {},
     Y: units === 'metric' ? 207 : 30000 / PSI_PER_MPA, E: units === 'metric' ? 200000 : 29e6 / PSI_PER_MPA, H: null,
-    edge: [], dep: []
+    edge: [], dep: [],
+    ep: defaultEP(units), curve: [], curveSrc: ''
+  };
+}
+/** Radial edge-settlement readings at each station: offsets inward from the shell. */
+export function defaultEP(units = 'imperial') {
+  return {
+    at0: true, tol: units === 'metric' ? 3 : IN / 8, rd: {}, st: {},
+    zones: units === 'metric'
+      ? [{ id: uidS(), start: 150, end: 600, step: 150 }, { id: uidS(), start: 900, end: 3000, step: 300 }]
+      : [{ id: uidS(), start: 6 * IN, end: 24 * IN, step: 6 * IN }, { id: uidS(), start: 3 * FT, end: 10 * FT, step: FT }]
   };
 }
 export function migrateSettle(s, units) {
   const b = defaultSettle(units);
   if (!s) return b;
-  return { ...b, ...s, el: s.el || {}, edge: s.edge || [], dep: s.dep || [] };
+  return { ...b, ...s, el: s.el || {}, edge: s.edge || [], dep: s.dep || [], curve: s.curve || [], ep: { ...b.ep, ...(s.ep || {}), rd: s.ep?.rd || {}, st: s.ep?.st || {} } };
 }
 export const newEdge = () => ({ id: uidS(), angle: null, arc: null, R: null, B: null, weld: 'par', alpha: null, Bew: null, Be: null, notes: '' });
 export const newDep = () => ({ id: uidS(), angle: null, r: null, R: null, B: null, notes: '' });
 
 export function hasSettle(job) {
   const s = job.settle; if (!s) return false;
-  return Object.values(s.el || {}).some((v) => num(v) !== null) || (s.edge || []).length > 0 || (s.dep || []).length > 0;
+  return Object.values(s.el || {}).some((v) => num(v) !== null) || (s.edge || []).length > 0 || (s.dep || []).length > 0 || hasEP(job);
 }
 
 /* ------------------------------------------------------------------ stations --- */
@@ -176,10 +186,120 @@ export function depEval(d) {
 /** Overall settlement result for summaries. */
 export function settleSummary(job) {
   const c = settleCalc(job), s = job.settle || {};
-  const ed = (s.edge || []).map(edgeEval), dp = (s.dep || []).map(depEval);
+  const ed = [...(s.edge || []).map(edgeEval), ...stations(job).map((x) => profileEval(job, x.i).ev).filter(Boolean)], dp = (s.dep || []).map(depEval);
   const bad = c.status === 'Not acceptable' || ed.some((x) => x.status === 'Exceeds') || dp.some((x) => x.status === 'Exceeds');
   const nde = ed.some((x) => x.status === 'NDE required');
   return { c, ed, dp, bad, nde };
+}
+
+/* --------------------------------------------------- radial edge-settlement survey --- */
+
+export const xKey = (x) => (Math.round(x * 10) / 10).toFixed(1);
+/** Offsets from the shell (mm), from the spacing zones, nearest the shell first. */
+export function epOffsets(job) {
+  const ep = job.settle?.ep || defaultEP(job.units), set = new Map();
+  if (ep.at0) set.set(xKey(0), 0);
+  for (const z of ep.zones || []) {
+    const a = num(z.start), b = num(z.end), st = num(z.step);
+    if (a === null || a < 0) continue;
+    if (b === null || !(st > 0) || b < a) { set.set(xKey(a), a); continue; }
+    for (let x = a, k = 0; x <= b + 1e-6 && k < 200; x = a + st * ++k) set.set(xKey(x), x);
+  }
+  return [...set.values()].sort((p, q) => p - q);
+}
+export function hasEP(job) { return Object.values(job.settle?.ep?.rd || {}).some((m) => Object.values(m || {}).some((v) => num(v) !== null)); }
+
+/** Linear interpolation of the allowable curve (Fig. B.11 / B.12 values entered for this tank) at R. */
+export function curveAt(job, R, key) {
+  const rows = (job.settle?.curve || []).filter((r) => num(r.R) !== null && num(r[key]) !== null).map((r) => [+r.R, +r[key]]).sort((a, b) => a[0] - b[0]);
+  if (!rows.length || !(R > 0)) return null;
+  if (R < rows[0][0] - 1e-6 || R > rows[rows.length - 1][0] + 1e-6) return rows.length === 1 && Math.abs(R - rows[0][0]) < 1e-6 ? rows[0][1] : null;
+  for (let i = 0; i < rows.length - 1; i++) {
+    const [r0, v0] = rows[i], [r1, v1] = rows[i + 1];
+    if (R >= r0 - 1e-6 && R <= r1 + 1e-6) return r1 - r0 < 1e-9 ? v0 : v0 + ((R - r0) / (r1 - r0)) * (v1 - v0);
+  }
+  return rows[rows.length - 1][1];
+}
+function lineFit(pts) {
+  const n = pts.length; if (n < 2) return null;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0; for (const p of pts) { sx += p.x; sy += p.z; sxx += p.x * p.x; sxy += p.x * p.z; }
+  const d = n * sxx - sx * sx; if (Math.abs(d) < 1e-9) return null;
+  const m = (n * sxy - sx * sy) / d, q = (sy - m * sx) / n;
+  return { m, q, at: (x) => q + m * x };
+}
+
+/**
+ * Evaluate the radial profile at station i. The unsettled bottom is the straight line fitted through the
+ * outer readings (so a cone-up / cone-down slope is allowed for, Fig. B.7); walking inward, the breakover
+ * is the last reading within the tolerance of that line. R = breakover distance from the shell;
+ * B = largest drop of the bottom below the projected line between the shell and the breakover (Fig. B.6).
+ */
+export function profileEval(job, i) {
+  const s = job.settle || {}, ep = s.ep || {}, m = ep.rd?.[i] || {}, so = ep.st?.[i] || {};
+  const pts = epOffsets(job).map((x) => { const v = num(m[xKey(x)]); return v === null ? null : { x, z: s.rod ? -v : v }; }).filter(Boolean);
+  const out = { i, pts, n: pts.length, R: null, B: null, xB: null, line: null, auto: true, ev: null, status: pts.length ? 'Incomplete' : 'No readings' };
+  if (pts.length < 3) return out;
+  const tol = num(ep.tol) ?? IN / 8, desc = pts.slice().sort((a, b) => b.x - a.x);
+  let R = null, line = null;
+  const Rov = num(so.Rov);
+  if (Rov !== null) {
+    out.auto = false; R = Rov;
+    line = lineFit(desc.filter((p) => p.x >= R - 1e-6));
+  } else {
+    let inc = desc.slice(0, 2); line = lineFit(inc);
+    for (let k = 2; k < desc.length && line; k++) {
+      const p = desc[k];
+      if (line.at(p.x) - p.z > tol + 1e-9) { R = inc[inc.length - 1].x; break; }
+      inc = [...inc, p]; line = lineFit(inc);
+    }
+  }
+  if (!line) return out;
+  out.line = line;
+  let B = 0, xB = null;
+  for (const p of pts) { if (R !== null && p.x >= R - 1e-6) continue; const d = line.at(p.x) - p.z; if (d > B) { B = d; xB = p.x; } }
+  out.dev = Math.max(0, ...pts.map((p) => line.at(p.x) - p.z));
+  if (R === null || !(R > 0)) { out.R = null; out.B = 0; out.status = 'No edge settlement'; return out; }
+  out.R = R; out.B = B; out.xB = xB;
+  const Bew = num(so.Bew) ?? curveAt(job, R, 'Bew'), Be = num(so.Be) ?? curveAt(job, R, 'Be');
+  out.Bew = Bew; out.Be = Be; out.BewSrc = num(so.Bew) !== null ? 'entered' : Bew !== null ? 'curve' : null; out.BeSrc = num(so.Be) !== null ? 'entered' : Be !== null ? 'curve' : null;
+  out.ev = edgeEval({ B, Bew, Be, weld: so.weld || 'par', alpha: so.alpha });
+  out.status = out.ev.status;
+  return out;
+}
+
+/** Radial profile chart for one station. */
+export function profileSVG(job, P, opts = {}) {
+  const small = !!opts.small, W = small ? 300 : 640, H = small ? 170 : 260, ml = small ? 34 : 56, mr = 10, mt = small ? 20 : 26, mb = small ? 24 : 36;
+  const fm = opts.fmt || ((v) => (v / IN).toFixed(2)), fx = opts.fmtX || ((x) => (x / FT).toFixed(1));
+  const o = [`<svg class="profsvg${small ? ' sm' : ''}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" font-size="${small ? 9.5 : 12}">`];
+  const title = `${opts.title || 'Station ' + P.i}${P.R ? ` — R ${opts.fmtR ? opts.fmtR(P.R) : fx(P.R)}, B ${fm(P.B)}` : P.status === 'No edge settlement' ? ' — no edge settlement' : ''}`;
+  o.push(`<text x="${ml}" y="${small ? 12 : 15}" class="pf-title${P.status === 'Exceeds' ? ' bad' : P.status === 'NDE required' ? ' warn' : ''}">${esc(title)}</text>`);
+  if (P.pts.length < 2) { o.push(`<text x="${W / 2}" y="${H / 2}" text-anchor="middle" class="sc-empty">No readings</text></svg>`); return o.join(''); }
+  const xMax = Math.max(...P.pts.map((p) => p.x)) || 1, ref = P.line ? P.line.at(0) : P.pts[0].z;
+  const rel = (z) => z - ref, ys = P.pts.map((p) => rel(p.z)); if (P.line) ys.push(rel(P.line.at(0)), rel(P.line.at(xMax)));
+  let lo = Math.min(...ys), hi = Math.max(...ys); const pad = (hi - lo) * 0.15 || IN / 4; lo -= pad; hi += pad;
+  const X = (x) => ml + (x / xMax) * (W - ml - mr), Y = (v) => mt + (H - mt - mb) - ((v - lo) / (hi - lo)) * (H - mt - mb);
+  o.push(`<rect x="${ml}" y="${mt}" width="${W - ml - mr}" height="${H - mt - mb}" class="sc-frame"/>`);
+  o.push(`<line x1="${ml}" x2="${ml}" y1="${mt - 4}" y2="${H - mb}" class="pf-shell"/>`);
+  const stp = niceStep((hi - lo) / (small ? 3 : 5));
+  for (let v = Math.ceil(lo / stp) * stp; v <= hi; v += stp) o.push(`<line x1="${ml}" x2="${W - mr}" y1="${f(Y(v))}" y2="${f(Y(v))}" class="sc-grid"/><text x="${ml - 4}" y="${f(Y(v) + 3)}" text-anchor="end" class="sc-ax">${fm(v)}</text>`);
+  { // x labels, skipping any that would overlap the previous one (always keep the shell and the last reading)
+    const gapPx = small ? 26 : 38, xs = P.pts.map((p) => p.x).sort((a, b) => a - b), last = xs[xs.length - 1];
+    let prev = -1e9;
+    for (const x of xs) {
+      const px = X(x); if (x !== last && px - prev < gapPx) continue;
+      if (x === last && px - prev < gapPx * 1.5 && prev > -1e8) o.pop();
+      o.push(`<text x="${f(px)}" y="${H - mb + (small ? 11 : 14)}" text-anchor="${x === last ? 'end' : x === 0 ? 'start' : 'middle'}" class="sc-ax">${fx(x)}</text>`); prev = px;
+    }
+  }
+  if (P.line) o.push(`<line x1="${f(X(0))}" y1="${f(Y(rel(P.line.at(0))))}" x2="${f(X(xMax))}" y2="${f(Y(rel(P.line.at(xMax))))}" class="pf-proj"/>`);
+  if (P.R) o.push(`<line x1="${f(X(P.R))}" x2="${f(X(P.R))}" y1="${mt}" y2="${H - mb}" class="sc-low"/><text x="${f(X(P.R) + 3)}" y="${mt + (small ? 9 : 12)}" class="sc-lowt">R</text>`);
+  o.push(`<polyline points="${P.pts.map((p) => `${f(X(p.x))},${f(Y(rel(p.z)))}`).join(' ')}" class="pf-bot"/>`);
+  for (const p of P.pts) o.push(`<circle cx="${f(X(p.x))}" cy="${f(Y(rel(p.z)))}" r="${small ? 2.2 : 3.2}" class="sc-pt${P.R && p.x < P.R - 1e-6 && P.status === 'Exceeds' ? ' bad' : ''}"/>`);
+  if (P.R && P.xB !== null && P.B > 0) { const x = X(P.xB); o.push(`<line x1="${f(x + 4)}" x2="${f(x + 4)}" y1="${f(Y(rel(P.line.at(P.xB))))}" y2="${f(Y(rel(P.line.at(P.xB) - P.B)))}" class="pf-b"/><text x="${f(x + 7)}" y="${f((Y(rel(P.line.at(P.xB))) + Y(rel(P.line.at(P.xB) - P.B))) / 2 + 3)}" class="pf-bt">B</text>`); }
+  if (!small) o.push(`<text x="${(ml + W - mr) / 2}" y="${H - 4}" text-anchor="middle" class="sc-ax">${esc(opts.xLabel || 'Distance from shell')}</text>`);
+  o.push('</svg>');
+  return o.join('');
 }
 
 /* ------------------------------------------------------------------- drawings --- */
@@ -264,6 +384,13 @@ export function settlePlanSVG(job, c, opts = {}) {
     const ev = edgeEval(e), [lx, ly] = polar(Ri - s * 6, a);
     o.push(`<g class="sp-edge ${ev.status === 'Exceeds' ? 'bad' : ev.status === 'NDE required' ? 'warn' : ''}"><path d="M${f(p[0][0])} ${f(-p[0][1])}A${f(R)} ${f(R)} 0 0 1 ${f(p[1][0])} ${f(-p[1][1])}L${f(p[2][0])} ${f(-p[2][1])}A${f(Ri)} ${f(Ri)} 0 0 0 ${f(p[3][0])} ${f(-p[3][1])}Z" stroke-width="${f(s * 0.4)}"/><text x="${f(lx)}" y="${f(-ly)}" font-size="${f(s * 5)}" text-anchor="middle" dominant-baseline="central">E${i + 1}</text></g>`);
   }
+  // radial survey results at stations
+  for (const st of stations(job)) {
+    const P = profileEval(job, st.i); if (!(P.R > 0)) continue;
+    const Ri = Math.max(0, R - P.R), a = st.angle, half = 3.2;
+    const p = [polar(R, a - half), polar(R, a + half), polar(Ri, a + half), polar(Ri, a - half)];
+    o.push(`<g class="sp-edge ${P.status === 'Exceeds' ? 'bad' : P.status === 'NDE required' ? 'warn' : ''}"><path d="M${f(p[0][0])} ${f(-p[0][1])}A${f(R)} ${f(R)} 0 0 1 ${f(p[1][0])} ${f(-p[1][1])}L${f(p[2][0])} ${f(-p[2][1])}A${f(Ri)} ${f(Ri)} 0 0 0 ${f(p[3][0])} ${f(-p[3][1])}Z" stroke-width="${f(s * 0.4)}"/></g>`);
+  }
   // tilt arrow (towards the low side)
   if (c.fit && c.fit.amp > 0.01) {
     const L = R * 0.55, [x, y] = polar(L, c.fit.loDeg), [bx, by] = polar(-L, c.fit.loDeg);
@@ -279,4 +406,4 @@ export function settlePlanSVG(job, c, opts = {}) {
   return o.join('');
 }
 
-export const SETTLE_SVG_STYLE = `.setchart text,.setplan text{font-family:system-ui,Arial,sans-serif}.sc-frame{fill:none;stroke:#3a434e}.sc-grid{stroke:#d9dde3}.sc-grid.zero{stroke:#66707c}.sc-ax{fill:#3a434e}.sc-title{fill:#1d232b;font-weight:700}.sc-st{fill:#0f766e;font-weight:700}.sc-fit{fill:none;stroke:#0f766e;stroke-width:2}.sc-meas{fill:none;stroke:#1d232b;stroke-width:1.2;stroke-dasharray:4 3}.sc-pt{fill:#1d232b}.sc-pt.bad,.sc-bar.bad{fill:#b91c1c}.sc-bar{fill:#0f766e}.sc-lim{stroke:#b91c1c;stroke-dasharray:6 4}.sc-limt{fill:#b91c1c}.sc-low{stroke:#a16207;stroke-dasharray:3 3}.sc-lowt{fill:#a16207}.sp-shell{fill:#fff;stroke:#1d232b}.sp-tick{stroke:#3a434e}.sp-ang{fill:#66707c}.sp-ang.z{fill:#1d232b;font-weight:700}.sp-st circle{fill:#0f766e;stroke:#0f766e}.sp-st.bad circle{fill:#b91c1c;stroke:#b91c1c}.sp-st.empty circle{fill:#fff;stroke:#66707c}.sp-n{fill:#1d232b;font-weight:700}.sp-v{fill:#3a434e}.sp-tilt line{stroke:#a16207}.sp-tilt path{fill:#a16207}.sp-tilt text{fill:#a16207;font-weight:700}.sp-edge path{fill:#d5efec;stroke:#0f766e}.sp-edge.warn path{fill:#fdf3d7;stroke:#a16207}.sp-edge.bad path{fill:#fde8e8;stroke:#b91c1c}.sp-edge text,.sp-dep text{fill:#1d232b;font-weight:700}.sp-dep circle{fill:none;stroke:#0f766e}.sp-dep.bad circle{stroke:#b91c1c}`;
+export const SETTLE_SVG_STYLE = `.setchart text,.setplan text{font-family:system-ui,Arial,sans-serif}.sc-frame{fill:none;stroke:#3a434e}.sc-grid{stroke:#d9dde3}.sc-grid.zero{stroke:#66707c}.sc-ax{fill:#3a434e}.sc-title{fill:#1d232b;font-weight:700}.sc-st{fill:#0f766e;font-weight:700}.sc-fit{fill:none;stroke:#0f766e;stroke-width:2}.sc-meas{fill:none;stroke:#1d232b;stroke-width:1.2;stroke-dasharray:4 3}.sc-pt{fill:#1d232b}.sc-pt.bad,.sc-bar.bad{fill:#b91c1c}.sc-bar{fill:#0f766e}.sc-lim{stroke:#b91c1c;stroke-dasharray:6 4}.sc-limt{fill:#b91c1c}.sc-low{stroke:#a16207;stroke-dasharray:3 3}.sc-lowt{fill:#a16207}.sp-shell{fill:#fff;stroke:#1d232b}.sp-tick{stroke:#3a434e}.sp-ang{fill:#66707c}.sp-ang.z{fill:#1d232b;font-weight:700}.sp-st circle{fill:#0f766e;stroke:#0f766e}.sp-st.bad circle{fill:#b91c1c;stroke:#b91c1c}.sp-st.empty circle{fill:#fff;stroke:#66707c}.sp-n{fill:#1d232b;font-weight:700}.sp-v{fill:#3a434e}.sp-tilt line{stroke:#a16207}.sp-tilt path{fill:#a16207}.sp-tilt text{fill:#a16207;font-weight:700}.sp-edge path{fill:#d5efec;stroke:#0f766e}.sp-edge.warn path{fill:#fdf3d7;stroke:#a16207}.sp-edge.bad path{fill:#fde8e8;stroke:#b91c1c}.sp-edge text,.sp-dep text{fill:#1d232b;font-weight:700}.sp-dep circle{fill:none;stroke:#0f766e}.sp-dep.bad circle{stroke:#b91c1c}.pf-title{fill:#1d232b;font-weight:700}.pf-title.bad{fill:#b91c1c}.pf-title.warn{fill:#a16207}.pf-shell{stroke:#1d232b;stroke-width:3}.pf-proj{stroke:#0f766e;stroke-dasharray:5 4;stroke-width:1.4}.pf-bot{fill:none;stroke:#1d232b;stroke-width:1.6}.pf-b{stroke:#b91c1c;stroke-width:1.6}.pf-bt{fill:#b91c1c;font-weight:700}`;

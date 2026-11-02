@@ -109,9 +109,24 @@ export function makeDemo() {
     for (let i = 0; i < N; i++) { const a = (360 * i) / N; el[i + 1] = Math.round((24 + 1.05 * Math.cos((a - 30) * Math.PI / 180) + (dev[i + 1] || 0)) * IN * 100) / 100; }
     Object.assign(job.settle, { date: job.info.inspDate, surveyor: 'D. Surveyor', instrument: 'Automatic level', benchmark: 'BM-1 pipe rack (assumed 100.00 ft)', level: 'Empty', eu: 'in', el, Y: 206.84 });
     job.settle.edge = [
-      { id: uid(), angle: 200, arc: 18 * FT, R: 3 * FT, B: 1.55 * IN, weld: 'par', alpha: null, Bew: 1.9 * IN, Be: null, notes: 'Breakover at annular lap' },
-      { id: uid(), angle: 250, arc: 10 * FT, R: 2.5 * FT, B: 0.9 * IN, weld: 'angle', alpha: 30, Bew: 1.6 * IN, Be: 3.2 * IN, notes: '' }
+      { id: uid(), angle: 250, arc: 10 * FT, R: 2.5 * FT, B: 0.9 * IN, weld: 'angle', alpha: 30, Bew: 1.6 * IN, Be: 3.2 * IN, notes: 'Found between stations 9 and 10' }
     ];
+    // radial edge readings at each station: bottom elevation (in) with a 1 in / 10 ft cone-up slope,
+    // settled zones at stations 7 and 8
+    const offs = [0, 6, 12, 18, 24, 36, 48, 60, 72, 84, 96, 108, 120];
+    const set = { 7: [0.75, 24], 8: [1.3, 36] };
+    for (let i = 1; i <= N; i++) {
+      const base = el[i] / IN + 0.5, m = {};
+      offs.forEach((x, k) => {
+        const [B0, Rb] = set[i] || [0, 1];
+        const drop = x < Rb ? B0 * (1 - x / Rb) ** 2 : 0, noise = (((i * 7 + k * 3) % 5) - 2) * 0.01;
+        m[(Math.round(x * IN * 10) / 10).toFixed(1)] = Math.round((base + x / 120 - drop + noise) * IN * 100) / 100;
+      });
+      job.settle.ep.rd[i] = m;
+    }
+    job.settle.ep.st = { 8: { weld: 'par', notes: 'Annular lap weld parallel to shell' } };
+    job.settle.curve = [{ id: uid(), R: 1 * FT, Bew: 0.9 * IN, Be: 1.8 * IN }, { id: uid(), R: 3 * FT, Bew: 1.5 * IN, Be: 3.0 * IN }, { id: uid(), R: 5 * FT, Bew: 2.0 * IN, Be: 4.0 * IN }];
+    job.settle.curveSrc = 'DEMO VALUES ONLY — read the real values from API 653 Fig. B.11 / B.12';
     job.settle.dep = [{ id: uid(), angle: 300, r: 30 * FT, R: 4 * FT, B: 1.1 * IN, notes: 'Smooth dish, no creasing' }];
   }
   return job;
