@@ -2,6 +2,7 @@
 import { fmt, fmtRate, u } from './units.js';
 import { RESULTS, RESULT_SHORT, nozzleUT, NZ_CONN_SHORT, UT_CLOCK } from './calc.js';
 import { renderMapSVG, COLORS } from './map.js';
+import { sealEval, activeStds, nextDue, gapSummary, cm2mToIn2ft, SEAL_CHECKS } from './seal.js';
 import { ROOF_TYPES, hasFixed, hasFloating, floatingLayout, floatingSVG, fixedSVG, plateUT, pointStatus, PT5, PT5_SHORT, roofDiameter } from './roof.js';
 import { rolloutSVG, utLocations, courseSummary, coursesWithElev, courseAt, readingElevations, getReading, fmtElev, coursePlates } from './shell.js';
 import { itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
@@ -198,6 +199,22 @@ export function buildReport(job, layout, calc, company, photos, opts) {
         ${all.map(({ p, s }) => { const m = F.ut?.[p.key] || {}; return `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${h(p.label)}</b>${p.cut ? ' <small>cut</small>' : ''}</td>${PT5.map(([k]) => { const v = m[k]; return `<td class="n">${v == null ? '—' : s.tMin && v < s.tMin - 1e-9 ? '<b class="bad">' + fmt(v, 't', job, false) + '</b>' : fmt(v, 't', job, false)}</td>`; }).join('')}<td class="n"><b>${s.min != null ? fmt(s.min, 't', job, false) : '—'}</b></td><td class="n">${s.lossPct != null ? s.lossPct.toFixed(0) + '%' : '—'}</td><td>${s.status === 'Below t-min' ? '<b>Below t-min</b>' : h(s.status)}</td></tr>`; }).join('')}
         </tbody></table><p class="note">Thickness in ${U.small}. TL / TR / C / BL / BR = top-left, top-right, centre, bottom-left, bottom-right of each plate as drawn.</p>
         ${pons.length ? `<h3 class="rp-h3">Pontoons</h3><table class="grid small"><thead><tr><th>Pontoon</th><th>Condition</th><th>Notes</th></tr></thead><tbody>${pons.map((p) => { const pc = F.pont?.[p.key] || {}; return `<tr class="${['Liquid present', 'Leaking'].includes(pc.cond) ? 'is-bad' : ''}"><td><b>${h(p.label)}</b></td><td>${h(pc.cond || '—')}</td><td>${h(pc.notes)}</td></tr>`; }).join('')}</tbody></table>` : ''}`);
+    }
+    if (hasFloating(job) && job.roof.seal) {
+      const seal = job.roof.seal, D = +job.tank.diameter || 0, met = job.units === 'metric';
+      const ga = (v) => (v === null || v === undefined ? '—' : met ? `${v.toFixed(1)} cm²/m` : `${cm2mToIn2ft(v).toFixed(2)} in²/ft (${v.toFixed(1)} cm²/m)`);
+      const gw = (cm) => (cm === null || cm === undefined ? '—' : met ? `${cm.toFixed(cm >= 5 ? 1 : 2)} cm` : `${(cm / 2.54).toFixed(cm >= 5 ? 1 : 3)} in (${cm.toFixed(cm >= 5 ? 1 : 2)} cm)`);
+      const gapRows = (sd) => sd.gaps.map((g, i) => { const L = +g.len, W = +(g.wAvg ?? g.wMax), a = L > 0 && W > 0 ? (L / 10) * (W / 10) : null; return `<tr><td>${i + 1}</td><td class="n">${g.angle != null ? (+g.angle).toFixed(1) + '°' : '—'}</td><td class="n">${fmt(g.len, 'small', job, false)}</td><td class="n">${fmt(g.wMax, 'small', job, false)}</td><td class="n">${g.wAvg != null ? fmt(g.wAvg, 'small', job, false) : '—'}</td><td class="n">${a === null ? '—' : met ? a.toFixed(1) + ' cm²' : (a / 6.4516).toFixed(2) + ' in²'}</td><td>${h(g.notes)}</td></tr>`; }).join('') || `<tr><td colspan="7">${sd.noGaps ? 'No gaps found.' : 'No gaps recorded.'}</td></tr>`;
+      const gapTbl = (title, sd) => `<h3 class="rp-h3">${title}: ${h(sd.type)}${sd.notes ? ' — ' + h(sd.notes) : ''}</h3><table class="grid small"><thead><tr><th>Gap</th><th class="n">Start angle</th><th class="n">Length (${U.small})</th><th class="n">Max width (${U.small})</th><th class="n">Avg width (${U.small})</th><th class="n">Area</th><th>Notes</th></tr></thead><tbody>${gapRows(sd)}</tbody></table>`;
+      const res = activeStds(seal).map((k) => { const ev = sealEval(job, k), due = nextDue(job, k); return `<h3 class="rp-h3">${h(ev.L.name)} — <span class="${ev.overall === 'Compliant' ? 'ok' : ev.overall === 'Not compliant' ? 'bad' : ''}">${ev.overall}</span></h3>
+        <table class="grid small"><thead><tr><th>Check</th><th class="n">Result</th><th class="n">Limit</th><th>Status</th></tr></thead><tbody>${ev.rows.map((r) => `<tr class="${r.ok === false ? 'is-bad' : ''}"><td>${h(r.item)}</td><td class="n">${r.text !== undefined ? h(r.text) : r.unit === 'cm2m' ? ga(r.value) : gw(r.value)}</td><td class="n">${r.limit === null || r.limit === undefined ? '—' : r.op + ' ' + (r.unit === 'cm2m' ? ga(r.limit) : gw(r.limit))}</td><td>${r.ok === true ? 'OK' : r.ok === false ? '<b>Fails</b>' : '—'}</td></tr>`).join('')}</tbody></table>
+        ${ev.fails ? `<p class="note"><b>Repair:</b> ${h(ev.repair)}</p>` : ''}${due.length ? `<p class="note">${due.map((d) => `${h(d.what)}: ${d.every}${d.due ? `, next due ${h(d.due.toLocaleDateString())}` : ''}`).join(' · ')}</p>` : ''}`; }).join('');
+      out.push(`</section><section class="pb"><h2>Rim seal inspection</h2>
+        <div class="cols">${kv([['Roof', h(job.roof.type === 'fixed-ifr' ? 'Internal floating roof' : 'External floating roof')], ['Inspection date', h(seal.date)], ['Inspected by', h(seal.inspector)]])}${kv([['Roof / liquid level', h(seal.level)], ['Tank diameter', fmt(D, 'big', job)], ['Notes', h(seal.notes)]])}</div>
+        ${res || '<p class="note">No standard selected.</p>'}
+        ${gapTbl('Primary seal', seal.primary)}${seal.secondary.type !== 'None' ? gapTbl('Secondary seal', seal.secondary) : '<p class="note">No secondary seal fitted.</p>'}
+        <h3 class="rp-h3">Visual inspection</h3><table class="grid small"><tbody>${SEAL_CHECKS.map(([k, l]) => { const c = seal.checks?.[k] || {}; return `<tr class="${c.r === 'defect' ? 'is-bad' : ''}"><td>${h(l)}</td><td>${c.r === 'ok' ? 'OK' : c.r === 'defect' ? '<b>Defect</b>' : c.r === 'na' ? 'N/A' : '—'}</td><td>${h(c.note)}</td></tr>`; }).join('')}</tbody></table>
+        <p class="note">Seal gaps found with a 1/8 in (0.32 cm) probe (Canada 0.3 cm) with the roof floating freely; gap area = length × average width (maximum width where no average was recorded); area per metre of tank diameter. Gaps are shown on the floating roof plan (primary red, secondary blue).</p>`);
     }
     out.push('</section>');
     return out.join('');

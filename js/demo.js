@@ -91,6 +91,14 @@ export function makeDemo() {
     const m = (job.roof.floating.ut[p.key] = {});
     for (const [k] of PT5) m[k] = Math.round((0.1875 - 0.003 - rnd() * 0.014 - (i === 23 && k === 'c' ? 0.1 : 0)) * 1000) / 1000 * IN;
   });
+  Object.assign(job.roof.seal, {
+    date: job.info.inspDate, inspector: 'C. Inspector', level: '24 ft 6 in liquid level, roof floating',
+    primary: { type: 'Mechanical shoe', shoeAbove: 26 * IN, shoeBelow: 6 * IN, shoeHeight: 32 * IN, notes: 'Shoes and fabric in good condition', noGaps: false,
+      gaps: [{ id: uid(), angle: 32, len: 18 * IN, wMax: 0.5 * IN, wAvg: 0.3 * IN, notes: '' }, { id: uid(), angle: 141, len: 30 * IN, wMax: 1.0 * IN, wAvg: 0.6 * IN, notes: 'Shoe hanger bent' }, { id: uid(), angle: 268, len: 12 * IN, wMax: 0.25 * IN, wAvg: null, notes: '' }] },
+    secondary: { type: 'Rim-mounted wiper', notes: 'Wiper tip worn at 200°', noGaps: false,
+      gaps: [{ id: uid(), angle: 198, len: 14 * IN, wMax: 0.6 * IN, wAvg: 0.35 * IN, notes: 'Worn wiper' }, { id: uid(), angle: 310, len: 6 * IN, wMax: 0.125 * IN, wAvg: null, notes: '' }] },
+    checks: { floating: { r: 'ok' }, liquid: { r: 'ok' }, pHoles: { r: 'ok' }, pAttached: { r: 'ok' }, sHoles: { r: 'defect', note: 'Tear in wiper tip, 3 in long at 200°' }, sCover: { r: 'ok' }, fittings: { r: 'ok' }, drains: { r: 'na' }, movement: { r: 'ok' }, rim: { r: 'ok' } }
+  });
   const sump = layout.plates.find((p) => p.key === job.features[0].plate);
   if (sump) job.plates[sump.key] = { scan: 'partial', notes: 'Around sump not scannable' };
   const p2 = at(18, 112).plate; job.plates[p2] = { ...(job.plates[p2] || {}), scan: 'partial', notes: 'Patch plate' };

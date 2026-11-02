@@ -401,6 +401,26 @@ b.bad { color: var(--bad); }
 .report .rp-h3 { margin: 10px 0 6px; color: #1d232b; text-transform: none; letter-spacing: 0; font-size: 13px; }
 @media (max-width: 1100px) { .roof-grid, .roof-grid.fl { grid-template-columns: 1fr; } .fgrid.g4 { grid-template-columns: 1fr 1fr; } }
 
+/* rim seal */
+.seal-std { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; padding: 8px 10px; background: var(--panel2); border: 1px solid var(--line2); border-radius: 6px; margin-bottom: 12px; }
+.seal-std .lbl { font-size: 12px; color: var(--muted); font-weight: 600; }
+.custom-lim { margin-bottom: 12px; padding: 10px; border: 1px dashed var(--line); border-radius: 6px; }
+.seal-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-top: 8px; }
+.seal-col { min-width: 0; }
+.grid.sgaps input { width: 74px; min-height: 28px; padding: 3px 6px; text-align: right; font-size: 13px; } .grid.sgaps input.note { width: 120px; text-align: left; }
+.grid.sgaps td { padding: 3px 6px; }
+.grid.schecks select { min-height: 28px; padding: 2px 6px; width: auto; font-size: 13px; } .grid.schecks input { min-height: 28px; padding: 3px 6px; font-size: 13px; }
+.chk.inline-chk { padding: 0; }
+.seal-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+.seal-res { border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.seal-res.ok { border-left-color: var(--ok); } .seal-res.bad { border-left-color: var(--bad); }
+.seal-res .sr-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.grid.sres td { padding: 4px 6px; font-size: 12.5px; }
+.chip.r-ok { background: var(--ok); } .chip.r-bad { background: var(--bad); }
+.roofplan .sl-gaps path { fill: none; stroke-linecap: butt; pointer-events: none; }
+.roofplan .sl-p { stroke: #dc2626; } .roofplan .sl-s { stroke: #2563eb; }
+@media (max-width: 1100px) { .seal-grid { grid-template-columns: 1fr; } }
+
 /* datums */
 .floormap .datums { pointer-events: none; }
 .floormap .datum { fill: var(--accent); opacity: .5; stroke: none; }

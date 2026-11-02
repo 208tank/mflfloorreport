@@ -188,6 +188,40 @@ layout is changed the app warns about readings on plates that no longer exist.
 The report has a Roof section (details, plan drawings, point / plate reading tables and pontoon
 conditions); *Export → Roof UT readings (CSV / Excel)*.
 
+### Rim seal inspection (floating roofs)
+
+Below the floating roof is a **Rim seal inspection** that evaluates the seals against one or more
+standards at once:
+
+| | US EPA — 40 CFR 60 Subpart Kb / 63 Subpart WW | Canada — SOR/2025-88 |
+| --- | --- | --- |
+| Primary seal gap area | ≤ 212 cm²/m of diameter (10 in²/ft) | < 200 cm²/m |
+| Primary seal widest gap | ≤ 3.81 cm (1.5 in) | < 4 cm |
+| Secondary seal gap area | ≤ 21.2 cm²/m (1 in²/ft) | < 20 cm²/m |
+| Secondary seal widest gap | ≤ 1.27 cm (0.5 in) | < 1.3 cm |
+| Mechanical shoe | top ≥ 61 cm (24 in) above liquid, bottom in liquid (EFR) | ≥ 30 cm high, ≥ 10 cm above and below liquid |
+| Gap probe | 0.32 cm (1/8 in) | 0.3 cm |
+| Frequency (EFR) | secondary annually, primary every 5 years | secondary annually, primary every 5 years (API 653 inspector), monthly roof visual |
+| Frequency (IFR) | annual visual through hatches; internal every 10 years (no gap limits) | monthly LEL; internal incl. seal gaps every 20 years |
+| Repair | 45 days (+30-day extension) | 60 days (90 days if total gap < 1000 cm²/m); IFR 15 days temporary vapour control, 180 days repair |
+
+A third **Custom / provincial approval** set takes the limits from the 1995 CCME guideline
+(PN 1180) or a provincial approval — enter them; the app does not supply CCME values.
+
+For each seal record the type (mechanical shoe, liquid-mounted, vapour-mounted; rim-mounted or
+shoe-mounted secondary), shoe dimensions, notes, and each **gap**: start angle, length along the
+shell, maximum width and (optional) average width. Gap area = length × average width (maximum width
+if no average); area per metre of tank diameter = total ÷ diameter. Tick *No gaps found* when the
+probe found none. A visual checklist covers roof floating freely, liquid on the deck, holes / tears,
+detached seal, secondary seal coverage, fittings, drains, obstructions and rim submergence. Each
+standard shows a pass / fail table, the repair requirement if anything fails, and the next due
+dates from the inspection date. Gaps are drawn on the floating roof plan (primary red, secondary
+blue). The report has a Rim seal inspection page; the roof CSV includes the gaps and results.
+
+Limits are from 40 CFR 60.113b, 40 CFR 63.1063 and SOR/2025-88 (ss. 64–65, 73–76, 91–101,
+Schedule 4) as published in 2025–2026. Check them against the rules, permit or approval that apply
+to the tank and the product stored.
+
 ## UT loader sheet (Excel)
 
 The inspector builds the tank in the app, then hands the UT technician an Excel workbook to fill in;

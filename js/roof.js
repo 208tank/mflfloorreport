@@ -1,5 +1,6 @@
 // Roof: fixed roof details and UT points, floating roof layout (deck plates + pontoons) and 5-point plate UT.
 import { buildLayout, defaultLayout, polar, pointInPoly } from './geometry.js';
+import { defaultSeal, migrateSeal, sealGapOverlay } from './seal.js';
 
 const IN = 25.4, FT = 304.8;
 
@@ -21,13 +22,14 @@ export function defaultRoof(units = 'imperial') {
       plateW: m ? 1800 : 6 * FT, plateL: m ? 6000 : 20 * FT, orient: 'h', stagger: 0.5,
       deckNom: null, deckMin: m ? 2.3 : 0.09 * IN,
       ut: {}, pont: {}, notes: ''
-    }
+    },
+    seal: defaultSeal()
   };
 }
 
 export function migrateRoof(r, units) {
   const d = defaultRoof(units);
-  return { ...d, ...(r || {}), fixed: { ...d.fixed, ...(r?.fixed || {}) }, floating: { ...d.floating, ...(r?.floating || {}) } };
+  return { ...d, ...(r || {}), fixed: { ...d.fixed, ...(r?.fixed || {}) }, floating: { ...d.floating, ...(r?.floating || {}) }, seal: migrateSeal(r?.seal) };
 }
 
 export const hasFixed = (job) => ['fixed', 'fixed-ifr'].includes(job.roof?.type);
@@ -145,6 +147,7 @@ export function floatingSVG(job, lay, opts = {}) {
   }
   o.push(`<circle cx="0" cy="0" r="${f(lay.R)}" class="rf-rim" stroke-width="${f(s * 0.5)}"/>`);
   if (lay.Ri < lay.R) o.push(`<circle cx="0" cy="0" r="${f(lay.Ri)}" class="rf-rim in" stroke-width="${f(s * 0.35)}"/>`);
+  if (opts.seal !== false) o.push(sealGapOverlay(job, lay, s));
   // labels
   o.push('<g class="rf-labels">');
   for (const p of lay.plates) {

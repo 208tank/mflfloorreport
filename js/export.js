@@ -2,6 +2,7 @@
 import { fromMm, u, fmt } from './units.js';
 import { RESULTS, nozzleUT, NZ_CONN_SHORT, UT_CLOCK } from './calc.js';
 import { floatingLayout, plateUT, pointStatus, PT5, hasFixed, hasFloating } from './roof.js';
+import { sealEval, activeStds } from './seal.js';
 import { utLocations, courseSummary, coursesWithElev, courseAt, readingElevations, getReading, fmtElev } from './shell.js';
 import { angleOf, toLocal, datumName, orientName } from './geometry.js';
 
@@ -121,6 +122,24 @@ export function roofCSV(job) {
       rows.push([]);
       rows.push(['Pontoon', 'Condition', 'Notes']);
       for (const p of pons) { const pc = F.pont?.[p.key] || {}; rows.push([p.label, pc.cond ?? '', pc.notes ?? '']); }
+    }
+  }
+  if (hasFloating(job) && job.roof.seal) {
+    const seal = job.roof.seal;
+    rows.push([]);
+    rows.push([`Rim seal inspection ${seal.date || ''}`.trim(), seal.inspector || '']);
+    for (const [title, sd] of [['Primary seal', seal.primary], ['Secondary seal', seal.secondary]]) {
+      if (sd.type === 'None') { rows.push([title, 'None']); continue; }
+      rows.push([title, sd.type]);
+      rows.push(['Gap', 'Start angle (deg)', `Length (${U.small})`, `Max width (${U.small})`, `Avg width (${U.small})`, 'Notes']);
+      sd.gaps.forEach((g, i) => rows.push([i + 1, g.angle ?? '', r(fromMm(g.len, 'small', job), U.smallDec + 2), r(fromMm(g.wMax, 'small', job), 3), r(fromMm(g.wAvg, 'small', job), 3), g.notes ?? '']));
+      if (!sd.gaps.length) rows.push([sd.noGaps ? 'No gaps found' : 'No gaps recorded']);
+    }
+    for (const k of activeStds(seal)) {
+      const ev = sealEval(job, k);
+      rows.push([]); rows.push([ev.L.name, ev.overall]);
+      rows.push(['Check', 'Result', 'Limit', 'Status']);
+      for (const x of ev.rows) rows.push([x.item, x.text !== undefined ? x.text : x.value === null || x.value === undefined ? '' : x.unit === 'cm2m' ? `${x.value.toFixed(1)} cm2/m` : `${x.value.toFixed(2)} cm`, x.limit === null || x.limit === undefined ? '' : `${x.op} ${x.limit}${x.unit === 'cm2m' ? ' cm2/m' : ' cm'}`, x.ok === true ? 'OK' : x.ok === false ? 'Fails' : '']);
     }
   }
   if (!rows.length) rows.push(['No roof recorded']);

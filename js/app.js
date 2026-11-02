@@ -11,9 +11,10 @@ import { newJob, migrate, nextNo, uid, getPath, setPath } from './model.js';
 import { makeDemo } from './demo.js';
 import { defaultShell, defaultZones, autoLocCount, autoPlateCount, utLocations, coursesWithElev, courseAt, coursePlates, shellHeight, courseSummary, readingElevations, zoneCount, getReading, fmtElev, zKey, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
 import { buildLoader, readLoader, loaderAreas } from './loader.js';
+import { SEAL_STDS, PRIMARY_TYPES, SECONDARY_TYPES, SEAL_CHECKS, newGap, gapSummary, cm2mToIn2ft, sealEval, activeStds, nextDue } from './seal.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '2.4.0';
+const APP_VERSION = '2.5.0';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -349,15 +350,15 @@ function refreshBuilder() {
   setTimeout(() => {
     const c = $('#builderCard');
     if (c) {
-      const a = document.activeElement, key = a && c.contains(a) ? focusSel(a) : null, pos = a?.selectionStart;
+      const a = document.activeElement, key = a && c.contains(a) ? focusSel(a) : null, pos = a?.selectionStart, typed = a && a.value !== undefined && a.value !== a.defaultValue ? a.value : null;
       c.innerHTML = S.job.layout.mode === 'measured' ? measuredHTML() : builderHTML();
-      if (key) { const n = c.querySelector(key); if (n) { n.focus(); try { if (pos != null) n.setSelectionRange(0, n.value.length); } catch { /* */ } } }
+      if (key) { const n = c.querySelector(key); if (n && typed !== null && n.value !== typed) { n.value = typed; n.dataset.restored = '1'; } if (n) { n.focus(); try { if (pos != null && typed === null) n.setSelectionRange(0, n.value.length); } catch { /* */ } } }
     }
     refreshSetupPreview();
   }, 0);
 }
 function focusSel(el) {
-  const attrs = ['data-rowf', 'data-row', 'data-secf', 'data-sec', 'data-mpf', 'data-pl', 'data-shc', 'data-shut', 'data-course', 'data-z', 'data-zf', 'data-zone', 'data-rut', 'data-pt', 'data-rpt', 'data-f', 'data-rpc', 'data-bind', 'data-act'];
+  const attrs = ['data-rowf', 'data-row', 'data-secf', 'data-sec', 'data-mpf', 'data-pl', 'data-shc', 'data-shut', 'data-course', 'data-z', 'data-zf', 'data-zone', 'data-rut', 'data-pt', 'data-rpt', 'data-f', 'data-rpc', 'data-sg', 'data-gid', 'data-sck', 'data-sckn', 'data-bind', 'data-act'];
   const parts = attrs.filter((k) => el.hasAttribute(k)).map((k) => `[${k}="${CSS.escape(el.getAttribute(k))}"]`);
   return parts.length ? el.tagName.toLowerCase() + parts.join('') : null;
 }
@@ -971,7 +972,7 @@ function roofBodyHTML() {
   const job = S.job;
   const typeCard = `<section class="card"><div class="fgrid">${field('Roof type', 'roof.type', 'sel', { options: ROOF_TYPES })}
     <p class="muted small">${hasFloating(job) && hasFixed(job) ? 'Both the fixed roof and the internal floating roof are shown below.' : job.roof.type === 'none' ? 'Choose the roof type to record roof details and UT readings.' : ''}</p></div></section>`;
-  return typeCard + (hasFixed(job) ? fixedCardHTML() : '') + (hasFloating(job) ? floatingCardHTML() : '');
+  return typeCard + (hasFixed(job) ? fixedCardHTML() : '') + (hasFloating(job) ? floatingCardHTML() + sealCardHTML() : '');
 }
 
 function fixedCardHTML() {
@@ -1061,13 +1062,83 @@ function floatingCardHTML() {
   </section>`;
 }
 
+/* ------------------------------------------------------------- rim seal inspection */
+
+/** Gap area per metre of diameter / gap width shown in the job's units (with the other system in brackets). */
+function fmtGapArea(v) { if (v === null || v === undefined) return '—'; return S.job.units === 'metric' ? `${v.toFixed(1)} cm²/m` : `${cm2mToIn2ft(v).toFixed(2)} in²/ft <small class="muted">(${v.toFixed(1)} cm²/m)</small>`; }
+function fmtGapW(cm) { if (cm === null || cm === undefined) return '—'; const big = cm >= 5; return S.job.units === 'metric' ? `${cm.toFixed(big ? 1 : 2)} cm` : `${(cm / 2.54).toFixed(big ? 1 : 3)} in <small class="muted">(${cm.toFixed(big ? 1 : 2)} cm)</small>`; }
+function fmtLim(r) {
+  if (r.limit === null || r.limit === undefined) return '—';
+  return `${r.op} ${r.unit === 'cm2m' ? fmtGapArea(r.limit) : fmtGapW(r.limit)}`;
+}
+
+function sealCardHTML() {
+  const job = S.job, seal = job.roof.seal, U = u(job), D = +job.tank.diameter || 0;
+  const ifr = job.roof.type === 'fixed-ifr';
+  const gapTable = (k) => {
+    const sd = k === 'p' ? seal.primary : seal.secondary, sum = gapSummary(sd.gaps, D);
+    const gin = (g, f, kind, extra = '') => `<input data-sg="${k}" data-gid="${g.id}" data-f="${f}" data-kind="${kind}" ${kind === 'text' ? '' : 'inputmode="decimal"'} value="${h(kind === 'small' ? inVal(g[f], 'small', job) : g[f] ?? '')}" ${extra}>`;
+    return `<div class="tblwrap"><table class="grid sgaps"><thead><tr><th>#</th><th>Start angle (°)</th><th>Length (${U.small})</th><th>Max width (${U.small})</th><th>Avg width (${U.small})</th><th class="n">Area</th><th>Notes</th><th></th></tr></thead><tbody>
+      ${sd.gaps.map((g, i) => { const L = +g.len, W = +(g.wAvg ?? g.wMax); const a = L > 0 && W > 0 ? (L / 10) * (W / 10) : null; return `<tr><td>${i + 1}</td><td>${gin(g, 'angle', 'num')}</td><td>${gin(g, 'len', 'small')}</td><td>${gin(g, 'wMax', 'small')}</td><td>${gin(g, 'wAvg', 'small', 'placeholder="= max"')}</td><td class="n">${a === null ? '—' : job.units === 'metric' ? a.toFixed(1) + ' cm²' : (a / 6.4516).toFixed(2) + ' in²'}</td><td>${gin(g, 'notes', 'text', 'class="note"')}</td><td><button class="btn sm icon ghost danger" data-act="sg-del" data-sg="${k}" data-gid="${g.id}" title="Remove gap">✕</button></td></tr>`; }).join('') || `<tr><td colspan="8" class="empty">${sd.noGaps ? 'No gaps found.' : 'No gaps entered.'}</td></tr>`}
+      </tbody></table></div>
+      <div class="acts"><button class="btn sm" data-act="sg-add" data-sg="${k}">+ Gap</button>${field('No gaps found', `roof.seal.${k === 'p' ? 'primary' : 'secondary'}.noGaps`, 'bool', { cls: 'inline-chk' })}<span class="spacer"></span><span class="muted small">${sum.n} gap${sum.n === 1 ? '' : 's'} · total ${job.units === 'metric' ? sum.areaCm2.toFixed(1) + ' cm²' : (sum.areaCm2 / 6.4516).toFixed(2) + ' in²'} · ${fmtGapArea(sum.n ? sum.perM : seal[k === 'p' ? 'primary' : 'secondary'].noGaps ? 0 : null)}</span></div>`;
+  };
+  const stds = activeStds(seal);
+  const results = stds.map((k) => {
+    const ev = sealEval(job, k), due = nextDue(job, k);
+    return `<div class="seal-res ${ev.overall === 'Compliant' ? 'ok' : ev.overall === 'Not compliant' ? 'bad' : ''}">
+      <div class="sr-head"><b>${h(ev.L.short)}</b><span class="chip ${ev.overall === 'Compliant' ? 'r-ok' : ev.overall === 'Not compliant' ? 'r-bad' : 'r-pending'}">${ev.overall}</span></div>
+      <div class="muted small">${h(ev.L.name)}</div>
+      <table class="grid sres"><tbody>${ev.rows.map((r) => `<tr><td>${h(r.item)}</td><td class="n">${r.text !== undefined ? h(r.text) : r.unit === 'cm2m' ? fmtGapArea(r.value) : fmtGapW(r.value)}</td><td class="n muted">${r.limit !== undefined ? fmtLim(r) : ''}</td><td>${r.ok === true ? '<span class="st st-OK">OK</span>' : r.ok === false ? '<span class="st st-below-MRT">Fails</span>' : '<span class="muted small">—</span>'}</td></tr>`).join('')}</tbody></table>
+      ${ev.warn.length ? `<ul class="warn">${ev.warn.map((w) => `<li>${h(w)}</li>`).join('')}</ul>` : ''}
+      ${ev.fails ? `<p class="small"><b>Repair:</b> ${h(ev.repair)}</p>` : ''}
+      ${due.length ? `<p class="small muted"><b>Inspection frequency${seal.date ? ' / next due' : ''}:</b> ${due.map((d) => `${h(d.what)} — ${d.every}${d.due ? ` (${d.due.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })})` : ''}`).join('; ')}.</p>` : ''}
+    </div>`;
+  }).join('') || '<p class="muted">Select at least one standard to evaluate against.</p>';
+  const chk = SEAL_CHECKS.map(([k, label]) => { const c = seal.checks?.[k] || {}; return `<tr class="${c.r === 'defect' ? 'is-bad' : ''}"><td>${h(label)}</td><td><select data-sck="${k}" data-kind="text"><option value="" ${!c.r ? 'selected' : ''}>—</option><option value="ok" ${c.r === 'ok' ? 'selected' : ''}>OK</option><option value="defect" ${c.r === 'defect' ? 'selected' : ''}>Defect</option><option value="na" ${c.r === 'na' ? 'selected' : ''}>N/A</option></select></td><td><input data-sckn="${k}" data-kind="text" value="${h(c.note || '')}" placeholder="Note"></td></tr>`; }).join('');
+  const C = SEAL_STDS;
+  return `<section class="card seal-card"><div class="sp-head"><h2>Rim seal inspection</h2><span class="muted small">${ifr ? 'Internal floating roof' : 'External floating roof'} · gaps are drawn on the roof plan above (primary red, secondary blue)</span></div>
+    <div class="seal-std">
+      <span class="lbl">Evaluate against</span>
+      ${field(`${C.kb.short} — 40 CFR 60 Subpart Kb / 63 Subpart WW`, 'roof.seal.std.kb', 'bool')}
+      ${field(`${C.ca.short} — SOR/2025-88`, 'roof.seal.std.ca', 'bool')}
+      ${field('Custom / provincial approval (e.g. CCME PN 1180)', 'roof.seal.std.custom', 'bool')}
+    </div>
+    ${seal.std.custom ? `<div class="fgrid g4 custom-lim">${field('Name / permit', 'roof.seal.custom.label', 'text', { ph: 'e.g. CCME PN 1180, approval no.' })}${field('Primary gap area limit', 'roof.seal.custom.pArea', 'num', { unit: 'cm²/m' })}${field('Primary max gap width', 'roof.seal.custom.pWidth', 'num', { unit: 'cm' })}${field('Secondary gap area limit', 'roof.seal.custom.sArea', 'num', { unit: 'cm²/m' })}${field('Secondary max gap width', 'roof.seal.custom.sWidth', 'num', { unit: 'cm' })}${field('Shoe top above liquid (min)', 'roof.seal.custom.shoeAbove', 'num', { unit: 'cm' })}${field('Shoe bottom below liquid (min)', 'roof.seal.custom.shoeBelow', 'num', { unit: 'cm' })}<p class="muted small span2">Enter the limits from the CCME guideline or your provincial approval. Gap limits are compared as “not more than”.</p></div>` : ''}
+    <div class="fgrid g4">
+      ${field('Inspection date', 'roof.seal.date', 'date')}${field('Inspected by', 'roof.seal.inspector')}
+      ${field('Roof / liquid level at measurement', 'roof.seal.level', 'text', { ph: 'e.g. 22 ft 4 in liquid level' })}${field('Notes', 'roof.seal.notes')}
+    </div>
+    <div class="seal-grid">
+      <div class="seal-col">
+        <h3>Primary seal</h3>
+        <div class="fgrid g3">${field('Type', 'roof.seal.primary.type', 'sel', { options: PRIMARY_TYPES })}
+          ${/shoe/i.test(seal.primary.type) ? `${field('Shoe top above liquid', 'roof.seal.primary.shoeAbove', 'small')}${field('Shoe bottom below liquid', 'roof.seal.primary.shoeBelow', 'small')}${field('Shoe height', 'roof.seal.primary.shoeHeight', 'small')}` : ''}
+          ${field('Condition / notes', 'roof.seal.primary.notes', 'text', { cls: /shoe/i.test(seal.primary.type) ? 'span2' : 'span2' })}</div>
+        ${gapTable('p')}
+      </div>
+      <div class="seal-col">
+        <h3>Secondary seal</h3>
+        <div class="fgrid">${field('Type', 'roof.seal.secondary.type', 'sel', { options: SECONDARY_TYPES })}${field('Condition / notes', 'roof.seal.secondary.notes')}</div>
+        ${seal.secondary.type === 'None' ? '<p class="muted small">No secondary seal fitted.</p>' : gapTable('s')}
+      </div>
+    </div>
+    <p class="muted small">Find gaps with a ${C.kb.probe} probe (Canada: ${C.ca.probe}) passed freely between the seal and the shell, with the roof floating freely and the liquid level steady. Record each gap's start angle, length along the shell and width; the area is length × average width (maximum width if no average is entered). Gap area per metre of tank diameter = total area ÷ diameter (${fmt(D, 'big', job)}).</p>
+    <h3>Visual inspection</h3>
+    <div class="tblwrap"><table class="grid schecks"><thead><tr><th>Item</th><th>Result</th><th>Note</th></tr></thead><tbody>${chk}</tbody></table></div>
+    <h3>Results</h3>
+    <div class="seal-results">${results}</div>
+    <p class="muted small">Limits from 40 CFR 60.113b and 63.1063 (US EPA) and SOR/2025-88 ss. 64–65, 73–76, 91–101 and Schedule 4 (Canada). Check the version that applies to the tank, its permit or approval, and the product stored.</p>
+  </section>`;
+}
+
 function refreshRoof() {
   setTimeout(() => {
     const c = $('#roofBody'); if (!c) return;
-    const a = document.activeElement, key = a && c.contains(a) ? focusSel(a) : null;
+    const a = document.activeElement, key = a && c.contains(a) ? focusSel(a) : null, typed = a && a.value !== undefined && a.value !== a.defaultValue ? a.value : null;
     c.innerHTML = roofBodyHTML();
     attachRoofMaps();
-    if (key) { const n = c.querySelector(key); if (n) { n.focus({ preventScroll: true }); try { n.select(); } catch { /* */ } } }
+    if (key) { const n = c.querySelector(key); if (n && typed !== null && n.value !== typed) { n.value = typed; n.dataset.restored = '1'; } if (n) { n.focus({ preventScroll: true }); try { if (typed === null) n.select(); else n.setSelectionRange(n.value.length, n.value.length); } catch { /* */ } } }
   }, 0);
 }
 
@@ -1175,9 +1246,9 @@ function shellBodyHTML() {
 function refreshShell() {
   setTimeout(() => {
     const c = $('#shellBody'); if (!c) return;
-    const a = document.activeElement, key = a && c.contains(a) ? focusSel(a) : null;
+    const a = document.activeElement, key = a && c.contains(a) ? focusSel(a) : null, typed = a && a.value !== undefined && a.value !== a.defaultValue ? a.value : null;
     c.innerHTML = shellBodyHTML();
-    if (key) { const n = c.querySelector(key); if (n) { n.focus(); try { n.select(); } catch { /* */ } } }
+    if (key) { const n = c.querySelector(key); if (n && typed !== null && n.value !== typed) { n.value = typed; n.dataset.restored = '1'; } if (n) { n.focus(); try { if (typed === null) n.select(); else n.setSelectionRange(n.value.length, n.value.length); } catch { /* */ } } }
   }, 0);
 }
 
@@ -1356,6 +1427,15 @@ document.addEventListener('click', async (e) => {
     case 'utl-up': $('#utlInput').click(); return;
     case 'exp-roof': return download(fileBase(S.job) + '_roof-ut.csv', roofCSV(S.job), 'text/csv');
     case 'rsel': S.roofSel = el.dataset.key; refreshRoof(); setTimeout(() => $(`.roof-panel input[data-pt="tl"], .roof-panel select[data-rpc]`)?.focus(), 40); return;
+    case 'sg-add': {
+      const sd = el.dataset.sg === 'p' ? S.job.roof.seal.primary : S.job.roof.seal.secondary;
+      const g = newGap(); sd.gaps.push(g); sd.noGaps = false; commit(); refreshRoof();
+      setTimeout(() => $(`#roofBody input[data-gid="${g.id}"][data-f="angle"]`)?.focus(), 40); return;
+    }
+    case 'sg-del': {
+      const sd = el.dataset.sg === 'p' ? S.job.roof.seal.primary : S.job.roof.seal.secondary;
+      sd.gaps = sd.gaps.filter((x) => x.id !== el.dataset.gid); commit(); refreshRoof(); return;
+    }
     case 'rsel-close': S.roofSel = null; refreshRoof(); return;
     case 'rsel-nav': {
       const all = floatingLayout(S.job).plates, cur = all.find((p) => p.key === S.roofSel);
@@ -1494,6 +1574,21 @@ document.addEventListener('change', async (e) => {
     if (path === 'units') renderAll();
     return;
   }
+  if (el.matches('[data-sg]')) {
+    const sd = el.dataset.sg === 'p' ? S.job.roof.seal.primary : S.job.roof.seal.secondary;
+    const g = sd.gaps.find((x) => x.id === el.dataset.gid); if (!g) return;
+    const k = el.dataset.f; let v = readInput(el);
+    if (k !== 'notes' && v !== null && v < 0) { toast('Values can’t be negative.'); return; }
+    if (k === 'angle' && v !== null) v = ((v % 360) + 360) % 360;
+    g[k] = v; commit(); refreshRoof(); return;
+  }
+  if (el.matches('[data-sck]') || el.matches('[data-sckn]')) {
+    const seal = S.job.roof.seal; seal.checks = seal.checks || {};
+    const k = el.dataset.sck || el.dataset.sckn, c = (seal.checks[k] = seal.checks[k] || {});
+    if (el.dataset.sck) { if (el.value) c.r = el.value; else delete c.r; } else c.note = el.value;
+    if (!c.r && !c.note) delete seal.checks[k];
+    commit(); refreshRoof(); return;
+  }
   if (el.matches('[data-rut]')) {
     const F = S.job.roof.floating; F.ut = F.ut || {};
     const m = (F.ut[el.dataset.rut] = F.ut[el.dataset.rut] || {}), v = readInput(el);
@@ -1614,6 +1709,12 @@ document.addEventListener('change', async (e) => {
     }
     rerenderEditor(el); return;
   }
+});
+
+// a value typed while the page was refreshing is put back into the new field; commit it when the field is left
+document.addEventListener('focusout', (e) => {
+  const el = e.target;
+  if (el?.dataset?.restored) { delete el.dataset.restored; if (el.value !== el.defaultValue) el.dispatchEvent(new Event('change', { bubbles: true })); }
 });
 
 document.addEventListener('input', (e) => {
