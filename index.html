@@ -26,6 +26,9 @@
       <details class="menu" id="exportMenu" hidden>
         <summary class="btn sm ghost-inv">Export ▾</summary>
         <div class="menu-pop">
+          <button data-act="utl-down"><b>UT loader sheet (Excel) — for the UT technician</b></button>
+          <button data-act="utl-up"><b>Upload completed UT loader sheet…</b></button>
+          <hr>
           <button data-act="exp-ind">Indications (CSV / Excel)</button>
           <button data-act="exp-plates">Plate register (CSV / Excel)</button>
           <button data-act="exp-noz">Nozzle schedule (CSV / Excel)</button>
@@ -47,6 +50,7 @@
   <dialog id="dlg" class="dlg"><div id="dlgBody"></div></dialog>
   <dialog id="confirmDlg" class="dlg dlg-sm"></dialog>
   <div class="toast" id="toast" hidden role="status"></div>
+    <input type="file" id="utlInput" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-act="utl-file" hidden>
 
   <noscript><p style="padding:2rem">This app needs JavaScript enabled.</p></noscript>
   <script type="module" src="js/app.js"></script>

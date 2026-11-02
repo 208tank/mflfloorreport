@@ -10,9 +10,10 @@ import { buildReport, legendHTML } from './report.js';
 import { newJob, migrate, nextNo, uid, getPath, setPath } from './model.js';
 import { makeDemo } from './demo.js';
 import { defaultShell, defaultZones, autoLocCount, autoPlateCount, utLocations, coursesWithElev, courseAt, coursePlates, shellHeight, courseSummary, readingElevations, zoneCount, getReading, fmtElev, zKey, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
+import { buildLoader, readLoader, loaderAreas } from './loader.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '2.3.1';
+const APP_VERSION = '2.4.0';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -245,7 +246,7 @@ function viewSetup() {
         ${field('Report no.', 'info.reportNo')}${field('Work order', 'info.workOrder')}
         ${field('Inspection date', 'info.inspDate', 'date')}${field('0° reference label', 'info.zeroRef', 'text', { ph: 'e.g. N, manway, inlet' })}
         ${field('MFL operator', 'info.mflTech')}${field('UT technician', 'info.utTech')}
-        ${field('API 653 inspector', 'info.inspector', 'text', { cls: 'span2' })}
+        ${field('API 653 inspector', 'info.inspector')}${field('Date of UT readings', 'info.utDate', 'text', { ph: 'from the UT loader sheet' })}
       </div></section>
 
       <section class="card"><h2>Tank</h2><div class="fgrid">
@@ -835,7 +836,7 @@ function viewInds() {
   const U = u(S.job);
   return `<div class="page wide">
     <div class="page-head"><div><h1>Indications</h1><p class="muted">MFL calls with UT and VT prove-up. Click a row to edit. Thickness in ${U.small}.</p></div>
-      <div class="acts"><button class="btn primary" data-act="ind-new">New indication</button><button class="btn" data-act="exp-ind">Export CSV</button></div></div>
+      <div class="acts"><button class="btn primary" data-act="ind-new">New indication</button><button class="btn" data-act="exp-ind">Export CSV</button><button class="btn" data-act="utl-down" title="Excel sheet for the UT technician">UT loader ↓</button><button class="btn" data-act="utl-up" title="Upload the completed UT loader sheet">UT loader ↑</button></div></div>
     <div class="toolbar"><input type="search" placeholder="Search no., plate, remarks…" value="${h(S.search)}" data-act="search" class="search">
       <select data-act="resfilter">${[['all', 'All results'], ...RESULT_OPTS, ['repair', 'Repairs only']].map(([k, v]) => `<option value="${k}" ${S.resFilter === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
       <span class="muted small" id="indCount"></span></div>
@@ -959,7 +960,7 @@ function refreshApi() {
 
 function viewRoof() {
   return `<div class="page wide roof-page"><div class="page-head"><div><h1>Roof</h1><p class="muted">Fixed roof and floating roof details, layout and UT readings.</p></div>
-    <div class="acts"><button class="btn" data-act="exp-roof">Export CSV</button></div></div>
+    <div class="acts"><button class="btn" data-act="utl-down" title="Excel sheet for the UT technician">UT loader ↓</button><button class="btn" data-act="utl-up" title="Upload the completed UT loader sheet">UT loader ↑</button><button class="btn" data-act="exp-roof">Export CSV</button></div></div>
     <div id="roofBody">${roofBodyHTML()}</div></div>`;
 }
 after.roof = () => attachRoofMaps();
@@ -1106,7 +1107,7 @@ function roofFloatClick(fp, hit) {
 
 function viewShell() {
   return `<div class="page wide shell-page"><div class="page-head"><div><h1>Shell UT</h1><p class="muted">Shell course thickness readings at standard UT stations around the circumference, with a shell roll-out showing the station lines.</p></div>
-    <div class="acts"><button class="btn" data-act="exp-shell">Export CSV</button><button class="btn" data-act="exp-shell-svg">Roll-out (SVG)</button></div></div>
+    <div class="acts"><button class="btn" data-act="utl-down" title="Excel sheet for the UT technician">UT loader ↓</button><button class="btn" data-act="utl-up" title="Upload the completed UT loader sheet">UT loader ↑</button><button class="btn" data-act="exp-shell">Export CSV</button><button class="btn" data-act="exp-shell-svg">Roll-out (SVG)</button></div></div>
     <div id="shellBody">${shellBodyHTML()}</div></div>`;
 }
 
@@ -1344,6 +1345,15 @@ document.addEventListener('click', async (e) => {
       const c = $('#nozzleCard'); if (c) { c.innerHTML = nozzleTableHTML(); refreshSetupPreview(); }
       return;
     }
+    case 'utl-down': {
+      const areas = loaderAreas(S.job);
+      if (!areas.length) { toast('Nothing to load yet — set up the shell courses, nozzles, roof or floor indications first.'); return; }
+      await flushSave();
+      try { const blob = await buildLoader(S.job); download(fileBase(S.job) + '_UT-loader.xlsx', blob); toast(`UT loader sheet downloaded (${areas.join(', ')}). Give it to the UT technician.`); }
+      catch (err) { toast('Could not build the loader sheet: ' + err.message); }
+      return;
+    }
+    case 'utl-up': $('#utlInput').click(); return;
     case 'exp-roof': return download(fileBase(S.job) + '_roof-ut.csv', roofCSV(S.job), 'text/csv');
     case 'rsel': S.roofSel = el.dataset.key; refreshRoof(); setTimeout(() => $(`.roof-panel input[data-pt="tl"], .roof-panel select[data-rpc]`)?.focus(), 40); return;
     case 'rsel-close': S.roofSel = null; refreshRoof(); return;
@@ -1593,6 +1603,7 @@ document.addEventListener('change', async (e) => {
   if (act === 'datum-sel') { applyDatum(el.dataset.key, el.value); return; }
   if (act === 'resfilter') { S.resFilter = el.value; refreshIndTable(); return; }
   if (el.id === 'ftType') { S.ftType = el.value; setMode('feature'); return; }
+  if (act === 'utl-file') { const f = el.files[0]; el.value = ''; if (f) uploadLoader(f); return; }
   if (act === 'job-import') return importJobFile(el.files[0]).finally(() => (el.value = ''));
   if (act === 'logo') { const f = el.files[0]; if (!f) return; S.company.logo = await resizeImage(f, 600, 'image/png'); await db.setMeta('company', S.company); renderView(); return; }
   if (act === 'photo-add') {
@@ -1791,6 +1802,25 @@ async function resizeImage(file, max, type = 'image/jpeg') {
 }
 
 /* ---------------------------------------------------------------- misc --- */
+
+async function uploadLoader(file) {
+  let res;
+  try { res = await readLoader(S.job, await file.arrayBuffer()); }
+  catch (err) { toast('Could not read the loader sheet: ' + err.message); return; }
+  const lines = [];
+  if (!res.jobMatch) lines.push(`This sheet was made for ${res.info.tank || 'another tank'} (a different job). Readings are matched by ID, so only items that exist in this job will be updated.`, '');
+  if (res.info.tech) lines.push(`UT technician: ${res.info.tech}${res.info.date ? ' · ' + res.info.date : ''}`);
+  for (const s of res.summary) lines.push(`${s.area}: ${s.added} new, ${s.changed} changed`);
+  if (res.infoChanges) lines.push(`UT technician / instrument details: ${res.infoChanges} update${res.infoChanges > 1 ? 's' : ''}`);
+  if (res.unmatched) lines.push(`${res.unmatched} row${res.unmatched > 1 ? 's' : ''} skipped — the item no longer exists in this job`);
+  if (res.errors.length) lines.push('', `${res.errors.length} cell${res.errors.length > 1 ? 's' : ''} could not be read and will be skipped:`, ...res.errors.slice(0, 8).map((e) => '• ' + e), ...(res.errors.length > 8 ? [`• … and ${res.errors.length - 8} more`] : []));
+  if (!res.total && !res.infoChanges) { toast(`${file.name}: no new or changed readings${res.errors.length ? ` (${res.errors.length} cell${res.errors.length > 1 ? 's' : ''} could not be read)` : ''}.`); return; }
+  if (!(await askConfirm(`Update the report from ${file.name}?\n\n${lines.join('\n')}\n\nBlank cells in the sheet do not erase existing readings.`, { ok: `Update ${res.total} reading${res.total === 1 ? '' : 's'}` }))) return;
+  res.apply();
+  S.job.utLoads = [...(S.job.utLoads || []), { at: Date.now(), file: file.name, count: res.total, tech: res.info.tech || '' }].slice(-50);
+  commit(); renderAll();
+  toast(`Updated ${res.total} reading${res.total === 1 ? '' : 's'} from ${file.name}.`);
+}
 
 /** In-app confirmation dialog (works where native confirm() is blocked). Resolves true for OK. */
 function askConfirm(msg, { ok = 'OK', cancel = 'Cancel', danger = false } = {}) {

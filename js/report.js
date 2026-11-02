@@ -141,7 +141,7 @@ export function buildReport(job, layout, calc, company, photos, opts) {
     <h2>Equipment and personnel</h2>
     <div class="cols">
       ${kv([['MFL scanner', h([E.mflMake, E.mflModel].filter(Boolean).join(' '))], ['Serial no.', h(E.mflSerial)], ['Calibration / reference', h([E.mflRef, E.mflCal].filter(Boolean).join(' · '))], ['Reporting threshold', E.mflThreshold ? h(E.mflThreshold) + ' %' : '—'], ['Sensitivity / settings', h(E.mflSettings)]])}
-      ${kv([['UT instrument', h([E.utMake, E.utModel].filter(Boolean).join(' '))], ['Serial no.', h(E.utSerial)], ['Probe', h(E.utProbe)], ['Calibration block', h(E.utBlock)], ['VT tools', h(E.vtTools)]])}
+      ${kv([['UT instrument', h([E.utMake, E.utModel].filter(Boolean).join(' '))], ['Serial no.', h(E.utSerial)], ['Probe', h(E.utProbe)], ['Calibration block', h(E.utBlock)], ['VT tools', h(E.vtTools), ['Date of UT readings', h(I.utDate)]]])}
     </div>
     ${I.notes ? `<p><b>Notes:</b> ${h(I.notes).replace(/\n/g, '<br>')}</p>` : ''}
     <table class="sig"><tr>${[['MFL operator', I.mflTech], ['UT technician', I.utTech], ['API 653 inspector', I.inspector]].map(([r, n]) => `<td><div class="line"></div><b>${h(n || '')}</b><br>${r} · Date</td>`).join('')}</tr></table>

@@ -188,6 +188,33 @@ layout is changed the app warns about readings on plates that no longer exist.
 The report has a Roof section (details, plan drawings, point / plate reading tables and pontoon
 conditions); *Export → Roof UT readings (CSV / Excel)*.
 
+## UT loader sheet (Excel)
+
+The inspector builds the tank in the app, then hands the UT technician an Excel workbook to fill in;
+the completed workbook is uploaded and the report updates.
+
+1. **Download** — *Export → UT loader sheet (Excel)* (or **UT loader ↓** on the Shell UT, Roof and
+   Indications pages). The workbook has a sheet for each UT area set up in the job:
+   - **Shell** — every reading elevation × every UT station, with the course and its nominal / t-min.
+   - **Nozzles** — 12, 3, 6 and 9 o'clock neck readings, with nominal / t-min.
+   - **Fixed roof** — each UT point (angle, distance from centre).
+   - **Floating roof** — the 5 readings (corners and centre) for each deck plate.
+   - **Floor prove-up** — UT minimum remaining and UT method for each MFL indication (plate, X / Y).
+   - **Info** — tank, report no., job ID, instructions, and cells for the UT technician's name,
+     instrument, serial no., probe and date of readings.
+   Readings already in the job are filled in. Input cells are yellow; headers and labels are frozen;
+   readings below t-min turn red; data validation rejects text and impossible values. Hidden ID
+   columns tie each cell back to its station, plate, nozzle or indication — leave them alone.
+2. **The UT technician** fills in the yellow cells (Excel, LibreOffice or Google Sheets saved as
+   .xlsx) and returns the file.
+3. **Upload** — *Export → Upload completed UT loader sheet…* (or **UT loader ↑**). The app checks
+   the sheet belongs to this job, then shows a summary before changing anything: new and changed
+   readings per area, technician details, rows for items that no longer exist, and any cells it
+   could not read (e.g. "n/a"). **Blank cells never erase readings already in the job.** Uploading
+   the same sheet again changes nothing. Each upload is logged in the job.
+
+Units follow the job (inches or millimetres); the sheet records which it used.
+
 ## Location convention — datum corners
 
 Every indication and feature is located by **plate + X/Y measured from the plate's datum corner**.
