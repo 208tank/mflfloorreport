@@ -191,7 +191,7 @@ export function svgForExport(svgMarkup) {
   .hatch-bg{fill:#eceef1}.hatch-bg2{fill:#f7f8fa}.hatch-line{stroke:#9aa3ad}.shell{fill:none;stroke:#1d232b}.cz{fill:none;stroke:#c2410c;opacity:.7}
   .ticks line{stroke:#1d232b}.ticks text,.plabels text{fill:#5b6470;font-family:Arial,sans-serif}.ticks text.zero{fill:#1d232b;font-weight:700}
   .ilabel,.ftlabel{fill:#1d232b;font-family:Arial,sans-serif;font-weight:700}.rep{fill:none;stroke:#b91c1c;stroke-dasharray:3 2}.rep.bad{stroke:#b91c1c}
-  .patchp rect{fill:rgba(234,88,12,.14);stroke:#c2410c}.patchp rect.true{fill:none}.patchp .plabel{fill:#c2410c;font-family:Arial,sans-serif;font-weight:700}
+  .patchp path{fill:rgba(234,88,12,.14);stroke:#c2410c}.patchp path.true{fill:none}.patchp.fail path{stroke:#b91c1c}.patchp .plabel{fill:#c2410c;font-family:Arial,sans-serif;font-weight:700}
   .selring{fill:none;stroke:#0ea5e9}.nozzle path{fill:#fff;stroke:#1d232b}.nozzle .fl{fill:#1d232b}.nozzle.bad path{stroke:#b91c1c}.nozzle.bad .fl{fill:#b91c1c}.nozzle text{fill:#1d232b;font-family:Arial;font-weight:700;stroke:none}.datum{fill:#0f766e;opacity:.6}.datum.own{opacity:.9}.ft{fill:#fff;stroke:#1d232b}.ft-column{fill:#1d232b}.ft-patch{fill:#fde68a;fill-opacity:.6}.scalebar rect{fill:#1d232b}.scalebar text{fill:#1d232b;font-family:Arial}</style>`;
   return svgMarkup.replace(/<defs>/, style + '<defs>');
 }

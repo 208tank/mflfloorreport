@@ -43,13 +43,24 @@ entered); the CSV includes them. Existing patches already on the floor are drawn
 Every indication that needs repair (auto from the API 653 calculation, or Repair = Yes) gets a lap-welded
 patch plate, unless its repair method is something other than a patch. Settings on Floor → Analysis
 (API 653): **Auto patch repair indications** (on), **Default patch length / width** (12 × 12 in), and
-**Extend past the corrosion by at least** (1 in) — a patch grows beyond the default when the indication is
-bigger. Patches are centred on the indication; overlapping patches, and indications given the same
+**Extend past the corrosion by at least** (2 in, API 653 9.10.1.1 b) — a patch grows beyond the default
+when the indication is bigger — and **Patch plate thickness** (1/4 in unless entered on the indication). Patches are centred on the indication; overlapping patches, and indications given the same
 Repair ID, are combined into one patch. They are numbered P-1, P-2 … (a Repair ID you type is kept).
 A size typed on the indication overrides the auto size. Patches are drawn on the floor map (toggle
 *Patches*; small patches are drawn at a minimum size with the true outline inside so they show on a large
 tank) and in the report, which also lists them in a *Patch plates* table with size, thickness (nominal
 bottom t unless entered), the indications covered, plates, and a flag when a patch reaches the critical zone.
+
+**Critical zone patches (API 653 9.10.1.2).** A patch that would come within 6 in of the shell becomes a
+**tombstone** patch: it is turned so its sides run radially and meet the shell-to-bottom joint at 90°, and
+it extends to the shell (L measured radially from the shell, W along the shell). Each critical-zone patch
+is checked: thickness not over 1/4 in (and API 650 4.2.10 toughness); tombstone shape within 6 in of the
+shell; at least 2 in past the corrosion; fillet welds at least the greater of 3 in or 5t from the course 1
+vertical seams; not over or butt-welded to an existing patch (floor features of type patch); operating
+temperature not over 200 °F / 93 °C (Tank setup → *Max. operating temperature*); and the items to verify in
+the field — bottom plate under the perimeter weld at least 0.10 in, and a two-pass perimeter weld examined
+by MT / PT. The result (OK / Verify / Fails) shows in the indication editor, on the API 653 page, in the
+report's *Critical zone patch plates* table and, when a patch fails, as a suggested recommendation.
 
 ## Organisation of the app (v3)
 

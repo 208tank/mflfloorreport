@@ -1,7 +1,7 @@
 // SVG floor map rendering and interaction.
 import { polar, datumPoint, datumAxes } from './geometry.js';
 import { nozzleUT } from './calc.js';
-import { patchList } from './patches.js';
+import { patchList, patchPath } from './patches.js';
 
 export const COLORS = { ps: '#1f6feb', ss: '#d9480f', both: '#8250df', pending: '#6b7280', nri: '#9ca3af', other: '#9ca3af' };
 
@@ -129,12 +129,13 @@ export function renderMapSVG(job, layout, opts = {}) {
   if (opts.showPatches !== false && calc) {
     const pl = opts.patches || patchList(job, layout, calc);
     out.push('<g class="patches">');
-    const minD = s * 5.2; // drawn at least this big so a 12 in patch shows on a large tank; true size when zoomed in
+    const minD = s * 5.2; // drawn at least this big so a 12 in patch shows on a large tank; true outline inside
     for (const pt of pl) {
-      const L = Math.max(pt.L, minD), W = Math.max(pt.W, minD), x0 = pt.cx - L / 2, y1 = pt.cy + W / 2;
-      out.push(`<g class="patchp${pt.auto ? ' auto' : ''}${pt.cz ? ' cz' : ''}"><rect x="${f(x0)}" y="${f(-y1)}" width="${f(L)}" height="${f(W)}" stroke-width="${f(s * 0.3)}"/>` +
-        (L > pt.L + 1 ? `<rect x="${f(pt.x0)}" y="${f(-pt.y1)}" width="${f(pt.L)}" height="${f(pt.W)}" class="true" stroke-width="${f(s * 0.15)}"/>` : '') +
-        `<text x="${f(pt.cx)}" y="${f(-(pt.cy - W / 2) + s * 2.1)}" font-size="${f(s * 1.9)}" text-anchor="middle" class="plabel">${esc(pt.id)}</text></g>`);
+      const k = Math.max(1, minD / Math.max(1, Math.min(pt.L, pt.W)));
+      const cy = (pt.y0 + pt.y1) / 2, hy = pt.kind === 'tomb' ? Math.max(pt.y1 - pt.y0, Math.min(pt.L, pt.W) * k) / 2 : ((pt.y1 - pt.y0) / 2) * k;
+      out.push(`<g class="patchp${pt.auto ? ' auto' : ''}${pt.cz ? ' cz' : ''}${pt.status === 'Fails' ? ' fail' : ''}"><path d="${patchPath(pt, k, R)}" stroke-width="${f(s * 0.3)}"/>` +
+        (k > 1.01 ? `<path d="${patchPath(pt)}" class="true" stroke-width="${f(s * 0.15)}"/>` : '') +
+        (() => { if (pt.kind === 'tomb') { const Ld = Math.max(pt.L, Math.min(pt.L, pt.W) * k) + s * 2.4, rr = R - Ld; return `<text x="${f(Math.sin(pt.th * Math.PI / 180) * rr)}" y="${f(-Math.cos(pt.th * Math.PI / 180) * rr + s * 0.7)}" font-size="${f(s * 1.9)}" text-anchor="middle" class="plabel">${esc(pt.id)}</text>`; } return `<text x="${f((pt.x0 + pt.x1) / 2)}" y="${f(-(cy - hy) + s * 2.1)}" font-size="${f(s * 1.9)}" text-anchor="middle" class="plabel">${esc(pt.id)}</text>`; })() + '</g>');
     }
     out.push('</g>');
   }

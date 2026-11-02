@@ -32,7 +32,8 @@ export function defaultCalc() {
     autoPatch: true,      // repair indications get a patch plate
     patchL: 304.8,        // default patch 12 x 12 in
     patchW: 304.8,
-    patchMargin: 25.4     // patch extends past the corrosion by at least this much
+    patchMargin: 50.8,    // patch extends at least 2 in past the corrosion (API 653 9.10.1.1 b)
+    patchT: 6.35          // patch plate thickness unless entered (1/4 in)
   };
 }
 

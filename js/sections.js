@@ -8,6 +8,7 @@ import { hasFixed, hasFloating, floatingLayout, plateUT, pointStatus } from './r
 import { sealEval, activeStds } from './seal.js';
 import { settleCalc, profileEval, edgeEval, depEval, stations, hasSettle } from './settle.js';
 import { designBasis, fillFromT } from './design.js';
+import { patchList } from './patches.js';
 
 const uidS = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
@@ -114,6 +115,9 @@ export function findings(job, layout, calc) {
       }
       const reps = inds.filter((i) => calc?.per?.get(i.id)?.repair);
       if (reps.length) add('floor', { key: 'floor-repairs', finding: `${reps.length} floor location${reps.length > 1 ? 's' : ''} require repair: ${reps.map((i) => i.no + ' (' + (calc.per.get(i.id)?.plate?.label || '') + ')').join(', ')}.`, loc: 'See floor map', action: 'Repair by patch plate, weld build-up or plate replacement per API 653 Section 9 and re-test (vacuum box) before return to service.', priority: 'P2', ref: 'API 653 9.10' });
+      try {
+        for (const pp of patchList(job, layout, calc).filter((x) => x.status === 'Fails')) add('floor', { key: 'floor-patch-' + pp.id, finding: `Patch ${pp.id} in the critical zone does not meet API 653 9.10.1.2: ${pp.checks.filter((k) => k.ok === false).map((k) => k.item.toLowerCase()).join('; ')}.`, loc: `Patch ${pp.id}`, action: 'Change the patch (thickness, shape, position) or replace the bottom plate in the critical zone; engineering approval where required.', priority: 'P2', ref: 'API 653 9.10.1.2' });
+      } catch { /* */ }
       if (pend) { add('floor', { key: 'floor-pending', finding: `${pend} MFL indication${pend > 1 ? 's have' : ' has'} not been proven up.`, loc: 'See indications list', action: 'Prove up the remaining MFL indications by UT / VT and update the evaluation.', priority: 'P2', ref: '' }); }
     }
   } catch { /* */ }
