@@ -33,8 +33,9 @@ Installed copies pick up the new version and show a *Reload* prompt.
 Open an indication (Floor → NDE → Indications, or click it on the floor map) and fill in **Repair & remarks**:
 Repair (auto / yes / no), Repair method, **Repair / patch plate length and width**, **Patch plate thickness**
 and a **Repair ID** (e.g. P-1; use the same ID when one patch covers several indications). The report's
-Repairs table lists the indication size and the repair / patch size (L × W × t) separately; the CSV
-includes them. Existing patches already on the floor are drawn with the floor feature *Patch plate / repair*
+Repairs table lists the repair / patch size (L × W × t) and, optionally, the indication size (report option
+*Indication sizes*; the indication length and width are optional and the column is left out when none are
+entered); the CSV includes them. Existing patches already on the floor are drawn with the floor feature *Patch plate / repair*
 (Floor map → + Feature).
 
 ## Organisation of the app (v3)

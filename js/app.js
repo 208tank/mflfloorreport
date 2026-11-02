@@ -20,7 +20,7 @@ import { designBasis, courseDesigns, fillFromT, annularReq, defaultJoint, shellY
 import { SECTIONS, SEC, CHILDREN, viewPlace, childView, findings, allDefs, numberDefs, STATUS_TEXT, NDE_METHODS, NDE_RESULTS, CONDITIONS, PRIORITIES, PRIORITY_LABEL, STATUSES, typicalNDE, typicalObs, newObs, newNDE, newRec, defaultSummary } from './sections.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '3.0.1';
+const APP_VERSION = '3.0.2';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -30,7 +30,7 @@ const S = {
   view: 'jobs', sel: null, selPlate: null, selFeature: null, selNozzle: null, mode: 'select', ftType: 'column',
   plateLabels: true, indLabels: true, showCZ: true, showDatums: true, filter: new Set(Object.keys(RESULTS)),
   search: '', resFilter: 'all', sort: { key: 'no', dir: 1 }, plateSearch: '',
-  reportOpts: { exec: true, defs: true, sections: true, photos: true, plates: false, provenOnly: false, plateLabels: true, datums: true },
+  reportOpts: { exec: true, defs: true, sections: true, indSize: true, photos: true, plates: false, provenOnly: false, plateLabels: true, datums: true },
   mapCtl: null, vb: null, roofSel: null, roofPt: null, roofAdd: false, roofVB: { fixed: null, floating: null }, installEvt: null, saving: false,
   navOpen: new Set(), ndeTab: {}, roofPart: 'fixed', photoSel: null
 };
@@ -687,7 +687,7 @@ function indEditor(ind, where) {
     </fieldset>
     <fieldset><legend>MFL</legend><div class="fgrid g3">
       ${f('Signal / amplitude', 'mflSignal')}${f('Est. wall loss', 'mflPct', 'num', { unit: '%' })}${f('Scan / pass ref', 'scanRef')}
-      ${f('Length', 'len', 'small')}${f('Width', 'wid', 'small')}
+      ${f('Indication length (optional)', 'len', 'small')}${f('Indication width (optional)', 'wid', 'small')}
     </div></fieldset>
     <fieldset><legend>Prove-up</legend><div class="fgrid">
       ${f('Result', 'result', 'sel', { options: RESULT_OPTS, cls: 'span2' })}
@@ -1774,7 +1774,7 @@ function viewReport() {
   const chk = (k, label) => `<label class="chk sm"><input type="checkbox" data-act="ropt" data-k="${k}" ${o[k] ? 'checked' : ''}><span>${label}</span></label>`;
   return `<div class="report-tools no-print">
     <div><h1>Report</h1><p class="muted small">Print or save as PDF from the browser dialog (choose “Save as PDF”, Letter or A4, margins Default).</p></div>
-    <div class="acts">${chk('exec', 'Executive summary')}${chk('defs', 'Deficiencies')}${chk('sections', 'Findings by component')}${chk('photos', 'Photos')}${chk('plates', 'Plate register')}${chk('provenOnly', 'Hide false calls')}${chk('plateLabels', 'Plate labels on map')}${chk('datums', 'Datum marks')}
+    <div class="acts">${chk('exec', 'Executive summary')}${chk('defs', 'Deficiencies')}${chk('sections', 'Findings by component')}${chk('photos', 'Photos')}${chk('indSize', 'Indication sizes')}${chk('plates', 'Plate register')}${chk('provenOnly', 'Hide false calls')}${chk('plateLabels', 'Plate labels on map')}${chk('datums', 'Datum marks')}
       <button class="btn primary" data-act="print">Print / Save PDF</button></div></div>
     <div class="report-preview" id="reportRoot"></div>`;
 }

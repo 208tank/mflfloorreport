@@ -1,6 +1,6 @@
 // Service worker: cache-first app shell so the app runs fully offline.
 // Bump CACHE when you publish changes so installed copies update.
-const CACHE = 'tank-floor-v3.0.1';
+const CACHE = 'tank-floor-v3.0.2';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/db.js', './js/units.js', './js/geometry.js', './js/calc.js', './js/map.js',
