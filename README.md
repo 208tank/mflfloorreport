@@ -158,6 +158,36 @@ The **Shell UT** page records shell thickness readings:
   every elevation and station. *Export → Shell UT readings (CSV / Excel)* and *Shell roll-out (SVG)*.
 - Readings entered in v2.0 (one per course) are kept at mid-height of their course.
 
+## Roof
+
+The **Roof** page records the roof. Pick the roof type: *Fixed roof*, *External floating roof*, or
+*Fixed roof + internal floating roof* (both sections show).
+
+**Fixed roof** — roof (cone, dome, umbrella, aluminium dome), support (column, self, rafter
+supported), slope / dome radius, nominal plate thickness and t-min (default 0.09 in, API 653
+§4.2.1.2 — check your edition) and notes. UT points are located by **angle and distance from the
+centre**: type them in, click **+ Point on plan** and click where the reading was taken, or use
+**Standard points** (edge and mid-radius on each shell UT station line, plus the centre). The plan
+shows the shell UT station lines, roof support columns from the floor map, and each point with its
+reading (red below t-min).
+
+**Floating roof** — roof type (single-deck pontoon, double-deck, internal pan / pontoon /
+aluminium), rim gap (roof diameter = shell − 2 × rim gap), pontoon ring (radial width, number of
+pontoons — about one per 10 ft suggested — and the angle of the first bulkhead), deck plate size,
+direction and stagger, and nominal / t-min for the deck and the pontoons. The plan draws the
+pontoons (P1, P2…) and the deck plates (A1, A2…, laid like the floor grid and cut at the pontoon
+ring).
+
+**Each deck plate and pontoon has 5 UT readings — the four corners and the centre** — drawn as dots
+on the plan (green OK, red below t-min, hollow not read). Click a plate on the plan to enter its
+readings in a corner-and-centre panel (‹ › steps to the next plate), or type them into the plate
+table. For pontoons, top = outer rim and bottom = inner rim. Pontoons also record a condition (dry,
+liquid present, leaking, not accessible) and notes. Readings are kept per plate position, so if the
+layout is changed the app warns about readings on plates that no longer exist.
+
+The report has a Roof section (details, plan drawings, point / plate reading tables and pontoon
+conditions); *Export → Roof UT readings (CSV / Excel)*.
+
 ## Location convention — datum corners
 
 Every indication and feature is located by **plate + X/Y measured from the plate's datum corner**.

@@ -1,6 +1,7 @@
 // CSV / JSON / image exports.
 import { fromMm, u, fmt } from './units.js';
 import { RESULTS, nozzleUT, NZ_CONN_SHORT, UT_CLOCK } from './calc.js';
+import { floatingLayout, plateUT, pointStatus, PT5, hasFixed, hasFloating } from './roof.js';
 import { utLocations, courseSummary, coursesWithElev, courseAt, readingElevations, getReading, fmtElev } from './shell.js';
 import { angleOf, toLocal, datumName, orientName } from './geometry.js';
 
@@ -94,6 +95,29 @@ export function shellCSV(job) {
   rows.push(['Course summary']);
   rows.push(['Course', `Height (${U.big})`, `Nominal t (${U.small})`, `t-min (${U.small})`, 'Readings', `Min (${U.small})`, 'Wall loss (%)', 'Status']);
   for (const c of courseSummary(job)) rows.push([c.no, r(fromMm(c.h, 'big', job), U.bigDec + 1), t(c.tNom), t(c.tMin), c.count, t(c.min), r(c.lossPct, 1), c.status]);
+  return toCSV(rows);
+}
+
+export function roofCSV(job) {
+  const U = u(job), td = U.tDec + 1, t = (mm) => r(fromMm(mm, 't', job), td);
+  const rows = [];
+  if (hasFixed(job)) {
+    const Fx = job.roof.fixed;
+    rows.push([`Fixed roof (${Fx.kind}, ${Fx.support})`]);
+    rows.push(['Point', 'Angle (deg)', `From centre (${U.big})`, `Reading (${U.small})`, `Nominal (${U.small})`, `t-min (${U.small})`, 'Wall loss (%)', 'Status']);
+    for (const pt of Fx.pts || []) { const s = pointStatus(job, pt); rows.push([pt.label ?? '', pt.angle ?? '', r(fromMm(pt.r, 'big', job), U.bigDec + 1), t(pt.t), t(Fx.tNom), t(Fx.tMin), r(s.lossPct, 1), s.status]); }
+    rows.push([]);
+  }
+  if (hasFloating(job)) {
+    const F = job.roof.floating, lay = floatingLayout(job);
+    rows.push([`Floating roof (${F.kind})`]);
+    rows.push(['Plate', 'Type', ...PT5.map(([, l]) => `${l} (${U.small})`), `Min (${U.small})`, `Nominal (${U.small})`, `t-min (${U.small})`, 'Wall loss (%)', 'Status', 'Pontoon condition', 'Notes']);
+    for (const p of lay.plates) {
+      const s = plateUT(job, p), m = F.ut?.[p.key] || {}, pc = F.pont?.[p.key] || {};
+      rows.push([p.label, p.kind === 'annular' ? 'Pontoon' : p.cut ? 'Deck (cut)' : 'Deck', ...PT5.map(([k]) => t(m[k])), t(s.min), t(s.tNom), t(s.tMin), r(s.lossPct, 1), s.status, pc.cond ?? '', pc.notes ?? '']);
+    }
+  }
+  if (!rows.length) rows.push(['No roof recorded']);
   return toCSV(rows);
 }
 

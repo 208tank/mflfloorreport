@@ -4,14 +4,15 @@ import { u, toMm, inVal, fmt, fmtRate, unitLabel, num, UNITS } from './units.js'
 import { buildLayout, stackSections, suggestCount, halfChord, plateAt, toLocal, itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
 import { api653, RESULTS, RESULT_SHORT, czLimitAuto, plateNominal, NZ_CONN, NZ_CONN_SHORT, UT_CLOCK, nozzleUT } from './calc.js';
 import { renderMapSVG, MapController } from './map.js';
-import { download, indicationsCSV, platesCSV, nozzlesCSV, shellCSV, svgForExport, svgToPng, fileBase } from './export.js';
+import { ROOF_TYPES, FIXED_TYPES, FIXED_SUPPORT, FLOAT_TYPES, PT5, PT5_SHORT, PONT_COND, hasFixed, hasFloating, floatingLayout, roofDiameter, autoPontCount, plateUT, pointStatus, floatingSVG, fixedSVG } from './roof.js';
+import { download, indicationsCSV, platesCSV, nozzlesCSV, shellCSV, roofCSV, svgForExport, svgToPng, fileBase } from './export.js';
 import { buildReport, legendHTML } from './report.js';
 import { newJob, migrate, nextNo, uid, getPath, setPath } from './model.js';
 import { makeDemo } from './demo.js';
 import { defaultShell, defaultZones, autoLocCount, autoPlateCount, utLocations, coursesWithElev, courseAt, coursePlates, shellHeight, courseSummary, readingElevations, zoneCount, getReading, fmtElev, zKey, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.3.0';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -22,7 +23,7 @@ const S = {
   plateLabels: true, indLabels: true, showCZ: true, showDatums: true, filter: new Set(Object.keys(RESULTS)),
   search: '', resFilter: 'all', sort: { key: 'no', dir: 1 }, plateSearch: '',
   reportOpts: { photos: true, plates: false, provenOnly: false, plateLabels: true, datums: true },
-  mapCtl: null, vb: null, installEvt: null, saving: false
+  mapCtl: null, vb: null, roofSel: null, roofPt: null, roofAdd: false, roofVB: { fixed: null, floating: null }, installEvt: null, saving: false
 };
 
 const VIEWS = [
@@ -33,6 +34,7 @@ const VIEWS = [
   ['plates', 'Plates', 'M3 4h8v7H3zM13 4h8v7h-8zM3 13h8v7H3zM13 13h8v7h-8z'],
   ['api', 'API 653', 'M5 4h14v16H5zM9 8h6M9 12h6M9 16h3'],
   ['shell', 'Shell UT', 'M4 5h16v14H4zM4 10h16M4 15h16M9 5v14M15 5v14'],
+  ['roof', 'Roof', 'M3 11l9-7 9 7M5 10v9h14v-9M9 19v-5h6v5'],
   ['report', 'Report', 'M6 3h9l4 4v14H6zM14 3v5h5']
 ];
 
@@ -138,7 +140,7 @@ function renderNav() {
 function renderView() {
   const main = $('#main');
   main.className = 'main view-' + S.view;
-  const fn = { jobs: viewJobs, setup: viewSetup, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, shell: viewShell, report: viewReport }[S.view];
+  const fn = { jobs: viewJobs, setup: viewSetup, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, shell: viewShell, roof: viewRoof, report: viewReport }[S.view];
   main.innerHTML = fn();
   after[S.view]?.();
 }
@@ -354,7 +356,7 @@ function refreshBuilder() {
   }, 0);
 }
 function focusSel(el) {
-  const attrs = ['data-rowf', 'data-row', 'data-secf', 'data-sec', 'data-mpf', 'data-pl', 'data-shc', 'data-shut', 'data-course', 'data-z', 'data-zf', 'data-zone', 'data-bind', 'data-act'];
+  const attrs = ['data-rowf', 'data-row', 'data-secf', 'data-sec', 'data-mpf', 'data-pl', 'data-shc', 'data-shut', 'data-course', 'data-z', 'data-zf', 'data-zone', 'data-rut', 'data-pt', 'data-rpt', 'data-f', 'data-rpc', 'data-bind', 'data-act'];
   const parts = attrs.filter((k) => el.hasAttribute(k)).map((k) => `[${k}="${CSS.escape(el.getAttribute(k))}"]`);
   return parts.length ? el.tagName.toLowerCase() + parts.join('') : null;
 }
@@ -953,6 +955,145 @@ function refreshApi() {
     <div class="ind-list">${reps.map((i) => { const a = c.per.get(i.id); return `<button class="ind-row" data-act="open-ind" data-id="${i.id}"><span class="dot r-${i.result}"></span><b>${h(i.no)}</b><span>${h(a.plate?.label)}</span><span class="n">${t(a.rem)}</span><span class="st st-${a.status.replace(/\W+/g, '-')}">${h(a.status)}</span></button>`; }).join('') || '<p class="muted small">No repairs required.</p>'}</div>`;
 }
 
+/* ------------------------------------------------------------------- roof view */
+
+function viewRoof() {
+  return `<div class="page wide roof-page"><div class="page-head"><div><h1>Roof</h1><p class="muted">Fixed roof and floating roof details, layout and UT readings.</p></div>
+    <div class="acts"><button class="btn" data-act="exp-roof">Export CSV</button></div></div>
+    <div id="roofBody">${roofBodyHTML()}</div></div>`;
+}
+after.roof = () => attachRoofMaps();
+
+const rStatus = (st) => (st ? `<span class="st ${st === 'OK' ? 'st-OK' : 'st-below-MRT'}">${st}</span>` : '');
+
+function roofBodyHTML() {
+  const job = S.job;
+  const typeCard = `<section class="card"><div class="fgrid">${field('Roof type', 'roof.type', 'sel', { options: ROOF_TYPES })}
+    <p class="muted small">${hasFloating(job) && hasFixed(job) ? 'Both the fixed roof and the internal floating roof are shown below.' : job.roof.type === 'none' ? 'Choose the roof type to record roof details and UT readings.' : ''}</p></div></section>`;
+  return typeCard + (hasFixed(job) ? fixedCardHTML() : '') + (hasFloating(job) ? floatingCardHTML() : '');
+}
+
+function fixedCardHTML() {
+  const job = S.job, Fx = job.roof.fixed, U = u(job), pts = Fx.pts || [];
+  const vals = pts.map((p) => pointStatus(job, p)).filter((x) => x.t !== null);
+  const min = vals.length ? Math.min(...vals.map((x) => x.t)) : null;
+  const bad = vals.filter((x) => x.status === 'Below t-min').length;
+  const pin = (pt, k, kind, extra = '') => `<input data-rpt="${pt.id}" data-f="${k}" data-kind="${kind}" ${kind === 'text' ? '' : 'inputmode="decimal"'} value="${h(kind === 'text' || kind === 'num' ? pt[k] ?? '' : inVal(pt[k], kind, job))}" ${extra}>`;
+  return `<section class="card"><div class="sp-head"><h2>Fixed roof</h2><span class="muted small">${pts.length} UT point${pts.length === 1 ? '' : 's'} · min ${min !== null ? fmt(min, 't', job) : '—'}${bad ? ` · <b class="bad">${bad} below t-min</b>` : ''}</span></div>
+    <div class="roof-grid">
+      <div class="roof-left">
+        <div class="fgrid">${field('Roof', 'roof.fixed.kind', 'sel', { options: FIXED_TYPES })}${field('Support', 'roof.fixed.support', 'sel', { options: FIXED_SUPPORT })}
+          ${field('Slope / dome radius', 'roof.fixed.slope', 'text', { ph: 'e.g. 3/4 in 12, 1.0 D' })}${field('Nominal plate t', 'roof.fixed.tNom', 't')}
+          ${field('t-min', 'roof.fixed.tMin', 't', { hint: 'API 653 §4.2.1.2: average below 0.09 in over 100 in² — check your edition' })}<div></div>
+          ${field('Notes', 'roof.fixed.notes', 'area', { rows: 2, cls: 'span2' })}</div>
+        <h3>UT points</h3>
+        <div class="tblwrap"><table class="grid rpts"><thead><tr><th>Point</th><th>Angle (°)</th><th>From centre (${U.big})</th><th>Reading (${U.small})</th><th>Status</th><th></th></tr></thead><tbody>
+        ${pts.map((pt) => { const st = pointStatus(job, pt); return `<tr class="${S.roofPt === pt.id ? 'sel' : ''}${st.status === 'Below t-min' ? ' is-bad' : ''}"><td>${pin(pt, 'label', 'text', 'class="lbl"')}</td><td>${pin(pt, 'angle', 'num')}</td><td>${pin(pt, 'r', 'big')}</td><td>${pin(pt, 't', 't')}</td><td>${rStatus(st.status)}</td><td><button class="btn sm icon ghost danger" data-act="rpt-del" data-id="${pt.id}" title="Delete point">✕</button></td></tr>`; }).join('') || '<tr><td colspan="6" class="empty">No UT points yet.</td></tr>'}
+        </tbody></table></div>
+        <div class="acts"><button class="btn sm" data-act="rpt-add">+ Point</button><button class="btn sm" data-act="rpt-std">Standard points: edge &amp; mid-radius at each shell UT station + centre</button></div>
+      </div>
+      <div class="roof-right">
+        <div class="rp-tools"><button class="btn sm${S.roofAdd ? ' on' : ''}" data-act="rpt-mode">+ Point on plan</button><span class="spacer"></span><button class="btn sm" data-act="roof-fit" data-k="fixed">Fit</button></div>
+        <div class="mapbox rp-box" id="rpFixed" data-mode="${S.roofAdd ? 'add' : 'select'}">${fixedSVG(job, { sel: S.roofPt, stations: utLocations(job), columns: roofColumns(), fmtT: (t) => fmt(t, 't', job, false) })}</div>
+        <div class="mapstatus"><span id="rpFixedHover">${S.roofAdd ? 'Click the plan where the reading was taken' : 'Scroll to zoom · drag to pan · click a point to select it'}</span></div>
+      </div>
+    </div></section>`;
+}
+
+function roofColumns() {
+  return (S.job.features || []).filter((ft) => ft.type === 'column').map((ft) => { const p = itemFloor(S.layout, ft); return p ? { ...p, d: +ft.sizeA || 0 } : null; }).filter(Boolean);
+}
+
+function floatingCardHTML() {
+  const job = S.job, F = job.roof.floating, U = u(job), lay = floatingLayout(job);
+  const deck = lay.plates.filter((p) => p.kind !== 'annular'), pons = lay.plates.filter((p) => p.kind === 'annular');
+  const orphan = Object.keys(F.ut || {}).filter((k) => !lay.byKey.has(k) && Object.values(F.ut[k] || {}).some((v) => v != null)).length;
+  const all = lay.plates.map((p) => plateUT(job, p));
+  const bad = all.filter((x) => x.status === 'Below t-min').length, done = all.filter((x) => x.count === 5).length;
+  const sel = S.roofSel ? lay.byKey.get(S.roofSel) : null;
+  const rin = (p, k) => `<input data-rut="${p.key}" data-pt="${k}" data-kind="t" inputmode="decimal" value="${h(inVal(F.ut?.[p.key]?.[k], 't', job))}">`;
+  const row = (p) => { const x = plateUT(job, p), pc = F.pont?.[p.key] || {}; return `<tr class="${S.roofSel === p.key ? 'sel' : ''}${x.status === 'Below t-min' ? ' is-bad' : ''}"><td><button class="linkbtn" data-act="rsel" data-key="${p.key}">${h(p.label)}</button>${p.cut ? ' <small class="muted">cut</small>' : ''}</td>${PT5.map(([k]) => `<td>${rin(p, k)}</td>`).join('')}<td class="n"><b>${x.min != null ? fmt(x.min, 't', job, false) : '—'}</b></td><td class="n">${x.lossPct != null ? x.lossPct.toFixed(0) + '%' : '—'}</td><td>${rStatus(x.status)}</td>${p.kind === 'annular' ? `<td><select data-rpc="${p.key}" data-f="cond" data-kind="text">${PONT_COND.map((c) => `<option ${(pc.cond || '') === c ? 'selected' : ''} value="${c}">${c || '—'}</option>`).join('')}</select></td>` : '<td></td>'}</tr>`; };
+  let panel;
+  if (!sel) panel = `<p class="muted small">Click a deck plate or pontoon on the plan (or its name in the table) to enter its 5 UT readings.</p>`;
+  else {
+    const x = plateUT(job, sel), pont = sel.kind === 'annular', pc = F.pont?.[sel.key] || {};
+    const cell = (k) => `<label class="u5"><span>${PT5_SHORT[k]}</span><span class="ctl">${rin(sel, k)}</span></label>`;
+    const list = lay.plates, i = list.indexOf(sel);
+    panel = `<div class="ed-head"><div class="ed-title"><span>${pont ? 'Pontoon' : 'Deck plate'}</span><b>${h(sel.label)}</b></div><div class="acts"><button class="btn sm icon" data-act="rsel-nav" data-d="-1" ${i <= 0 ? 'disabled' : ''} title="Previous">‹</button><button class="btn sm icon" data-act="rsel-nav" data-d="1" ${i >= list.length - 1 ? 'disabled' : ''} title="Next">›</button><button class="btn sm icon ghost" data-act="rsel-close" title="Close">✕</button></div></div>
+      <p class="muted small">${pont ? 'Top = outer rim, bottom = inner rim, left = anticlockwise end.' : `${fmt(sel.bb.x1 - sel.bb.x0, 'big', job)} × ${fmt(sel.bb.y1 - sel.bb.y0, 'big', job)}${sel.cut ? ' · cut plate' : ''}`} Readings in ${U.small}.</p>
+      <div class="ut5">${cell('tl')}<i></i>${cell('tr')}<i></i>${cell('c')}<i></i>${cell('bl')}<i></i>${cell('br')}</div>
+      <div class="sum-grid three"><div><span>Min.</span><b>${x.min != null ? fmt(x.min, 't', job) : '—'}</b><small>${x.count}/5 readings</small></div><div><span>Loss</span><b>${x.lossPct != null ? x.lossPct.toFixed(0) + '%' : '—'}</b><small>${x.tNom ? 'vs ' + fmt(x.tNom, 't', job) : 'enter nominal'}</small></div><div><span>Status</span><b class="${x.status === 'OK' ? 'ok' : x.status ? 'bad' : ''}">${x.status || '—'}</b><small>${x.tMin ? 't-min ' + fmt(x.tMin, 't', job) : ''}</small></div></div>
+      ${pont ? `<div class="fgrid" style="margin-top:10px"><label class="fld"><span class="lbl">Pontoon condition</span><span class="ctl"><select data-rpc="${sel.key}" data-f="cond" data-kind="text">${PONT_COND.map((c) => `<option ${(pc.cond || '') === c ? 'selected' : ''} value="${c}">${c || '—'}</option>`).join('')}</select></span></label><label class="fld"><span class="lbl">Notes</span><span class="ctl"><input data-rpc="${sel.key}" data-f="notes" data-kind="text" value="${h(pc.notes || '')}"></span></label></div>` : ''}`;
+  }
+  return `<section class="card"><div class="sp-head"><h2>${job.roof.type === 'fixed-ifr' ? 'Internal floating roof' : 'External floating roof'}</h2><span class="muted small">${deck.length} deck plates · ${pons.length} pontoons · ${done}/${lay.plates.length} fully read${bad ? ` · <b class="bad">${bad} below t-min</b>` : ''}</span></div>
+    <div class="fgrid g4">
+      ${field('Roof', 'roof.floating.kind', 'sel', { options: FLOAT_TYPES })}${field('Rim gap (roof to shell)', 'roof.floating.rimGap', 'small')}
+      ${field('Pontoon width (radial)', 'roof.floating.pontW', 'big', { hint: '0 = no pontoon ring' })}${field('Number of pontoons', 'roof.floating.pontN', 'num', { ph: `${autoPontCount(job)} (suggested)` })}
+      ${field('First pontoon bulkhead at', 'roof.floating.pontStart', 'num', { unit: '°', ph: '0' })}${field('Deck plate width', 'roof.floating.plateW', 'big')}
+      ${field('Deck plate length', 'roof.floating.plateL', 'big')}${field('Deck plates run', 'roof.floating.orient', 'sel', { options: [['h', 'Left – right'], ['v', 'Top – bottom']] })}
+      ${field('Row stagger', 'roof.floating.stagger', 'sel', { options: [['0', 'None'], ['0.5', '½ plate'], ['0.3333333333', '⅓ plate'], ['0.25', '¼ plate']], attrs: 'data-num="1"' })}${field('Deck nominal t', 'roof.floating.deckNom', 't')}
+      ${field('Deck t-min', 'roof.floating.deckMin', 't')}${field('Pontoon nominal t', 'roof.floating.pontNom', 't')}
+      ${field('Pontoon t-min', 'roof.floating.pontMin', 't')}${field('Notes', 'roof.floating.notes', 'text', { cls: 'span2' })}
+    </div>
+    <p class="muted small">Roof diameter ${fmt(roofDiameter(job), 'big', job)} (shell less twice the rim gap). Deck plates are laid like the floor grid and cut at the pontoon ring. Each plate and pontoon has 5 UT readings: the four corners and the centre.</p>
+    ${orphan ? `<p class="callout warn">${orphan} plate${orphan > 1 ? 's' : ''} with readings no longer exist after a layout change. Change the layout back to see them, or re-enter the readings.</p>` : ''}
+    <div class="roof-grid fl">
+      <div class="roof-right">
+        <div class="rp-tools"><span class="legend-mini"><i class="d ok"></i>OK <i class="d bad"></i>below t-min <i class="d empty"></i>no reading</span><span class="spacer"></span><button class="btn sm" data-act="roof-fit" data-k="floating">Fit</button></div>
+        <div class="mapbox rp-box" id="rpFloat">${floatingSVG(job, lay, { sel: S.roofSel })}</div>
+        <div class="mapstatus"><span id="rpFloatHover">Scroll to zoom · drag to pan · click a plate</span></div>
+      </div>
+      <div class="roof-panel ed">${panel}</div>
+    </div>
+    <h3>Plate UT readings (${U.small})</h3>
+    <div class="tblwrap rd-wrap"><table class="grid rplates"><thead><tr><th>Plate</th>${PT5.map(([k, l]) => `<th>${l}</th>`).join('')}<th class="n">Min</th><th class="n">Loss</th><th>Status</th><th>Pontoon</th></tr></thead><tbody>
+      <tr class="crow"><td colspan="10"><b>Deck plates</b></td></tr>${deck.map(row).join('')}
+      ${pons.length ? `<tr class="crow"><td colspan="10"><b>Pontoons</b> <span class="muted small">TL/TR = outer rim, BL/BR = inner rim</span></td></tr>${pons.map(row).join('')}` : ''}
+    </tbody></table></div></section>`;
+}
+
+function refreshRoof() {
+  setTimeout(() => {
+    const c = $('#roofBody'); if (!c) return;
+    const a = document.activeElement, key = a && c.contains(a) ? focusSel(a) : null;
+    c.innerHTML = roofBodyHTML();
+    attachRoofMaps();
+    if (key) { const n = c.querySelector(key); if (n) { n.focus({ preventScroll: true }); try { n.select(); } catch { /* */ } } }
+  }, 0);
+}
+
+function attachRoofMaps() {
+  const mk = (id, k, onClick, onHover) => {
+    const box = $(id); if (!box) return;
+    const ctl = new MapController(box, { onClick, onHover, rerender: () => { S.roofVB[k] = null; refreshRoof(); } });
+    ctl.r = +box.querySelector('svg')?.dataset.r || 0; ctl.vb = S.roofVB[k]; ctl.afterRender();
+    const orig = ctl.setVB.bind(ctl); ctl.setVB = (vb) => { orig(vb); S.roofVB[k] = vb; };
+  };
+  mk('#rpFixed', 'fixed', roofFixedClick, (fp) => { const el = $('#rpFixedHover'); if (!el) return; if (!fp) { el.textContent = S.roofAdd ? 'Click the plan where the reading was taken' : 'Scroll to zoom · drag to pan · click a point to select it'; return; } const r = Math.hypot(fp.x, fp.y); el.innerHTML = r > S.job.tank.diameter / 2 ? 'Outside the roof' : `θ <b>${angleOf(fp.x, fp.y).toFixed(1)}°</b> · <b>${fmt(r, 'big', S.job)}</b> from centre`; });
+  mk('#rpFloat', 'floating', roofFloatClick, (fp) => { const el = $('#rpFloatHover'); if (!el) return; if (!fp) { el.textContent = 'Scroll to zoom · drag to pan · click a plate'; return; } const p = plateAt(floatingLayout(S.job), fp.x, fp.y); el.innerHTML = p ? `<b>${h(p.label)}</b> ${p.kind === 'annular' ? 'pontoon' : 'deck plate'}` : 'Rim gap / outside the roof'; });
+}
+
+function roofFixedClick(fp, hit) {
+  if (!fp) return;
+  if (hit.feature) { S.roofPt = hit.feature; refreshRoof(); setTimeout(() => $(`#roofBody input[data-rpt="${hit.feature}"][data-f="t"]`)?.focus(), 40); return; }
+  if (S.roofAdd) {
+    const r = Math.hypot(fp.x, fp.y), R = S.job.tank.diameter / 2;
+    if (r > R) { toast('That point is outside the roof.'); return; }
+    const st = S.job.units === 'metric' ? 10 : 25.4;
+    const pts = (S.job.roof.fixed.pts = S.job.roof.fixed.pts || []);
+    let n = 0; for (const p of pts) { const m = String(p.label || '').match(/^R(\d+)$/); if (m) n = Math.max(n, +m[1]); }
+    const pt = { id: uid(), label: 'R' + (n + 1), angle: Math.round(angleOf(fp.x, fp.y) * 2) / 2 % 360, r: Math.round(r / st) * st, t: null };
+    pts.push(pt); S.roofPt = pt.id; if (!hit.shift) S.roofAdd = false;
+    commit(); refreshRoof(); setTimeout(() => $(`#roofBody input[data-rpt="${pt.id}"][data-f="t"]`)?.focus(), 40); return;
+  }
+  S.roofPt = null; refreshRoof();
+}
+
+function roofFloatClick(fp, hit) {
+  S.roofSel = hit.plate || null; refreshRoof();
+  if (S.roofSel) setTimeout(() => $(`.roof-panel input[data-pt="tl"]`)?.focus(), 40);
+}
+
 /* ------------------------------------------------------------- shell UT view */
 
 function viewShell() {
@@ -1195,6 +1336,35 @@ document.addEventListener('click', async (e) => {
       const c = $('#nozzleCard'); if (c) { c.innerHTML = nozzleTableHTML(); refreshSetupPreview(); }
       return;
     }
+    case 'exp-roof': return download(fileBase(S.job) + '_roof-ut.csv', roofCSV(S.job), 'text/csv');
+    case 'rsel': S.roofSel = el.dataset.key; refreshRoof(); setTimeout(() => $(`.roof-panel input[data-pt="tl"]`)?.focus(), 40); return;
+    case 'rsel-close': S.roofSel = null; refreshRoof(); return;
+    case 'rsel-nav': {
+      const list = floatingLayout(S.job).plates, i = list.findIndex((p) => p.key === S.roofSel), nx = list[i + +el.dataset.d];
+      if (nx) { S.roofSel = nx.key; refreshRoof(); setTimeout(() => $(`.roof-panel input[data-pt="tl"]`)?.focus(), 40); } return;
+    }
+    case 'roof-fit': S.roofVB[el.dataset.k] = null; refreshRoof(); return;
+    case 'rpt-mode': S.roofAdd = !S.roofAdd; refreshRoof(); return;
+    case 'rpt-add': {
+      const pts = (S.job.roof.fixed.pts = S.job.roof.fixed.pts || []);
+      let n = 0; for (const p of pts) { const m = String(p.label || '').match(/^R(\d+)$/); if (m) n = Math.max(n, +m[1]); }
+      const pt = { id: uid(), label: 'R' + (n + 1), angle: null, r: null, t: null }; pts.push(pt); S.roofPt = pt.id;
+      commit(); refreshRoof(); setTimeout(() => $(`#roofBody input[data-rpt="${pt.id}"][data-f="angle"]`)?.focus(), 40); return;
+    }
+    case 'rpt-del': {
+      const Fx = S.job.roof.fixed, pt = (Fx.pts || []).find((x) => x.id === id); if (!pt) return;
+      if (pt.t != null && !(await askConfirm(`Delete point ${pt.label || ''} and its reading?`, { ok: 'Delete', danger: true }))) return;
+      Fx.pts = Fx.pts.filter((x) => x.id !== id); if (S.roofPt === id) S.roofPt = null; commit(); refreshRoof(); return;
+    }
+    case 'rpt-std': {
+      const D = +S.job.tank.diameter || 0; if (!(D > 0)) { toast('Enter the tank diameter first.'); return; }
+      const Fx = S.job.roof.fixed;
+      if ((Fx.pts || []).length && !(await askConfirm('Replace the current fixed roof UT points with the standard set? Readings on the current points will be removed.', { ok: 'Replace', danger: true }))) return;
+      const R = D / 2, edge = Math.max(R * 0.5, R - (S.job.units === 'metric' ? 600 : 609.6));
+      Fx.pts = [{ id: uid(), label: 'CTR', angle: 0, r: 0, t: null }];
+      for (const l of utLocations(S.job)) { Fx.pts.push({ id: uid(), label: `${l.label}-E`, angle: l.angle, r: Math.round(edge), t: null }); Fx.pts.push({ id: uid(), label: `${l.label}-M`, angle: l.angle, r: Math.round(R / 2), t: null }); }
+      commit(); refreshRoof(); return;
+    }
     case 'exp-shell': return download(fileBase(S.job) + '_shell-ut.csv', shellCSV(S.job), 'text/csv');
     case 'exp-shell-svg': return download(fileBase(S.job) + '_shell-rollout.svg', rolloutSVG(S.job, { print: true }).replace(/(<svg[^>]*>)/, '$1' + SHELL_SVG_STYLE), 'image/svg+xml');
     case 'course-add': {
@@ -1301,8 +1471,30 @@ document.addEventListener('change', async (e) => {
     if (S.view === 'setup') { if (structural) renderView(); else if (S.job.layout.mode !== 'grid' && path.startsWith('layout.')) refreshBuilder(); else refreshSetupPreview(); renderHeader(); }
     else if (S.view === 'api') refreshApi();
     else if (S.view === 'shell') refreshShell();
+    else if (S.view === 'roof') refreshRoof();
     if (path === 'units') renderAll();
     return;
+  }
+  if (el.matches('[data-rut]')) {
+    const F = S.job.roof.floating; F.ut = F.ut || {};
+    const m = (F.ut[el.dataset.rut] = F.ut[el.dataset.rut] || {}), v = readInput(el);
+    if (v !== null && v < 0) { toast('Readings can’t be negative.'); return; }
+    if (v === null) delete m[el.dataset.pt]; else m[el.dataset.pt] = v;
+    commit(); refreshRoof(); return;
+  }
+  if (el.matches('[data-rpc]')) {
+    const F = S.job.roof.floating; F.pont = F.pont || {};
+    const m = (F.pont[el.dataset.rpc] = F.pont[el.dataset.rpc] || {}), v = readInput(el);
+    if (v === null || v === '') delete m[el.dataset.f]; else m[el.dataset.f] = v;
+    commit(); refreshRoof(); return;
+  }
+  if (el.matches('[data-rpt]')) {
+    const pt = (S.job.roof.fixed.pts || []).find((x) => x.id === el.dataset.rpt); if (!pt) return;
+    const k = el.dataset.f; let v = readInput(el);
+    if (k !== 'label' && v !== null && v < 0) { toast('Values can’t be negative.'); return; }
+    if (k === 'angle' && v !== null) v = ((v % 360) + 360) % 360;
+    if (k === 'r' && v !== null && v > (+S.job.tank.diameter || 0) / 2) { toast('That is further from the centre than the shell.'); return; }
+    pt[k] = v; commit(); refreshRoof(); return;
   }
   if (el.matches('[data-shc]')) {
     const c = S.job.shell?.courses?.find((x) => x.id === el.dataset.course); if (!c) return;

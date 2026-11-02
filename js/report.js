@@ -2,6 +2,7 @@
 import { fmt, fmtRate, u } from './units.js';
 import { RESULTS, RESULT_SHORT, nozzleUT, NZ_CONN_SHORT, UT_CLOCK } from './calc.js';
 import { renderMapSVG, COLORS } from './map.js';
+import { ROOF_TYPES, hasFixed, hasFloating, floatingLayout, floatingSVG, fixedSVG, plateUT, pointStatus, PT5, PT5_SHORT, roofDiameter } from './roof.js';
 import { rolloutSVG, utLocations, courseSummary, coursesWithElev, courseAt, readingElevations, getReading, fmtElev, coursePlates } from './shell.js';
 import { itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
 
@@ -169,6 +170,36 @@ export function buildReport(job, layout, calc, company, photos, opts) {
     <section class="pb"><h2>Shell UT readings</h2>
       <table class="grid small readings-rp"><thead><tr><th>Elevation</th>${locs.map((l) => `<th class="n">${l.label}<br>${l.angle.toFixed(0)}°</th>`).join('')}<th class="n">Min</th></tr></thead><tbody>${rows.join('') || `<tr><td colspan="${locs.length + 2}">No readings recorded.</td></tr>`}</tbody></table>
       <p class="note">Elevation above the bottom of the shell. Readings below the course t-min in bold. Thickness in ${U.small}.</p></section>`;
+  })()}
+  ${(() => {
+    if (!job.roof || job.roof.type === 'none') return '';
+    const out = [`<section class="pb"><h2>Roof</h2><p><b>${h((ROOF_TYPES.find(([k]) => k === job.roof.type) || [])[1] || '')}</b></p>`];
+    if (hasFixed(job)) {
+      const Fx = job.roof.fixed, pts = Fx.pts || [];
+      const vals = pts.map((p) => pointStatus(job, p)).filter((x) => x.t !== null);
+      out.push(`<h3 class="rp-h3">Fixed roof</h3><div class="cols">${kv([['Roof', h(Fx.kind)], ['Support', h(Fx.support)], ['Slope / radius', h(Fx.slope)]])}${kv([['Nominal plate t', t(Fx.tNom)], ['t-min', t(Fx.tMin)], ['Minimum reading', vals.length ? t(Math.min(...vals.map((x) => x.t))) : '—']])}</div>
+        ${Fx.notes ? `<p class="note">${h(Fx.notes)}</p>` : ''}
+        <div class="roof-print">${fixedSVG(job, { stations: utLocations(job), fmtT: (v) => fmt(v, 't', job, false) })}</div>
+        <table class="grid small"><thead><tr><th>Point</th><th class="n">Angle</th><th class="n">From centre</th><th class="n">Reading</th><th class="n">Loss</th><th>Status</th></tr></thead><tbody>
+        ${pts.map((pt) => { const st = pointStatus(job, pt); return `<tr class="${st.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${h(pt.label)}</b></td><td class="n">${pt.angle != null ? (+pt.angle).toFixed(1) + '°' : '—'}</td><td class="n">${fmt(pt.r, 'big', job)}</td><td class="n">${fmt(pt.t, 't', job, false)}</td><td class="n">${st.lossPct != null ? st.lossPct.toFixed(0) + '%' : '—'}</td><td>${st.status === 'Below t-min' ? '<b>Below t-min</b>' : h(st.status)}</td></tr>`; }).join('') || '<tr><td colspan="6">No readings.</td></tr>'}
+        </tbody></table><p class="note">Thickness in ${U.small}. Angles clockwise from 0° ${h(I.zeroRef || '')}.</p>`);
+    }
+    if (hasFloating(job)) {
+      const F = job.roof.floating, lay = floatingLayout(job);
+      const all = lay.plates.map((p) => ({ p, s: plateUT(job, p) }));
+      const vals = all.filter((x) => x.s.min !== null);
+      out.push(`${hasFixed(job) ? '</section><section class="pb"><h2>Roof (continued)</h2>' : ''}<h3 class="rp-h3">${job.roof.type === 'fixed-ifr' ? 'Internal' : 'External'} floating roof</h3>
+        <div class="cols">${kv([['Roof', h(F.kind)], ['Roof diameter', fmt(roofDiameter(job), 'big', job)], ['Rim gap', fmt(F.rimGap, 'small', job)], ['Pontoons', `${lay.nPont} × ${fmt(F.pontW, 'big', job)} wide`]])}${kv([['Deck plates', `${lay.plates.filter((p) => p.kind !== 'annular').length} (${fmt(F.plateW, 'big', job, false)} × ${fmt(F.plateL, 'big', job)})`], ['Deck nominal / t-min', `${t(F.deckNom)} / ${t(F.deckMin)}`], ['Pontoon nominal / t-min', `${t(F.pontNom)} / ${t(F.pontMin)}`], ['Minimum reading', vals.length ? t(Math.min(...vals.map((x) => x.s.min))) : '—']])}</div>
+        ${F.notes ? `<p class="note">${h(F.notes)}</p>` : ''}
+        <div class="roof-print">${floatingSVG(job, lay)}</div>
+        <p class="note">Each deck plate and pontoon has 5 UT readings (four corners and centre). ● OK ● below t-min ○ not read.</p></section>
+        <section class="pb"><h2>Floating roof UT readings</h2>
+        <table class="grid small"><thead><tr><th>Plate</th>${PT5.map(([k]) => `<th class="n">${PT5_SHORT[k]}</th>`).join('')}<th class="n">Min</th><th class="n">Loss</th><th>Status</th><th>Pontoon</th></tr></thead><tbody>
+        ${all.map(({ p, s }) => { const m = F.ut?.[p.key] || {}, pc = F.pont?.[p.key] || {}; return `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${h(p.label)}</b>${p.kind === 'annular' ? ' <small>pontoon</small>' : ''}</td>${PT5.map(([k]) => { const v = m[k]; return `<td class="n">${v == null ? '—' : s.tMin && v < s.tMin - 1e-9 ? '<b class="bad">' + fmt(v, 't', job, false) + '</b>' : fmt(v, 't', job, false)}</td>`; }).join('')}<td class="n"><b>${s.min != null ? fmt(s.min, 't', job, false) : '—'}</b></td><td class="n">${s.lossPct != null ? s.lossPct.toFixed(0) + '%' : '—'}</td><td>${s.status === 'Below t-min' ? '<b>Below t-min</b>' : h(s.status)}</td><td>${h([pc.cond, pc.notes].filter(Boolean).join('; '))}</td></tr>`; }).join('')}
+        </tbody></table><p class="note">Thickness in ${U.small}. Pontoons: TL/TR at the outer rim, BL/BR at the inner rim.</p>`);
+    }
+    out.push('</section>');
+    return out.join('');
   })()}
   ${platesBlock}
   ${photoBlock}

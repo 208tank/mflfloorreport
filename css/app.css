@@ -352,6 +352,52 @@ button.sug { border: 1px dashed var(--accent); background: none; color: var(--ac
 .report .ro-print svg { width: 100%; height: auto; display: block; }
 @media (max-width: 1100px) { .shell-grid { grid-template-columns: 1fr; } }
 
+/* roof */
+.roof-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.roof-grid.fl { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); margin: 10px 0 6px; }
+.roof-right { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--map-bg); display: flex; flex-direction: column; }
+.rp-tools { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.rp-box { position: relative; height: 520px; }
+.roof-right .mapstatus { border-top: 1px solid var(--line); }
+.roof-panel { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.fgrid.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ut5 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 8px; margin: 10px 0; padding: 12px; border: 1.5px solid var(--ink2); border-radius: 4px; background: var(--panel2); }
+.ut5 i { display: block; }
+.ut5 .u5 { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted); font-weight: 600; }
+.ut5 input { text-align: right; }
+.grid.rpts input, .grid.rplates input, .grid.rplates select { min-height: 28px; padding: 3px 6px; font-size: 13px; }
+.grid.rpts input { width: 84px; text-align: right; } .grid.rpts input.lbl { width: 80px; text-align: left; font-weight: 600; }
+.grid.rplates input { width: 66px; text-align: right; } .grid.rplates td { padding: 3px 6px; }
+.grid tr.sel { background: var(--accent-soft); }
+.grid.rplates tr.crow td { background: var(--accent-soft); }
+.linkbtn { border: 0; background: none; color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; padding: 0; }
+.legend-mini { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+.legend-mini .d { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1.5px solid var(--accent); }
+.legend-mini .d.ok { background: var(--accent); } .legend-mini .d.bad { background: var(--bad); border-color: var(--bad); } .legend-mini .d.empty { background: transparent; border-color: var(--muted); }
+b.bad { color: var(--bad); }
+.roofplan text { font-family: var(--font); }
+.roofplan .rf-shell { fill: none; stroke: var(--ink); }
+.roofplan .rf-roof { fill: var(--plate); stroke: var(--ink); }
+.roofplan .rf-deck { fill: var(--plate); stroke: var(--plate-line); cursor: pointer; }
+.roofplan .rf-pont { fill: var(--plate-ann); stroke: var(--plate-line); cursor: pointer; }
+.roofplan .rf-deck.bad, .roofplan .rf-pont.bad { fill: var(--bad-soft); }
+.roofplan .sel { fill: var(--accent-soft); stroke: var(--accent); }
+.roofplan .rf-rim { fill: none; stroke: var(--ink2); pointer-events: none; } .roofplan .rf-rim.in { stroke: var(--plate-line); }
+.roofplan .rf-ticks line { stroke: var(--ink2); } .roofplan .rf-ticks text { fill: var(--muted); } .roofplan .rf-ticks text.zero { fill: var(--ink); font-weight: 700; }
+.roofplan .rf-labels text { fill: var(--muted); pointer-events: none; }
+.roofplan .rf-pt { stroke: var(--accent); cursor: pointer; } .roofplan .rf-pt.ok { fill: var(--accent); } .roofplan .rf-pt.bad { fill: var(--bad); stroke: var(--bad); } .roofplan .rf-pt.empty { fill: var(--map-bg); stroke: var(--muted); }
+.roofplan .rf-stl { stroke: var(--accent); fill: none; } .roofplan .rf-stt { fill: var(--accent); font-weight: 700; }
+.roofplan .rf-ctr { stroke: var(--ink2); } .roofplan .rf-col { fill: var(--ink2); }
+.roofplan .rf-fp { cursor: pointer; } .roofplan .rf-fp circle { fill: var(--map-bg); stroke: var(--accent); }
+.roofplan .rf-fp.ok circle { fill: var(--accent); } .roofplan .rf-fp.bad circle { fill: var(--bad); stroke: var(--bad); } .roofplan .rf-fp.empty circle { stroke: var(--muted); }
+.roofplan .rf-fp.sel circle { stroke: #0ea5e9; stroke-width: calc(var(--s) * .6px); }
+.roofplan .rf-fl { fill: var(--ink); font-weight: 700; } .roofplan .rf-fv { fill: var(--ink2); } .roofplan .rf-fp.bad .rf-fv { fill: var(--bad); font-weight: 700; }
+.roofplan .rf-empty { fill: var(--muted); }
+.report .roofplan { --map-bg: #fff; --plate: #fff; --plate-ann: #f1f3f6; --plate-line: #6b7480; --ink: #1d232b; --ink2: #3a434e; --muted: #5b6470; --accent: #0f766e; --accent-soft: #fff; --bad: #b91c1c; --bad-soft: #fde8e8; }
+.report .roof-print svg { width: 100%; max-height: 6.4in; height: auto; display: block; margin: 0 auto; }
+.report .rp-h3 { margin: 10px 0 6px; color: #1d232b; text-transform: none; letter-spacing: 0; font-size: 13px; }
+@media (max-width: 1100px) { .roof-grid, .roof-grid.fl { grid-template-columns: 1fr; } .fgrid.g4 { grid-template-columns: 1fr 1fr; } }
+
 /* datums */
 .floormap .datums { pointer-events: none; }
 .floormap .datum { fill: var(--accent); opacity: .5; stroke: none; }

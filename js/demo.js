@@ -1,6 +1,7 @@
 // Demo job so the app can be tried without field data.
 import { newJob, uid } from './model.js';
-import { defaultZones } from './shell.js';
+import { defaultZones, utLocations } from './shell.js';
+import { defaultRoof, floatingLayout, PT5 } from './roof.js';
 import { buildLayout, plateAt, toLocal, polar } from './geometry.js';
 
 const IN = 25.4, FT = 304.8;
@@ -73,6 +74,23 @@ export function makeDemo() {
       job.shell.rd[key][(Math.round(z * 10) / 10).toFixed(1)] = Math.round((nom[ci] - loss) * 1000) / 1000 * IN;
     }
   }
+  // roof: cone roof on columns with an internal steel pontoon floating roof
+  job.roof = defaultRoof('imperial');
+  job.roof.type = 'fixed-ifr';
+  Object.assign(job.roof.fixed, { kind: 'Cone roof', support: 'Column supported', slope: '3/4 in 12', tNom: 0.1875 * IN });
+  const R = 60 * FT;
+  job.roof.fixed.pts = [{ id: uid(), label: 'CTR', angle: 0, r: 0, t: 0.181 * IN }];
+  for (const l of utLocations(job)) {
+    job.roof.fixed.pts.push({ id: uid(), label: `${l.label}-E`, angle: l.angle, r: R - 2 * FT, t: Math.round((0.1875 - 0.01 - rnd() * 0.03 - (l.angle === 135 ? 0.085 : 0)) * 1000) / 1000 * IN });
+    job.roof.fixed.pts.push({ id: uid(), label: `${l.label}-M`, angle: l.angle, r: R / 2, t: Math.round((0.1875 - 0.004 - rnd() * 0.012) * 1000) / 1000 * IN });
+  }
+  Object.assign(job.roof.floating, { kind: 'Internal – steel pontoon', rimGap: 8 * IN, pontW: 5 * FT, pontN: 32, plateW: 6 * FT, plateL: 20 * FT, deckNom: 0.1875 * IN, pontNom: 0.1875 * IN });
+  const rl = floatingLayout(job);
+  rl.plates.forEach((p, i) => {
+    const m = (job.roof.floating.ut[p.key] = {});
+    for (const [k] of PT5) m[k] = Math.round((0.1875 - 0.003 - rnd() * 0.014 - (i === 23 && k === 'c' ? 0.1 : 0)) * 1000) / 1000 * IN;
+    if (p.kind === 'annular') job.roof.floating.pont[p.key] = { cond: p.label === 'P7' ? 'Liquid present' : 'Dry' };
+  });
   const sump = layout.plates.find((p) => p.key === job.features[0].plate);
   if (sump) job.plates[sump.key] = { scan: 'partial', notes: 'Around sump not scannable' };
   const p2 = at(18, 112).plate; job.plates[p2] = { ...(job.plates[p2] || {}), scan: 'partial', notes: 'Patch plate' };

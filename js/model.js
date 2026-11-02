@@ -2,6 +2,7 @@
 import { defaultLayout, buildLayout, toFloor, toLocal } from './geometry.js';
 import { defaultCalc } from './calc.js';
 import { defaultShell, migrateShell } from './shell.js';
+import { defaultRoof, migrateRoof } from './roof.js';
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
@@ -14,7 +15,7 @@ export function newJob(units = 'imperial') {
     layout: units === 'metric' ? { ...defaultLayout(), plateW: 2400, plateL: 9000, annW: 600 } : defaultLayout(),
     equip: {},
     calc: units === 'metric' ? { ...defaultCalc(), czDist: 75 } : defaultCalc(),
-    plates: {}, indications: [], features: [], nozzles: [], shell: defaultShell(units)
+    plates: {}, indications: [], features: [], nozzles: [], shell: defaultShell(units), roof: defaultRoof(units)
   };
 }
 
@@ -29,7 +30,8 @@ export function migrate(job) {
     equip: { ...(job.equip || {}) },
     calc: { ...base.calc, ...(job.calc || {}) },
     plates: job.plates || {}, indications: job.indications || [], features: job.features || [], nozzles: job.nozzles || [],
-    shell: migrateShell(job.shell, job.units || 'imperial')
+    shell: migrateShell(job.shell, job.units || 'imperial'),
+    roof: migrateRoof(job.roof, job.units || 'imperial')
   };
   // schema 2: X/Y on shell-cut plates are measured from the plate edges, not the seam/shell point.
   // Convert older jobs so their indications stay where they were on the floor.
