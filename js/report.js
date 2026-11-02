@@ -186,17 +186,18 @@ export function buildReport(job, layout, calc, company, photos, opts) {
     }
     if (hasFloating(job)) {
       const F = job.roof.floating, lay = floatingLayout(job);
-      const all = lay.plates.map((p) => ({ p, s: plateUT(job, p) }));
+      const all = lay.plates.filter((p) => p.kind !== 'annular').map((p) => ({ p, s: plateUT(job, p) })), pons = lay.plates.filter((p) => p.kind === 'annular');
       const vals = all.filter((x) => x.s.min !== null);
       out.push(`${hasFixed(job) ? '</section><section class="pb"><h2>Roof (continued)</h2>' : ''}<h3 class="rp-h3">${job.roof.type === 'fixed-ifr' ? 'Internal' : 'External'} floating roof</h3>
-        <div class="cols">${kv([['Roof', h(F.kind)], ['Roof diameter', fmt(roofDiameter(job), 'big', job)], ['Rim gap', fmt(F.rimGap, 'small', job)], ['Pontoons', `${lay.nPont} × ${fmt(F.pontW, 'big', job)} wide`]])}${kv([['Deck plates', `${lay.plates.filter((p) => p.kind !== 'annular').length} (${fmt(F.plateW, 'big', job, false)} × ${fmt(F.plateL, 'big', job)})`], ['Deck nominal / t-min', `${t(F.deckNom)} / ${t(F.deckMin)}`], ['Pontoon nominal / t-min', `${t(F.pontNom)} / ${t(F.pontMin)}`], ['Minimum reading', vals.length ? t(Math.min(...vals.map((x) => x.s.min))) : '—']])}</div>
+        <div class="cols">${kv([['Roof', h(F.kind)], ['Roof diameter', fmt(roofDiameter(job), 'big', job)], ['Rim gap', fmt(F.rimGap, 'small', job)], ['Pontoons', `${lay.nPont} × ${fmt(F.pontW, 'big', job)} wide`]])}${kv([['Deck plates', `${lay.plates.filter((p) => p.kind !== 'annular').length} (${fmt(F.plateW, 'big', job, false)} × ${fmt(F.plateL, 'big', job)})`], ['Deck nominal / t-min', `${t(F.deckNom)} / ${t(F.deckMin)}`], ['Pontoons with liquid / leaking', String(pons.filter((p) => ['Liquid present', 'Leaking'].includes(F.pont?.[p.key]?.cond)).length)], ['Minimum reading', vals.length ? t(Math.min(...vals.map((x) => x.s.min))) : '—']])}</div>
         ${F.notes ? `<p class="note">${h(F.notes)}</p>` : ''}
         <div class="roof-print">${floatingSVG(job, lay)}</div>
-        <p class="note">Each deck plate and pontoon has 5 UT readings (four corners and centre). ● OK ● below t-min ○ not read.</p></section>
-        <section class="pb"><h2>Floating roof UT readings</h2>
-        <table class="grid small"><thead><tr><th>Plate</th>${PT5.map(([k]) => `<th class="n">${PT5_SHORT[k]}</th>`).join('')}<th class="n">Min</th><th class="n">Loss</th><th>Status</th><th>Pontoon</th></tr></thead><tbody>
-        ${all.map(({ p, s }) => { const m = F.ut?.[p.key] || {}, pc = F.pont?.[p.key] || {}; return `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${h(p.label)}</b>${p.kind === 'annular' ? ' <small>pontoon</small>' : ''}</td>${PT5.map(([k]) => { const v = m[k]; return `<td class="n">${v == null ? '—' : s.tMin && v < s.tMin - 1e-9 ? '<b class="bad">' + fmt(v, 't', job, false) + '</b>' : fmt(v, 't', job, false)}</td>`; }).join('')}<td class="n"><b>${s.min != null ? fmt(s.min, 't', job, false) : '—'}</b></td><td class="n">${s.lossPct != null ? s.lossPct.toFixed(0) + '%' : '—'}</td><td>${s.status === 'Below t-min' ? '<b>Below t-min</b>' : h(s.status)}</td><td>${h([pc.cond, pc.notes].filter(Boolean).join('; '))}</td></tr>`; }).join('')}
-        </tbody></table><p class="note">Thickness in ${U.small}. Pontoons: TL/TR at the outer rim, BL/BR at the inner rim.</p>`);
+        <p class="note">Each deck plate has 5 UT readings (four corners and centre): ● OK ● below t-min ○ not read. Shaded pontoons have liquid present or are leaking.</p></section>
+        <section class="pb"><h2>Floating roof deck UT readings</h2>
+        <table class="grid small"><thead><tr><th>Plate</th>${PT5.map(([k]) => `<th class="n">${PT5_SHORT[k]}</th>`).join('')}<th class="n">Min</th><th class="n">Loss</th><th>Status</th></tr></thead><tbody>
+        ${all.map(({ p, s }) => { const m = F.ut?.[p.key] || {}; return `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${h(p.label)}</b>${p.cut ? ' <small>cut</small>' : ''}</td>${PT5.map(([k]) => { const v = m[k]; return `<td class="n">${v == null ? '—' : s.tMin && v < s.tMin - 1e-9 ? '<b class="bad">' + fmt(v, 't', job, false) + '</b>' : fmt(v, 't', job, false)}</td>`; }).join('')}<td class="n"><b>${s.min != null ? fmt(s.min, 't', job, false) : '—'}</b></td><td class="n">${s.lossPct != null ? s.lossPct.toFixed(0) + '%' : '—'}</td><td>${s.status === 'Below t-min' ? '<b>Below t-min</b>' : h(s.status)}</td></tr>`; }).join('')}
+        </tbody></table><p class="note">Thickness in ${U.small}. TL / TR / C / BL / BR = top-left, top-right, centre, bottom-left, bottom-right of each plate as drawn.</p>
+        ${pons.length ? `<h3 class="rp-h3">Pontoons</h3><table class="grid small"><thead><tr><th>Pontoon</th><th>Condition</th><th>Notes</th></tr></thead><tbody>${pons.map((p) => { const pc = F.pont?.[p.key] || {}; return `<tr class="${['Liquid present', 'Leaking'].includes(pc.cond) ? 'is-bad' : ''}"><td><b>${h(p.label)}</b></td><td>${h(pc.cond || '—')}</td><td>${h(pc.notes)}</td></tr>`; }).join('')}</tbody></table>` : ''}`);
     }
     out.push('</section>');
     return out.join('');

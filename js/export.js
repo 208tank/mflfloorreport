@@ -111,10 +111,16 @@ export function roofCSV(job) {
   if (hasFloating(job)) {
     const F = job.roof.floating, lay = floatingLayout(job);
     rows.push([`Floating roof (${F.kind})`]);
-    rows.push(['Plate', 'Type', ...PT5.map(([, l]) => `${l} (${U.small})`), `Min (${U.small})`, `Nominal (${U.small})`, `t-min (${U.small})`, 'Wall loss (%)', 'Status', 'Pontoon condition', 'Notes']);
-    for (const p of lay.plates) {
-      const s = plateUT(job, p), m = F.ut?.[p.key] || {}, pc = F.pont?.[p.key] || {};
-      rows.push([p.label, p.kind === 'annular' ? 'Pontoon' : p.cut ? 'Deck (cut)' : 'Deck', ...PT5.map(([k]) => t(m[k])), t(s.min), t(s.tNom), t(s.tMin), r(s.lossPct, 1), s.status, pc.cond ?? '', pc.notes ?? '']);
+    rows.push(['Deck plate', 'Type', ...PT5.map(([, l]) => `${l} (${U.small})`), `Min (${U.small})`, `Nominal (${U.small})`, `t-min (${U.small})`, 'Wall loss (%)', 'Status']);
+    for (const p of lay.plates.filter((q) => q.kind !== 'annular')) {
+      const s = plateUT(job, p), m = F.ut?.[p.key] || {};
+      rows.push([p.label, p.cut ? 'Deck (cut)' : 'Deck', ...PT5.map(([k]) => t(m[k])), t(s.min), t(s.tNom), t(s.tMin), r(s.lossPct, 1), s.status]);
+    }
+    const pons = lay.plates.filter((q) => q.kind === 'annular');
+    if (pons.length) {
+      rows.push([]);
+      rows.push(['Pontoon', 'Condition', 'Notes']);
+      for (const p of pons) { const pc = F.pont?.[p.key] || {}; rows.push([p.label, pc.cond ?? '', pc.notes ?? '']); }
     }
   }
   if (!rows.length) rows.push(['No roof recorded']);

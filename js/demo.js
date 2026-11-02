@@ -84,12 +84,12 @@ export function makeDemo() {
     job.roof.fixed.pts.push({ id: uid(), label: `${l.label}-E`, angle: l.angle, r: R - 2 * FT, t: Math.round((0.1875 - 0.01 - rnd() * 0.03 - (l.angle === 135 ? 0.085 : 0)) * 1000) / 1000 * IN });
     job.roof.fixed.pts.push({ id: uid(), label: `${l.label}-M`, angle: l.angle, r: R / 2, t: Math.round((0.1875 - 0.004 - rnd() * 0.012) * 1000) / 1000 * IN });
   }
-  Object.assign(job.roof.floating, { kind: 'Internal – steel pontoon', rimGap: 8 * IN, pontW: 5 * FT, pontN: 32, plateW: 6 * FT, plateL: 20 * FT, deckNom: 0.1875 * IN, pontNom: 0.1875 * IN });
+  Object.assign(job.roof.floating, { kind: 'Internal – steel pontoon', rimGap: 8 * IN, pontW: 5 * FT, pontN: 32, plateW: 6 * FT, plateL: 20 * FT, deckNom: 0.1875 * IN });
   const rl = floatingLayout(job);
   rl.plates.forEach((p, i) => {
+    if (p.kind === 'annular') { job.roof.floating.pont[p.key] = { cond: p.label === 'P7' ? 'Liquid present' : 'Dry' }; return; }
     const m = (job.roof.floating.ut[p.key] = {});
     for (const [k] of PT5) m[k] = Math.round((0.1875 - 0.003 - rnd() * 0.014 - (i === 23 && k === 'c' ? 0.1 : 0)) * 1000) / 1000 * IN;
-    if (p.kind === 'annular') job.roof.floating.pont[p.key] = { cond: p.label === 'P7' ? 'Liquid present' : 'Dry' };
   });
   const sump = layout.plates.find((p) => p.key === job.features[0].plate);
   if (sump) job.plates[sump.key] = { scan: 'partial', notes: 'Around sump not scannable' };

@@ -12,7 +12,7 @@ import { makeDemo } from './demo.js';
 import { defaultShell, defaultZones, autoLocCount, autoPlateCount, utLocations, coursesWithElev, courseAt, coursePlates, shellHeight, courseSummary, readingElevations, zoneCount, getReading, fmtElev, zKey, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '2.3.0';
+const APP_VERSION = '2.3.1';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1007,49 +1007,57 @@ function roofColumns() {
 function floatingCardHTML() {
   const job = S.job, F = job.roof.floating, U = u(job), lay = floatingLayout(job);
   const deck = lay.plates.filter((p) => p.kind !== 'annular'), pons = lay.plates.filter((p) => p.kind === 'annular');
-  const orphan = Object.keys(F.ut || {}).filter((k) => !lay.byKey.has(k) && Object.values(F.ut[k] || {}).some((v) => v != null)).length;
-  const all = lay.plates.map((p) => plateUT(job, p));
+  const orphan = Object.keys(F.ut || {}).filter((k) => !lay.byKey.has(k) && !k.startsWith('an') && Object.values(F.ut[k] || {}).some((v) => v != null)).length;
+  const all = deck.map((p) => plateUT(job, p));
   const bad = all.filter((x) => x.status === 'Below t-min').length, done = all.filter((x) => x.count === 5).length;
+  const pBad = pons.filter((p) => ['Liquid present', 'Leaking'].includes(F.pont?.[p.key]?.cond)).length;
   const sel = S.roofSel ? lay.byKey.get(S.roofSel) : null;
+  const condSel = (key, cond) => `<select data-rpc="${key}" data-f="cond" data-kind="text">${PONT_COND.map((c) => `<option ${(cond || '') === c ? 'selected' : ''} value="${c}">${c || '—'}</option>`).join('')}</select>`;
   const rin = (p, k) => `<input data-rut="${p.key}" data-pt="${k}" data-kind="t" inputmode="decimal" value="${h(inVal(F.ut?.[p.key]?.[k], 't', job))}">`;
-  const row = (p) => { const x = plateUT(job, p), pc = F.pont?.[p.key] || {}; return `<tr class="${S.roofSel === p.key ? 'sel' : ''}${x.status === 'Below t-min' ? ' is-bad' : ''}"><td><button class="linkbtn" data-act="rsel" data-key="${p.key}">${h(p.label)}</button>${p.cut ? ' <small class="muted">cut</small>' : ''}</td>${PT5.map(([k]) => `<td>${rin(p, k)}</td>`).join('')}<td class="n"><b>${x.min != null ? fmt(x.min, 't', job, false) : '—'}</b></td><td class="n">${x.lossPct != null ? x.lossPct.toFixed(0) + '%' : '—'}</td><td>${rStatus(x.status)}</td>${p.kind === 'annular' ? `<td><select data-rpc="${p.key}" data-f="cond" data-kind="text">${PONT_COND.map((c) => `<option ${(pc.cond || '') === c ? 'selected' : ''} value="${c}">${c || '—'}</option>`).join('')}</select></td>` : '<td></td>'}</tr>`; };
+  const row = (p) => { const x = plateUT(job, p); return `<tr class="${S.roofSel === p.key ? 'sel' : ''}${x.status === 'Below t-min' ? ' is-bad' : ''}"><td><button class="linkbtn" data-act="rsel" data-key="${p.key}">${h(p.label)}</button>${p.cut ? ' <small class="muted">cut</small>' : ''}</td>${PT5.map(([k]) => `<td>${rin(p, k)}</td>`).join('')}<td class="n"><b>${x.min != null ? fmt(x.min, 't', job, false) : '—'}</b></td><td class="n">${x.lossPct != null ? x.lossPct.toFixed(0) + '%' : '—'}</td><td>${rStatus(x.status)}</td></tr>`; };
+  const prow = (p) => { const pc = F.pont?.[p.key] || {}; return `<tr class="${S.roofSel === p.key ? 'sel' : ''}${['Liquid present', 'Leaking'].includes(pc.cond) ? ' is-bad' : ''}"><td><button class="linkbtn" data-act="rsel" data-key="${p.key}">${h(p.label)}</button></td><td>${condSel(p.key, pc.cond)}</td><td><input class="pnote" data-rpc="${p.key}" data-f="notes" data-kind="text" value="${h(pc.notes || '')}"></td></tr>`; };
+  const nav = (list, i) => `<div class="acts"><button class="btn sm icon" data-act="rsel-nav" data-d="-1" ${i <= 0 ? 'disabled' : ''} title="Previous">‹</button><button class="btn sm icon" data-act="rsel-nav" data-d="1" ${i >= list.length - 1 ? 'disabled' : ''} title="Next">›</button><button class="btn sm icon ghost" data-act="rsel-close" title="Close">✕</button></div>`;
   let panel;
-  if (!sel) panel = `<p class="muted small">Click a deck plate or pontoon on the plan (or its name in the table) to enter its 5 UT readings.</p>`;
-  else {
-    const x = plateUT(job, sel), pont = sel.kind === 'annular', pc = F.pont?.[sel.key] || {};
+  if (!sel) panel = `<p class="muted small">Click a deck plate on the plan (or its name in the table) to enter its 5 UT readings. Click a pontoon to record its condition.</p>`;
+  else if (sel.kind === 'annular') {
+    const pc = F.pont?.[sel.key] || {};
+    panel = `<div class="ed-head"><div class="ed-title"><span>Pontoon</span><b>${h(sel.label)}</b></div>${nav(pons, pons.indexOf(sel))}</div>
+      <p class="muted small">${(sel.a0 % 360).toFixed(1)}° – ${(sel.a1 % 360).toFixed(1)}°. Pontoons are inspected for condition; no UT readings are taken on the pontoon tops.</p>
+      <div class="fgrid"><label class="fld"><span class="lbl">Condition</span><span class="ctl">${condSel(sel.key, pc.cond)}</span></label><label class="fld"><span class="lbl">Notes</span><span class="ctl"><input data-rpc="${sel.key}" data-f="notes" data-kind="text" value="${h(pc.notes || '')}"></span></label></div>`;
+  } else {
+    const x = plateUT(job, sel);
     const cell = (k) => `<label class="u5"><span>${PT5_SHORT[k]}</span><span class="ctl">${rin(sel, k)}</span></label>`;
-    const list = lay.plates, i = list.indexOf(sel);
-    panel = `<div class="ed-head"><div class="ed-title"><span>${pont ? 'Pontoon' : 'Deck plate'}</span><b>${h(sel.label)}</b></div><div class="acts"><button class="btn sm icon" data-act="rsel-nav" data-d="-1" ${i <= 0 ? 'disabled' : ''} title="Previous">‹</button><button class="btn sm icon" data-act="rsel-nav" data-d="1" ${i >= list.length - 1 ? 'disabled' : ''} title="Next">›</button><button class="btn sm icon ghost" data-act="rsel-close" title="Close">✕</button></div></div>
-      <p class="muted small">${pont ? 'Top = outer rim, bottom = inner rim, left = anticlockwise end.' : `${fmt(sel.bb.x1 - sel.bb.x0, 'big', job)} × ${fmt(sel.bb.y1 - sel.bb.y0, 'big', job)}${sel.cut ? ' · cut plate' : ''}`} Readings in ${U.small}.</p>
+    panel = `<div class="ed-head"><div class="ed-title"><span>Deck plate</span><b>${h(sel.label)}</b></div>${nav(deck, deck.indexOf(sel))}</div>
+      <p class="muted small">${fmt(sel.bb.x1 - sel.bb.x0, 'big', job)} × ${fmt(sel.bb.y1 - sel.bb.y0, 'big', job)}${sel.cut ? ' · cut plate' : ''}. Readings in ${U.small}.</p>
       <div class="ut5">${cell('tl')}<i></i>${cell('tr')}<i></i>${cell('c')}<i></i>${cell('bl')}<i></i>${cell('br')}</div>
-      <div class="sum-grid three"><div><span>Min.</span><b>${x.min != null ? fmt(x.min, 't', job) : '—'}</b><small>${x.count}/5 readings</small></div><div><span>Loss</span><b>${x.lossPct != null ? x.lossPct.toFixed(0) + '%' : '—'}</b><small>${x.tNom ? 'vs ' + fmt(x.tNom, 't', job) : 'enter nominal'}</small></div><div><span>Status</span><b class="${x.status === 'OK' ? 'ok' : x.status ? 'bad' : ''}">${x.status || '—'}</b><small>${x.tMin ? 't-min ' + fmt(x.tMin, 't', job) : ''}</small></div></div>
-      ${pont ? `<div class="fgrid" style="margin-top:10px"><label class="fld"><span class="lbl">Pontoon condition</span><span class="ctl"><select data-rpc="${sel.key}" data-f="cond" data-kind="text">${PONT_COND.map((c) => `<option ${(pc.cond || '') === c ? 'selected' : ''} value="${c}">${c || '—'}</option>`).join('')}</select></span></label><label class="fld"><span class="lbl">Notes</span><span class="ctl"><input data-rpc="${sel.key}" data-f="notes" data-kind="text" value="${h(pc.notes || '')}"></span></label></div>` : ''}`;
+      <div class="sum-grid three"><div><span>Min.</span><b>${x.min != null ? fmt(x.min, 't', job) : '—'}</b><small>${x.count}/5 readings</small></div><div><span>Loss</span><b>${x.lossPct != null ? x.lossPct.toFixed(0) + '%' : '—'}</b><small>${x.tNom ? 'vs ' + fmt(x.tNom, 't', job) : 'enter nominal'}</small></div><div><span>Status</span><b class="${x.status === 'OK' ? 'ok' : x.status ? 'bad' : ''}">${x.status || '—'}</b><small>${x.tMin ? 't-min ' + fmt(x.tMin, 't', job) : ''}</small></div></div>`;
   }
-  return `<section class="card"><div class="sp-head"><h2>${job.roof.type === 'fixed-ifr' ? 'Internal floating roof' : 'External floating roof'}</h2><span class="muted small">${deck.length} deck plates · ${pons.length} pontoons · ${done}/${lay.plates.length} fully read${bad ? ` · <b class="bad">${bad} below t-min</b>` : ''}</span></div>
+  return `<section class="card"><div class="sp-head"><h2>${job.roof.type === 'fixed-ifr' ? 'Internal floating roof' : 'External floating roof'}</h2><span class="muted small">${deck.length} deck plates · ${done}/${deck.length} fully read${bad ? ` · <b class="bad">${bad} below t-min</b>` : ''} · ${pons.length} pontoons${pBad ? ` · <b class="bad">${pBad} with liquid / leaking</b>` : ''}</span></div>
     <div class="fgrid g4">
       ${field('Roof', 'roof.floating.kind', 'sel', { options: FLOAT_TYPES })}${field('Rim gap (roof to shell)', 'roof.floating.rimGap', 'small')}
       ${field('Pontoon width (radial)', 'roof.floating.pontW', 'big', { hint: '0 = no pontoon ring' })}${field('Number of pontoons', 'roof.floating.pontN', 'num', { ph: `${autoPontCount(job)} (suggested)` })}
       ${field('First pontoon bulkhead at', 'roof.floating.pontStart', 'num', { unit: '°', ph: '0' })}${field('Deck plate width', 'roof.floating.plateW', 'big')}
       ${field('Deck plate length', 'roof.floating.plateL', 'big')}${field('Deck plates run', 'roof.floating.orient', 'sel', { options: [['h', 'Left – right'], ['v', 'Top – bottom']] })}
       ${field('Row stagger', 'roof.floating.stagger', 'sel', { options: [['0', 'None'], ['0.5', '½ plate'], ['0.3333333333', '⅓ plate'], ['0.25', '¼ plate']], attrs: 'data-num="1"' })}${field('Deck nominal t', 'roof.floating.deckNom', 't')}
-      ${field('Deck t-min', 'roof.floating.deckMin', 't')}${field('Pontoon nominal t', 'roof.floating.pontNom', 't')}
-      ${field('Pontoon t-min', 'roof.floating.pontMin', 't')}${field('Notes', 'roof.floating.notes', 'text', { cls: 'span2' })}
+      ${field('Deck t-min', 'roof.floating.deckMin', 't')}<div></div>
+      ${field('Notes', 'roof.floating.notes', 'text', { cls: 'span2' })}
     </div>
-    <p class="muted small">Roof diameter ${fmt(roofDiameter(job), 'big', job)} (shell less twice the rim gap). Deck plates are laid like the floor grid and cut at the pontoon ring. Each plate and pontoon has 5 UT readings: the four corners and the centre.</p>
+    <p class="muted small">Roof diameter ${fmt(roofDiameter(job), 'big', job)} (shell less twice the rim gap). Deck plates are laid like the floor grid and cut at the pontoon ring. Each deck plate has 5 UT readings: the four corners and the centre. Pontoons record condition only.</p>
     ${orphan ? `<p class="callout warn">${orphan} plate${orphan > 1 ? 's' : ''} with readings no longer exist after a layout change. Change the layout back to see them, or re-enter the readings.</p>` : ''}
     <div class="roof-grid fl">
       <div class="roof-right">
-        <div class="rp-tools"><span class="legend-mini"><i class="d ok"></i>OK <i class="d bad"></i>below t-min <i class="d empty"></i>no reading</span><span class="spacer"></span><button class="btn sm" data-act="roof-fit" data-k="floating">Fit</button></div>
+        <div class="rp-tools"><span class="legend-mini"><i class="d ok"></i>OK <i class="d bad"></i>below t-min <i class="d empty"></i>no reading <i class="sq liq"></i>pontoon liquid / leaking</span><span class="spacer"></span><button class="btn sm" data-act="roof-fit" data-k="floating">Fit</button></div>
         <div class="mapbox rp-box" id="rpFloat">${floatingSVG(job, lay, { sel: S.roofSel })}</div>
         <div class="mapstatus"><span id="rpFloatHover">Scroll to zoom · drag to pan · click a plate</span></div>
       </div>
       <div class="roof-panel ed">${panel}</div>
     </div>
-    <h3>Plate UT readings (${U.small})</h3>
-    <div class="tblwrap rd-wrap"><table class="grid rplates"><thead><tr><th>Plate</th>${PT5.map(([k, l]) => `<th>${l}</th>`).join('')}<th class="n">Min</th><th class="n">Loss</th><th>Status</th><th>Pontoon</th></tr></thead><tbody>
-      <tr class="crow"><td colspan="10"><b>Deck plates</b></td></tr>${deck.map(row).join('')}
-      ${pons.length ? `<tr class="crow"><td colspan="10"><b>Pontoons</b> <span class="muted small">TL/TR = outer rim, BL/BR = inner rim</span></td></tr>${pons.map(row).join('')}` : ''}
-    </tbody></table></div></section>`;
+    <h3>Deck plate UT readings (${U.small})</h3>
+    <div class="tblwrap rd-wrap"><table class="grid rplates"><thead><tr><th>Plate</th>${PT5.map(([k, l]) => `<th>${l}</th>`).join('')}<th class="n">Min</th><th class="n">Loss</th><th>Status</th></tr></thead><tbody>
+      ${deck.map(row).join('')}
+    </tbody></table></div>
+    ${pons.length ? `<h3>Pontoons</h3><div class="tblwrap rd-wrap short"><table class="grid rplates pons"><thead><tr><th>Pontoon</th><th>Condition</th><th>Notes</th></tr></thead><tbody>${pons.map(prow).join('')}</tbody></table></div>` : ''}
+  </section>`;
 }
 
 function refreshRoof() {
@@ -1091,7 +1099,7 @@ function roofFixedClick(fp, hit) {
 
 function roofFloatClick(fp, hit) {
   S.roofSel = hit.plate || null; refreshRoof();
-  if (S.roofSel) setTimeout(() => $(`.roof-panel input[data-pt="tl"]`)?.focus(), 40);
+  if (S.roofSel) setTimeout(() => $(`.roof-panel input[data-pt="tl"], .roof-panel select[data-rpc]`)?.focus(), 40);
 }
 
 /* ------------------------------------------------------------- shell UT view */
@@ -1337,11 +1345,12 @@ document.addEventListener('click', async (e) => {
       return;
     }
     case 'exp-roof': return download(fileBase(S.job) + '_roof-ut.csv', roofCSV(S.job), 'text/csv');
-    case 'rsel': S.roofSel = el.dataset.key; refreshRoof(); setTimeout(() => $(`.roof-panel input[data-pt="tl"]`)?.focus(), 40); return;
+    case 'rsel': S.roofSel = el.dataset.key; refreshRoof(); setTimeout(() => $(`.roof-panel input[data-pt="tl"], .roof-panel select[data-rpc]`)?.focus(), 40); return;
     case 'rsel-close': S.roofSel = null; refreshRoof(); return;
     case 'rsel-nav': {
-      const list = floatingLayout(S.job).plates, i = list.findIndex((p) => p.key === S.roofSel), nx = list[i + +el.dataset.d];
-      if (nx) { S.roofSel = nx.key; refreshRoof(); setTimeout(() => $(`.roof-panel input[data-pt="tl"]`)?.focus(), 40); } return;
+      const all = floatingLayout(S.job).plates, cur = all.find((p) => p.key === S.roofSel);
+      const list = all.filter((p) => (p.kind === 'annular') === (cur?.kind === 'annular')), i = list.indexOf(cur), nx = list[i + +el.dataset.d];
+      if (nx) { S.roofSel = nx.key; refreshRoof(); setTimeout(() => $(`.roof-panel input[data-pt="tl"], .roof-panel select[data-rpc]`)?.focus(), 40); } return;
     }
     case 'roof-fit': S.roofVB[el.dataset.k] = null; refreshRoof(); return;
     case 'rpt-mode': S.roofAdd = !S.roofAdd; refreshRoof(); return;

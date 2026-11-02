@@ -373,6 +373,9 @@ button.sug { border: 1px dashed var(--accent); background: none; color: var(--ac
 .linkbtn { border: 0; background: none; color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; padding: 0; }
 .legend-mini { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
 .legend-mini .d { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1.5px solid var(--accent); }
+.legend-mini .sq { width: 12px; height: 10px; display: inline-block; border: 1px solid var(--plate-line); background: var(--bad-soft); margin-left: 4px; }
+.grid.rplates.pons input.pnote { width: 100%; text-align: left; }
+.rd-wrap.short { max-height: 40vh; }
 .legend-mini .d.ok { background: var(--accent); } .legend-mini .d.bad { background: var(--bad); border-color: var(--bad); } .legend-mini .d.empty { background: transparent; border-color: var(--muted); }
 b.bad { color: var(--bad); }
 .roofplan text { font-family: var(--font); }
@@ -380,7 +383,7 @@ b.bad { color: var(--bad); }
 .roofplan .rf-roof { fill: var(--plate); stroke: var(--ink); }
 .roofplan .rf-deck { fill: var(--plate); stroke: var(--plate-line); cursor: pointer; }
 .roofplan .rf-pont { fill: var(--plate-ann); stroke: var(--plate-line); cursor: pointer; }
-.roofplan .rf-deck.bad, .roofplan .rf-pont.bad { fill: var(--bad-soft); }
+.roofplan .rf-deck.bad, .roofplan .rf-pont.liq { fill: var(--bad-soft); }
 .roofplan .sel { fill: var(--accent-soft); stroke: var(--accent); }
 .roofplan .rf-rim { fill: none; stroke: var(--ink2); pointer-events: none; } .roofplan .rf-rim.in { stroke: var(--plate-line); }
 .roofplan .rf-ticks line { stroke: var(--ink2); } .roofplan .rf-ticks text { fill: var(--muted); } .roofplan .rf-ticks text.zero { fill: var(--ink); font-weight: 700; }

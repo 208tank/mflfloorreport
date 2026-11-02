@@ -19,7 +19,7 @@ export function defaultRoof(units = 'imperial') {
     floating: {
       kind: 'Single-deck pontoon', rimGap: m ? 200 : 8 * IN, pontW: m ? 1800 : 6 * FT, pontN: null, pontStart: 0,
       plateW: m ? 1800 : 6 * FT, plateL: m ? 6000 : 20 * FT, orient: 'h', stagger: 0.5,
-      deckNom: null, deckMin: m ? 2.3 : 0.09 * IN, pontNom: null, pontMin: m ? 2.3 : 0.09 * IN,
+      deckNom: null, deckMin: m ? 2.3 : 0.09 * IN,
       ut: {}, pont: {}, notes: ''
     }
   };
@@ -75,7 +75,7 @@ function centroid(poly) {
 
 /**
  * Where the 5 readings sit on a plate: corners inset 15% and the centre (pulled inside cut plates).
- * Pontoons: top = outer rim, bottom = inner rim, left = start (anticlockwise) end, right = clockwise end.
+ * (Pontoon tops have no UT readings.)
  */
 export function utPoints(p, lay) {
   if (p.kind === 'annular') {
@@ -93,9 +93,9 @@ const num = (v) => (v === null || v === undefined || v === '' || !Number.isFinit
 
 export function plateUT(job, p) {
   const F = job.roof.floating, r = F.ut?.[p.key] || {};
-  const pont = p.kind === 'annular';
+  const tNom = num(F.deckNom), tMin = num(F.deckMin);
+  if (p.kind === 'annular') return { count: 0, min: null, tNom, tMin, lossPct: null, status: '' }; // pontoons: condition only, no UT
   const vals = PT5.map(([k]) => num(r[k])).filter((v) => v !== null);
-  const tNom = num(pont ? F.pontNom : F.deckNom), tMin = num(pont ? F.pontMin : F.deckMin);
   const min = vals.length ? Math.min(...vals) : null;
   return { count: vals.length, min, tNom, tMin, lossPct: min !== null && tNom ? Math.max(0, ((tNom - min) / tNom) * 100) : null, status: min === null || !tMin ? '' : min < tMin - 1e-9 ? 'Below t-min' : 'OK' };
 }
@@ -140,8 +140,8 @@ export function floatingSVG(job, lay, opts = {}) {
   o.push(`<circle cx="0" cy="0" r="${f(Rt)}" class="rf-shell" stroke-width="${f(s * 0.9)}"/>`);
   o.push(ticks(job, Rt, s));
   for (const p of lay.plates) {
-    const st = plateUT(job, p).status;
-    o.push(`<path d="${pathOf(p.poly)}" class="${p.kind === 'annular' ? 'rf-pont' : 'rf-deck'}${st === 'Below t-min' ? ' bad' : ''}${opts.sel === p.key ? ' sel' : ''}" data-plate="${esc(p.key)}" stroke-width="${f(s * 0.25)}"/>`);
+    const st = plateUT(job, p).status, liq = p.kind === 'annular' && ['Liquid present', 'Leaking'].includes(job.roof.floating.pont?.[p.key]?.cond);
+    o.push(`<path d="${pathOf(p.poly)}" class="${p.kind === 'annular' ? 'rf-pont' : 'rf-deck'}${st === 'Below t-min' ? ' bad' : ''}${liq ? ' liq' : ''}${opts.sel === p.key ? ' sel' : ''}" data-plate="${esc(p.key)}" stroke-width="${f(s * 0.25)}"/>`);
   }
   o.push(`<circle cx="0" cy="0" r="${f(lay.R)}" class="rf-rim" stroke-width="${f(s * 0.5)}"/>`);
   if (lay.Ri < lay.R) o.push(`<circle cx="0" cy="0" r="${f(lay.Ri)}" class="rf-rim in" stroke-width="${f(s * 0.35)}"/>`);
@@ -168,6 +168,7 @@ export function floatingSVG(job, lay, opts = {}) {
   const F = job.roof.floating;
   o.push(`<g class="rf-dots" stroke-width="${f(s * 0.18)}">`);
   for (const p of lay.plates) {
+    if (p.kind === 'annular') continue;
     const pts = utPoints(p, lay), u = plateUT(job, p), r = F.ut?.[p.key] || {};
     for (const [k] of PT5) {
       const v = num(r[k]), [x, y] = pts[k];
