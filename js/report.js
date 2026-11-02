@@ -2,6 +2,7 @@
 import { fmt, fmtRate, u } from './units.js';
 import { RESULTS, RESULT_SHORT, nozzleUT, NZ_CONN_SHORT, UT_CLOCK } from './calc.js';
 import { renderMapSVG, COLORS } from './map.js';
+import { settleCalc, edgeEval, depEval, hasSettle, slopeText, settleChartSVG, settlePlanSVG, ELEV_UNITS, PSI_PER_MPA } from './settle.js';
 import { sealEval, activeStds, nextDue, gapSummary, cm2mToIn2ft, SEAL_CHECKS } from './seal.js';
 import { ROOF_TYPES, hasFixed, hasFloating, floatingLayout, floatingSVG, fixedSVG, plateUT, pointStatus, PT5, PT5_SHORT, roofDiameter } from './roof.js';
 import { rolloutSVG, utLocations, courseSummary, coursesWithElev, courseAt, readingElevations, getReading, fmtElev, coursePlates } from './shell.js';
@@ -219,6 +220,37 @@ export function buildReport(job, layout, calc, company, photos, opts) {
     out.push('</section>');
     return out.join('');
   })()}
+  ${hasSettle(job) ? (() => {
+    const st = job.settle, c = settleCalc(job), F = c.fit, met = job.units === 'metric', sU = U.small;
+    const fS = (mm, sign = false) => (mm === null || mm === undefined ? '—' : (sign && mm > 0 ? '+' : '') + (met ? mm.toFixed(1) : (mm / 25.4).toFixed(2)));
+    const eu = ELEV_UNITS[st.eu] || ELEV_UNITS.in, okc = (ok) => (ok === true ? 'OK' : ok === false ? '<b class="bad">Fails</b>' : '—');
+    const stTxt = (s) => (s === 'Exceeds' || s === 'Not acceptable' ? `<b class="bad">${s}</b>` : s === 'Acceptable' ? `<span class="ok">${s}</span>` : `<b>${s}</b>`);
+    const out = [`<section class="pb"><h2>Settlement — API 653 Annex B</h2>
+      <div class="cols">${kv([['Survey date', h(st.date)], ['Surveyed by', h(st.surveyor)], ['Instrument', h(st.instrument)], ['Benchmark', h(st.benchmark)]])}${kv([['Liquid level at survey', h(st.level)], ['Stations', `${c.N} (${c.n} read) · L = ${c.L ? fmt(c.L, 'big', job) : '—'}`], ['Shell height H', c.H > 0 ? fmt(c.H, 'big', job) : '—'], ['Y / E', st.Y == null ? '—' : met ? `${(+st.Y).toFixed(0)} / ${(+st.E).toFixed(0)} MPa` : `${Math.round(st.Y * PSI_PER_MPA).toLocaleString()} / ${Math.round(st.E * PSI_PER_MPA).toLocaleString()} psi`]])}</div>`];
+    if (c.n) {
+      out.push(`<h3 class="rp-h3">Shell settlement — ${stTxt(c.status)}</h3>
+      <div class="set-print"><div>${settlePlanSVG(job, c, { fmt: (v) => fS(v) })}</div><div>${settleChartSVG(job, c, { fmt: (v) => fS(v), unit: sU })}</div></div>
+      ${F ? `<table class="grid small"><thead><tr><th>Check</th><th class="n">Result</th><th class="n">Limit</th><th>Status</th><th>Basis</th></tr></thead><tbody>
+        <tr><td>Cosine fit R²</td><td class="n">${F.R2.toFixed(3)}</td><td class="n">≥ 0.90</td><td>${c.valid ? 'Valid' : '<b class="bad">Not valid</b>'}</td><td>B.2.2.4</td></tr>
+        <tr><td>Planar tilt across diameter</td><td class="n">${fS(F.tilt)} ${sU}</td><td class="n">—</td><td>—</td><td>Low side ${F.loDeg.toFixed(0)}°, slope ${slopeText(F.slope, job)}</td></tr>
+        <tr class="${c.tiltOk === false ? 'is-bad' : ''}"><td>Out-of-plumbness at top of shell</td><td class="n">${fS(F.plumb)} ${sU}</td><td class="n">≤ ${fS(F.plumbLim)} ${sU}</td><td>${okc(c.tiltOk)}</td><td>API 653 §10.5.2.1 (1/100 H, 5 in max); API 650 1/200 H = ${fS(F.plumb650)} ${sU} for reference</td></tr>
+        <tr class="${c.oopOk === false ? 'is-bad' : ''}"><td>Max out-of-plane deflection |S|</td><td class="n">${F.maxS == null ? '—' : fS(Math.abs(F.maxS)) + ' ' + sU + ' (stn ' + F.maxAt + ')'}</td><td class="n">${c.Smax == null ? '—' : '≤ ' + fS(c.Smax) + ' ' + sU}</td><td>${okc(c.oopOk)}</td><td>B.3.2.1: Smax = 11·L²·Y / (2·E·H)</td></tr>
+      </tbody></table>` : ''}
+      ${c.warnings.length ? `<p class="note">${c.warnings.map(h).join(' ')}</p>` : ''}
+      <table class="grid small"><thead><tr><th>Station</th><th class="n">Angle</th><th class="n">Reading (${eu[1]})</th><th class="n">Cosine fit</th><th class="n">Measured</th><th class="n">U</th><th class="n">S</th><th>Status</th></tr></thead><tbody>
+      ${c.pts.map((p) => `<tr class="${p.ok === false ? 'is-bad' : ''}"><td>${p.i}</td><td class="n">${p.angle.toFixed(1)}°</td><td class="n">${p.raw == null ? '—' : (p.raw / eu[0]).toFixed(eu[2])}</td><td class="n">${F && p.fit !== undefined ? fS(p.fit - F.a, true) : '—'}</td><td class="n">${F && p.z !== null ? fS(p.z - F.a, true) : '—'}</td><td class="n">${p.U !== undefined ? fS(p.U, true) : '—'}</td><td class="n">${p.S != null ? fS(p.S, true) : '—'}</td><td>${p.ok === false ? '<b>Exceeds</b>' : p.ok ? 'OK' : '—'}</td></tr>`).join('')}
+      </tbody></table><p class="note">Fit, measured, U and S in ${sU === "in" ? "inches" : "mm"} relative to the mean plane${st.rod ? '; readings are rod readings (larger = lower)' : ''}. U = measured − optimum cosine curve; S = U − ½(U<sub>i−1</sub> + U<sub>i+1</sub>). Annex B sets no numeric planar-tilt limit; out-of-plumbness is compared with API 653 §10.5.2.1.</p>`);
+    }
+    if (st.edge.length) out.push(`<h3 class="rp-h3">Edge settlement (B.2.3 / B.3.4)</h3><table class="grid small"><thead><tr><th>Area</th><th class="n">Angle</th><th class="n">R (${U.big})</th><th class="n">B (${sU})</th><th>Bottom weld</th><th class="n">Bew</th><th class="n">Be</th><th class="n">Allowable</th><th class="n">B / allow</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+      ${st.edge.map((x, i) => { const ev = edgeEval(x); return `<tr class="${ev.status === 'Exceeds' ? 'is-bad' : ''}"><td>E${i + 1}</td><td class="n">${x.angle != null ? x.angle + '°' : '—'}</td><td class="n">${fmt(x.R, 'big', job, false)}</td><td class="n">${fmt(x.B, 'small', job, false)}</td><td>${{ par: 'Lap ∥ shell', perp: 'Lap ⊥ shell', none: 'None / butt', angle: `Lap at ${x.alpha ?? '?'}°` }[x.weld] || ''}</td><td class="n">${fmt(x.Bew, 'small', job, false)}</td><td class="n">${fmt(x.Be, 'small', job, false)}</td><td class="n">${fmt(ev.allow, 'small', job, false)}</td><td class="n">${ev.pct != null ? ev.pct.toFixed(0) + '%' : '—'}</td><td>${stTxt(ev.status)}</td><td>${h(x.notes)}</td></tr>`; }).join('')}
+      </tbody></table><p class="note">Bew from API 653 Fig. B.11 (lap weld ±20° of parallel to the shell), Be from Fig. B.12 (no weld, butt welds, or lap weld ±20° of perpendicular), read at R for a ${fmt(c.D, 'big', job)} tank; angled welds B = Be − (Be − Bew)·sin α. NDE required: over 75 % of allowable — examine shell-to-bottom and bottom welds in the area by VT and MT/PT (B.3.4.1).</p>`);
+    if (st.dep.length) out.push(`<h3 class="rp-h3">Bottom depressions / bulges (B.3.3)</h3><table class="grid small"><thead><tr><th>Area</th><th class="n">Angle</th><th class="n">From centre (${U.big})</th><th class="n">R (${U.big})</th><th class="n">Depth B (${sU})</th><th class="n">Allowable 0.37·R</th><th class="n">B / allow</th><th>Status</th><th>Notes</th></tr></thead><tbody>
+      ${st.dep.map((x, i) => { const ev = depEval(x); return `<tr class="${ev.status === 'Exceeds' ? 'is-bad' : ''}"><td>D${i + 1}</td><td class="n">${x.angle != null ? x.angle + '°' : '—'}</td><td class="n">${fmt(x.r, 'big', job, false)}</td><td class="n">${fmt(x.R, 'big', job, false)}</td><td class="n">${fmt(x.B, 'small', job, false)}</td><td class="n">${fmt(ev.allow, 'small', job, false)}</td><td class="n">${ev.pct != null ? ev.pct.toFixed(0) + '%' : '—'}</td><td>${stTxt(ev.status)}</td><td>${h(x.notes)}</td></tr>`; }).join('')}
+      </tbody></table>`);
+    if (st.notes) out.push(`<p class="note">${h(st.notes)}</p>`);
+    out.push('</section>');
+    return out.join('');
+  })() : ''}
   ${platesBlock}
   ${photoBlock}
   <footer class="rp-foot">${job.rev ? `${h(I.tankId || '')} Rev ${job.rev} (${h(new Date(job.savedAt).toLocaleDateString())}). ` : ''}${h(company.footer || '')} Calculation per API 653 §4.4.7 as configured in this report; verify limits against the edition and tank design in force.</footer>

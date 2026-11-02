@@ -222,6 +222,48 @@ Limits are from 40 CFR 60.113b, 40 CFR 63.1063 and SOR/2025-88 (ss. 64–65, 73�
 Schedule 4) as published in 2025–2026. Check them against the rules, permit or approval that apply
 to the tank and the product stored.
 
+### Settlement (API 653 Annex B)
+
+The **Settlement** page evaluates a settlement survey to API 653 Annex B.
+
+**Shell settlement (planar tilt and out-of-plane).** The number of stations defaults to N = D/10
+(D in ft), rounded up to an even number, at least 8 and no more than 32 ft apart; override it and
+the angle of station 1 if needed. Enter readings in inches, decimal feet or mm (or m), as
+elevations or as rod readings (larger = lower); press Enter to move to the next station. The app:
+
+- fits the optimum cosine curve a + b·cos θ + c·sin θ by least squares (uniform settlement plus
+  planar tilt) and reports R² (must be ≥ 0.90 for the out-of-plane check, B.2.2.4);
+- reports the planar tilt across the diameter, the high and low sides, the slope, and the
+  out-of-plumbness at the top of the shell (tilt × H). Annex B gives no numeric tilt limit, so this
+  is compared with API 653 §10.5.2.1 (1/100 of shell height, 5 in max), with API 650's 1/200 shown
+  for reference;
+- computes U = measured − cosine curve and S = U − ½(U of the stations either side) at each
+  station and checks |S| ≤ Smax = 11·L²·Y / (2·E·H) (B.3.2.1), L = πD/N, Y = shell yield strength
+  (30,000 psi / 207 MPa if unknown), E = 29,000,000 psi / 200,000 MPa, H = shell height (from the
+  shell courses unless entered);
+- draws a plan (stations, elevation relative to the mean plane, tilt arrow to the low side, edge
+  settlement areas and depressions) and a chart of the measured points against the cosine curve
+  with the S bars and ±Smax.
+
+If R² is below 0.90 the result is *Engineering evaluation required* (more readings, a rigorous fit,
+or the B.3.2.2 method).
+
+**Edge settlement (B.2.3 / B.3.4).** For each settled area record its angle, radial width R,
+settlement B (measured per Fig. B.6 / B.7), the bottom weld in the area, and the allowables read
+from Fig. B.11 (**Bew**, lap weld within ±20° of parallel to the shell) and Fig. B.12 (**Be**, no
+weld, butt welds, or lap weld within ±20° of perpendicular) at R for the tank diameter. Lap welds
+at another angle use B = Be − (Be − Bew)·sin α. Any area may be screened against Bew alone. The
+status is *Acceptable*, *NDE required* (75 % of allowable or more: VT and MT/PT of the shell-to-bottom
+and bottom welds, B.3.4.1) or *Exceeds*. The app does not reproduce the curves of Fig. B.11 / B.12 —
+the inspector reads them from their copy of API 653.
+
+**Bottom depressions / bulges (B.3.3).** Angle, distance from centre, inscribed radius R and depth B,
+checked against BB = 0.37·R (BB in inches, R in feet).
+
+The report has a Settlement section (plan, chart, results, station table, edge and depression
+tables); *Export → Settlement survey (CSV / Excel)*. Check the limits against the edition of API 653
+in force.
+
 ## UT loader sheet (Excel)
 
 The inspector builds the tank in the app, then hands the UT technician an Excel workbook to fill in;

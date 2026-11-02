@@ -102,5 +102,17 @@ export function makeDemo() {
   const sump = layout.plates.find((p) => p.key === job.features[0].plate);
   if (sump) job.plates[sump.key] = { scan: 'partial', notes: 'Around sump not scannable' };
   const p2 = at(18, 112).plate; job.plates[p2] = { ...(job.plates[p2] || {}), scan: 'partial', notes: 'Patch plate' };
+  // settlement survey: 12 stations (120 ft), planar tilt with low side near 210°, one local low spot at station 6
+  {
+    const N = 12, el = {};
+    const dev = { 6: -0.42, 9: 0.08, 3: 0.05 };
+    for (let i = 0; i < N; i++) { const a = (360 * i) / N; el[i + 1] = Math.round((24 + 1.05 * Math.cos((a - 30) * Math.PI / 180) + (dev[i + 1] || 0)) * IN * 100) / 100; }
+    Object.assign(job.settle, { date: job.info.inspDate, surveyor: 'D. Surveyor', instrument: 'Automatic level', benchmark: 'BM-1 pipe rack (assumed 100.00 ft)', level: 'Empty', eu: 'in', el, Y: 206.84 });
+    job.settle.edge = [
+      { id: uid(), angle: 200, arc: 18 * FT, R: 3 * FT, B: 1.55 * IN, weld: 'par', alpha: null, Bew: 1.9 * IN, Be: null, notes: 'Breakover at annular lap' },
+      { id: uid(), angle: 250, arc: 10 * FT, R: 2.5 * FT, B: 0.9 * IN, weld: 'angle', alpha: 30, Bew: 1.6 * IN, Be: 3.2 * IN, notes: '' }
+    ];
+    job.settle.dep = [{ id: uid(), angle: 300, r: 30 * FT, R: 4 * FT, B: 1.1 * IN, notes: 'Smooth dish, no creasing' }];
+  }
   return job;
 }

@@ -5,16 +5,17 @@ import { buildLayout, stackSections, suggestCount, halfChord, plateAt, toLocal, 
 import { api653, RESULTS, RESULT_SHORT, czLimitAuto, plateNominal, NZ_CONN, NZ_CONN_SHORT, UT_CLOCK, nozzleUT } from './calc.js';
 import { renderMapSVG, MapController } from './map.js';
 import { ROOF_TYPES, FIXED_TYPES, FIXED_SUPPORT, FLOAT_TYPES, PT5, PT5_SHORT, PONT_COND, hasFixed, hasFloating, floatingLayout, roofDiameter, autoPontCount, plateUT, pointStatus, floatingSVG, fixedSVG } from './roof.js';
-import { download, indicationsCSV, platesCSV, nozzlesCSV, shellCSV, roofCSV, svgForExport, svgToPng, fileBase } from './export.js';
+import { download, indicationsCSV, platesCSV, nozzlesCSV, shellCSV, roofCSV, settleCSV, svgForExport, svgToPng, fileBase } from './export.js';
 import { buildReport, legendHTML } from './report.js';
 import { newJob, migrate, nextNo, uid, getPath, setPath } from './model.js';
 import { makeDemo } from './demo.js';
 import { defaultShell, defaultZones, autoLocCount, autoPlateCount, utLocations, coursesWithElev, courseAt, coursePlates, shellHeight, courseSummary, readingElevations, zoneCount, getReading, fmtElev, zKey, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
 import { buildLoader, readLoader, loaderAreas } from './loader.js';
 import { SEAL_STDS, PRIMARY_TYPES, SECONDARY_TYPES, SEAL_CHECKS, newGap, gapSummary, cm2mToIn2ft, sealEval, activeStds, nextDue } from './seal.js';
+import { WELDS, ELEV_UNITS, PSI_PER_MPA, DEP_K, newEdge, newDep, stations, stationCount, autoN, settleHeight, settleCalc, slopeText, edgeEval, depEval, EDGE_NOTE, settlePlanSVG, settleChartSVG } from './settle.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.6.0';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -37,6 +38,7 @@ const VIEWS = [
   ['api', 'API 653', 'M5 4h14v16H5zM9 8h6M9 12h6M9 16h3'],
   ['shell', 'Shell UT', 'M4 5h16v14H4zM4 10h16M4 15h16M9 5v14M15 5v14'],
   ['roof', 'Roof', 'M3 11l9-7 9 7M5 10v9h14v-9M9 19v-5h6v5'],
+  ['settle', 'Settlement', 'M3 7h18M3 7l3 11h12l3-11M8 12l8 3'],
   ['report', 'Report', 'M6 3h9l4 4v14H6zM14 3v5h5']
 ];
 
@@ -142,7 +144,7 @@ function renderNav() {
 function renderView() {
   const main = $('#main');
   main.className = 'main view-' + S.view;
-  const fn = { jobs: viewJobs, setup: viewSetup, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, shell: viewShell, roof: viewRoof, report: viewReport }[S.view];
+  const fn = { jobs: viewJobs, setup: viewSetup, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, shell: viewShell, roof: viewRoof, settle: viewSettle, report: viewReport }[S.view];
   main.innerHTML = fn();
   after[S.view]?.();
 }
@@ -358,7 +360,7 @@ function refreshBuilder() {
   }, 0);
 }
 function focusSel(el) {
-  const attrs = ['data-rowf', 'data-row', 'data-secf', 'data-sec', 'data-mpf', 'data-pl', 'data-shc', 'data-shut', 'data-course', 'data-z', 'data-zf', 'data-zone', 'data-rut', 'data-pt', 'data-rpt', 'data-f', 'data-rpc', 'data-sg', 'data-gid', 'data-sck', 'data-sckn', 'data-bind', 'data-act'];
+  const attrs = ['data-rowf', 'data-row', 'data-secf', 'data-sec', 'data-mpf', 'data-pl', 'data-shc', 'data-shut', 'data-course', 'data-z', 'data-zf', 'data-zone', 'data-rut', 'data-pt', 'data-rpt', 'data-f', 'data-rpc', 'data-sg', 'data-gid', 'data-sck', 'data-sckn', 'data-st', 'data-se', 'data-sd', 'data-eid', 'data-sts', 'data-bind', 'data-act'];
   const parts = attrs.filter((k) => el.hasAttribute(k)).map((k) => `[${k}="${CSS.escape(el.getAttribute(k))}"]`);
   return parts.length ? el.tagName.toLowerCase() + parts.join('') : null;
 }
@@ -1252,6 +1254,86 @@ function refreshShell() {
   }, 0);
 }
 
+
+/* ----------------------------------------------------------- settlement view */
+
+function viewSettle() {
+  return `<div class="page wide settle-page"><div class="page-head"><div><h1>Settlement</h1><p class="muted">API 653 Annex B: shell settlement survey (planar tilt and out-of-plane settlement), edge settlement and bottom depressions.</p></div>
+    <div class="acts"><button class="btn" data-act="exp-settle">Export CSV</button></div></div>
+    <div id="settleBody">${settleBodyHTML()}</div></div>`;
+}
+
+function settleBodyHTML() {
+  const job = S.job, st = job.settle, U = u(job), met = job.units === 'metric', D = +job.tank.diameter || 0;
+  const c = settleCalc(job), F = c.fit, eu = ELEV_UNITS[st.eu] || ELEV_UNITS.in;
+  const fS = (mm, sign = false) => (mm === null || mm === undefined ? '—' : (sign && mm > 0 ? '+' : '') + (met ? mm.toFixed(1) : (mm / 25.4).toFixed(2)));
+  const sU = U.small, stress = (mpa) => (mpa == null ? '' : met ? String(+(+mpa).toFixed(1)) : String(Math.round(mpa * PSI_PER_MPA)));
+  const shH = shellHeight(job);
+  const stRow = (p) => `<tr class="${p.ok === false ? 'is-bad' : ''}"><td><b>${p.i}</b></td><td class="n">${p.angle.toFixed(1)}°</td><td><input data-st="${p.i}" data-kind="num" inputmode="decimal" value="${p.raw == null ? '' : +(p.raw / eu[0]).toFixed(eu[2])}"></td>
+    <td class="n">${p.fit !== undefined ? fS(p.fit - F.a, true) : '—'}</td><td class="n">${p.z !== null && F ? fS(p.z - F.a, true) : '—'}</td><td class="n">${p.U !== undefined ? fS(p.U, true) : '—'}</td><td class="n"><b>${p.S != null ? fS(p.S, true) : '—'}</b></td><td>${p.S == null ? '' : p.ok === false ? '<span class="st st-below-MRT">Exceeds</span>' : p.ok ? '<span class="st st-OK">OK</span>' : ''}</td></tr>`;
+  const res = (label, val, lim, ok, note = '') => `<tr class="${ok === false ? 'is-bad' : ''}"><td>${label}</td><td class="n"><b>${val}</b></td><td class="n">${lim}</td><td>${ok === true ? '<span class="st st-OK">OK</span>' : ok === false ? '<span class="st st-below-MRT">Fails</span>' : ''}</td><td class="muted small">${note}</td></tr>`;
+  const stCls = c.status === 'Acceptable' ? 'ok' : c.status === 'Not acceptable' ? 'bad' : '';
+  const results = F ? `<table class="grid sres settle-res"><thead><tr><th>Check</th><th class="n">Result</th><th class="n">Limit</th><th></th><th>Basis</th></tr></thead><tbody>
+      ${res('Cosine fit R²', F.R2.toFixed(3), '≥ 0.90', c.valid, 'B.2.2.4 — fit must be valid to use B.3.2.1')}
+      ${res('Planar tilt across the diameter', `${fS(F.tilt)} ${sU}`, '', null, `High side ${F.hiDeg.toFixed(0)}°, low side ${F.loDeg.toFixed(0)}° · slope ${slopeText(F.slope, job)}`)}
+      ${res('Out-of-plumbness at top of shell (tilt × H)', `${fS(F.plumb)} ${sU}`, `≤ ${fS(F.plumbLim)} ${sU}`, c.tiltOk, 'API 653 §10.5.2.1: 1/100 of shell height, 5 in max')}
+      ${res('… API 650 new-construction tolerance', `${fS(F.plumb)} ${sU}`, `${fS(F.plumb650)} ${sU}`, null, 'API 650 §7.5.2: 1/200 of height — reference only')}
+      ${res('Max out-of-plane deflection |S|', F.maxS !== null ? `${fS(Math.abs(F.maxS))} ${sU} <small class="muted">(stn ${F.maxAt})</small>` : '—', c.Smax !== null ? `≤ ${fS(c.Smax)} ${sU}` : '<span class="muted">needs H, Y, E</span>', c.oopOk, 'B.3.2.1: Smax = 11·L²·Y / (2·E·H)')}
+      ${res('Max measured difference (high − low)', `${fS(F.diff)} ${sU}`, '', null, 'Information')}
+    </tbody></table>` : '<p class="muted">Enter at least 4 station readings to evaluate the shell settlement.</p>';
+  const warn = c.warnings.length ? `<div class="warnbox">${c.warnings.map((w) => `<p>${h(w)}</p>`).join('')}</div>` : '';
+
+  const ein = (x, k, kind, extra = '') => `<input data-se="edge" data-eid="${x.id}" data-f="${k}" data-kind="${kind}" ${kind === 'text' ? '' : 'inputmode="decimal"'} value="${h(kind === 'num' || kind === 'text' ? x[k] ?? '' : inVal(x[k], kind, job))}" ${extra}>`;
+  const din = (x, k, kind, extra = '') => `<input data-se="dep" data-eid="${x.id}" data-f="${k}" data-kind="${kind}" ${kind === 'text' ? '' : 'inputmode="decimal"'} value="${h(kind === 'num' || kind === 'text' ? x[k] ?? '' : inVal(x[k], kind, job))}" ${extra}>`;
+  const stt = (s) => `<span class="st ${s === 'Acceptable' ? 'st-OK' : s === 'Exceeds' ? 'st-below-MRT' : s === 'NDE required' ? 'st-warn' : ''}">${s}</span>`;
+  const edgeRows = st.edge.map((x, i) => { const ev = edgeEval(x); return `<tr class="${ev.status === 'Exceeds' ? 'is-bad' : ev.status === 'NDE required' ? 'is-warn' : ''}"><td><b>E${i + 1}</b></td><td>${ein(x, 'angle', 'num')}</td><td>${ein(x, 'arc', 'big', 'placeholder="opt."')}</td><td>${ein(x, 'R', 'big')}</td><td>${ein(x, 'B', 'small')}</td>
+    <td><select data-se="edge" data-eid="${x.id}" data-f="weld" data-kind="text">${WELDS.map(([k, l]) => `<option value="${k}" ${x.weld === k ? 'selected' : ''}>${h(l)}</option>`).join('')}</select></td><td>${x.weld === 'angle' ? ein(x, 'alpha', 'num', 'placeholder="0–90"') : '<span class="muted">—</span>'}</td>
+    <td>${ein(x, 'Bew', 'small')}</td><td>${ein(x, 'Be', 'small', x.weld === 'par' ? 'placeholder="opt."' : '')}</td><td class="n"><b>${ev.allow != null ? fmt(ev.allow, 'small', job, false) : '—'}</b></td><td class="n">${ev.pct != null ? ev.pct.toFixed(0) + '%' : '—'}</td><td title="${h(ev.basis)}">${stt(ev.status)}</td><td>${ein(x, 'notes', 'text', 'class="note"')}</td><td><button class="btn sm icon ghost danger" data-act="se-del" data-k="edge" data-eid="${x.id}" title="Remove">✕</button></td></tr>`; }).join('') || '<tr><td colspan="14" class="empty">No edge settlement recorded.</td></tr>';
+  const edgeNotes = [...new Set(st.edge.map((x) => edgeEval(x).status).filter((s) => s === 'NDE required' || s === 'Exceeds'))].map((s) => `<p class="small"><b>${s}:</b> ${h(EDGE_NOTE[s])}</p>`).join('');
+  const depRows = st.dep.map((x, i) => { const ev = depEval(x); return `<tr class="${ev.status === 'Exceeds' ? 'is-bad' : ''}"><td><b>D${i + 1}</b></td><td>${din(x, 'angle', 'num')}</td><td>${din(x, 'r', 'big')}</td><td>${din(x, 'R', 'big')}</td><td>${din(x, 'B', 'small')}</td><td class="n"><b>${ev.allow != null ? fmt(ev.allow, 'small', job, false) : '—'}</b></td><td class="n">${ev.pct != null ? ev.pct.toFixed(0) + '%' : '—'}</td><td>${stt(ev.status)}</td><td>${din(x, 'notes', 'text', 'class="note"')}</td><td><button class="btn sm icon ghost danger" data-act="se-del" data-k="dep" data-eid="${x.id}" title="Remove">✕</button></td></tr>`; }).join('') || '<tr><td colspan="10" class="empty">No bottom depressions recorded.</td></tr>';
+
+  return `<section class="card"><div class="sp-head"><h2>Shell settlement survey</h2><span class="muted small">${c.n}/${c.N} stations read · <b class="${stCls}">${c.status}</b></span></div>
+    <div class="fgrid g4">${field('Survey date', 'settle.date', 'date')}${field('Surveyed by', 'settle.surveyor')}${field('Instrument', 'settle.instrument', 'text', { ph: 'e.g. level, total station' })}${field('Benchmark', 'settle.benchmark')}
+      ${field('Liquid level at survey', 'settle.level', 'text', { ph: 'e.g. empty / 32 ft' })}${field('Number of stations', 'settle.n', 'num', { ph: `${autoN(job)} (API 653)`, hint: `N = D/10 ft, even, ≥ 8, spacing ≤ 32 ft · spacing now ${c.L ? fmt(c.L, 'big', job) : '—'}` })}${field('Station 1 at', 'settle.start', 'num', { unit: '°', ph: '0' })}${field('Reading units', 'settle.eu', 'sel', { options: met ? [['mm', 'mm'], ['m', 'm']] : [['in', 'inches'], ['ft', 'feet (decimal)'], ['mm', 'mm']] })}
+      ${field('Readings are rod readings (larger = lower)', 'settle.rod', 'bool')}${field('Shell height H', 'settle.H', 'big', { ph: shH ? fmt(shH, 'big', job, false) + ' (shell courses)' : '' })}
+      <label class="fld"><span class="lbl">Shell yield strength Y</span><span class="ctl"><input data-sts="Y" inputmode="decimal" value="${stress(st.Y)}"><i class="unit">${met ? 'MPa' : 'psi'}</i></span><small>Lowest course; 30,000 psi (207 MPa) if unknown</small></label>
+      <label class="fld"><span class="lbl">Elastic modulus E</span><span class="ctl"><input data-sts="E" inputmode="decimal" value="${stress(st.E)}"><i class="unit">${met ? 'MPa' : 'psi'}</i></span></label>
+      ${field('Notes', 'settle.notes', 'text', { cls: 'span2' })}</div>
+    ${warn}
+    <div class="settle-grid">
+      <div class="settle-left">
+        <div class="tblwrap"><table class="grid sstations"><thead><tr><th>Stn</th><th class="n">Angle</th><th>Reading (${eu[1]})</th><th class="n">Cosine fit</th><th class="n">Measured</th><th class="n">U</th><th class="n">S</th><th></th></tr></thead><tbody>${c.pts.map(stRow).join('')}</tbody></table></div>
+        <p class="muted small">Fit, measured, U and S in ${sU === "in" ? "inches" : "mm"}, relative to the mean plane. U = measured − cosine fit; S = U − ½(U of the stations either side). Enter readings and press Enter to move to the next station. <button class="linkbtn" data-act="st-clear">Clear readings</button></p>
+      </div>
+      <div class="settle-right"><div class="setplan-box">${settlePlanSVG(job, c, { fmt: (v) => fS(v) })}</div></div>
+    </div>
+    <div class="setchart-box">${settleChartSVG(job, c, { fmt: (v) => fS(v), unit: sU })}</div>
+    <h3>Results — API 653 Annex B</h3>${results}
+    <p class="muted small">Stations are equally spaced clockwise from station 1. The optimum cosine curve a + b·cos θ + c·sin θ is fitted by least squares and represents uniform settlement plus planar (rigid-body) tilt; L = πD/N = ${c.L ? fmt(c.L, 'big', job) : '—'}, H = ${H_TXT(c, job)}. Annex B sets no numeric planar-tilt limit; out-of-plumbness is compared with API 653 §10.5.2.1. Tilt also reduces freeboard on the low side and can bind floating roofs — check those separately.</p>
+  </section>
+  <section class="card"><div class="sp-head"><h2>Edge settlement</h2><span class="muted small">API 653 B.2.3 / B.3.4 · tank diameter ${fmt(D, 'big', job)}</span></div>
+    <div class="tblwrap"><table class="grid sedge"><thead><tr><th></th><th>Angle (°)</th><th title="Length of the settled area along the shell (drawing only)">Arc (${U.big})</th><th title="Radial width of the settled area from the shell">R (${U.big})</th><th title="Settlement measured per Fig. B.6 / B.7">B (${sU})</th><th>Bottom weld in area</th><th title="Weld angle to the tank radius: 0° = perpendicular to shell, 90° = parallel">α (°)</th><th title="Read from Fig. B.11 at R for this tank diameter">Bew (${sU})</th><th title="Read from Fig. B.12 at R for this tank diameter">Be (${sU})</th><th class="n">Allowable</th><th class="n">B / allow</th><th>Status</th><th>Notes</th><th></th></tr></thead><tbody>${edgeRows}</tbody></table></div>
+    <div class="acts row-acts"><button class="btn sm" data-act="se-add" data-k="edge">+ Edge settlement area</button></div>
+    ${edgeNotes}
+    <p class="muted small">Measure B from a projection of the unsettled bottom (Fig. B.6; for cone-up / cone-down bottoms follow Fig. B.7), over the radial width R. Read <b>Bew</b> from Fig. B.11 (bottom lap weld within ±20° of parallel to the shell) and <b>Be</b> from Fig. B.12 (no weld, butt welds, or lap weld within ±20° of perpendicular) at R for this tank diameter. Lap welds at another angle: B = Be − (Be − Bew)·sin α (B.3.4.4). Any area may be screened against Bew first. At 75 % of the allowable or more, examine the welds by VT and MT/PT (B.3.4.1). The curves assume 1/4 in (6 mm) bottoms and apply to 5/16–3/8 in (8–10 mm).</p>
+  </section>
+  <section class="card"><div class="sp-head"><h2>Bottom depressions / bulges</h2><span class="muted small">API 653 B.2.5 / B.3.3 · remote from the shell</span></div>
+    <div class="tblwrap"><table class="grid sedge"><thead><tr><th></th><th>Angle (°)</th><th>From centre (${U.big})</th><th title="Radius of the inscribed circle of the depression">R (${U.big})</th><th>Depth B (${sU})</th><th class="n">Allowable 0.37·R</th><th class="n">B / allow</th><th>Status</th><th>Notes</th><th></th></tr></thead><tbody>${depRows}</tbody></table></div>
+    <div class="acts row-acts"><button class="btn sm" data-act="se-add" data-k="dep">+ Depression / bulge</button></div>
+    <p class="muted small">BB = 0.37·R (BB in inches, R in feet; ${met ? `≈ ${DEP_K.toFixed(4)}·R in mm` : 'metric ≈ 0.031·R'}) for single-pass lap-welded bottoms, smooth depressions with no sharp creases or buckled welds, and plate meeting the minimum bottom thickness. Check that floating roof supports are not affected.</p>
+  </section>`;
+}
+const H_TXT = (c, job) => (c.H > 0 ? fmt(c.H, 'big', job) : '—');
+
+function refreshSettle() {
+  setTimeout(() => {
+    const c = $('#settleBody'); if (!c) return;
+    const a = document.activeElement, key = a && c.contains(a) ? focusSel(a) : null, typed = a && a.value !== undefined && a.value !== a.defaultValue ? a.value : null;
+    c.innerHTML = settleBodyHTML();
+    if (key) { const n = c.querySelector(key); if (n && typed !== null && n.value !== typed) { n.value = typed; n.dataset.restored = '1'; } if (n) { n.focus({ preventScroll: true }); try { if (typed === null) n.select(); else n.setSelectionRange(n.value.length, n.value.length); } catch { /* */ } } }
+  }, 0);
+}
+
 /* ------------------------------------------------------------ report view */
 
 function viewReport() {
@@ -1426,6 +1508,10 @@ document.addEventListener('click', async (e) => {
     }
     case 'utl-up': $('#utlInput').click(); return;
     case 'exp-roof': return download(fileBase(S.job) + '_roof-ut.csv', roofCSV(S.job), 'text/csv');
+    case 'exp-settle': return download(fileBase(S.job) + '_settlement.csv', settleCSV(S.job), 'text/csv');
+    case 'se-add': { const L = el.dataset.k === 'edge' ? S.job.settle.edge : S.job.settle.dep; const x = el.dataset.k === 'edge' ? newEdge() : newDep(); L.push(x); commit(); refreshSettle(); setTimeout(() => $(`#settleBody input[data-eid="${x.id}"][data-f="angle"]`)?.focus(), 40); return; }
+    case 'se-del': { const k = el.dataset.k; S.job.settle[k] = S.job.settle[k].filter((x) => x.id !== el.dataset.eid); commit(); refreshSettle(); return; }
+    case 'st-clear': { if (!(await askConfirm('Clear all settlement station readings?', { ok: 'Clear', danger: true }))) return; S.job.settle.el = {}; commit(); refreshSettle(); return; }
     case 'rsel': S.roofSel = el.dataset.key; refreshRoof(); setTimeout(() => $(`.roof-panel input[data-pt="tl"], .roof-panel select[data-rpc]`)?.focus(), 40); return;
     case 'sg-add': {
       const sd = el.dataset.sg === 'p' ? S.job.roof.seal.primary : S.job.roof.seal.secondary;
@@ -1571,8 +1657,29 @@ document.addEventListener('change', async (e) => {
     else if (S.view === 'api') refreshApi();
     else if (S.view === 'shell') refreshShell();
     else if (S.view === 'roof') refreshRoof();
+    else if (S.view === 'settle') { if (path === 'settle.eu') renderView(); else refreshSettle(); }
     if (path === 'units') renderAll();
     return;
+  }
+  if (el.matches('[data-st]')) {
+    const st = S.job.settle; st.el = st.el || {};
+    const v = num(el.value), fct = (ELEV_UNITS[st.eu] || ELEV_UNITS.in)[0];
+    if (v === null) delete st.el[el.dataset.st]; else st.el[el.dataset.st] = v * fct;
+    commit(); refreshSettle(); return;
+  }
+  if (el.matches('[data-sts]')) {
+    const v = num(el.value); const k = el.dataset.sts;
+    S.job.settle[k] = v === null ? null : S.job.units === 'metric' ? v : v / PSI_PER_MPA;
+    commit(); refreshSettle(); return;
+  }
+  if (el.matches('[data-se]')) {
+    const L = el.dataset.se === 'edge' ? S.job.settle.edge : S.job.settle.dep;
+    const x = L.find((q) => q.id === el.dataset.eid); if (!x) return;
+    const k = el.dataset.f; let v = readInput(el);
+    if (!['notes', 'weld'].includes(k) && v !== null && v < 0) { toast('Values can’t be negative.'); return; }
+    if (k === 'angle' && v !== null) v = ((v % 360) + 360) % 360;
+    if (k === 'alpha' && v !== null && v > 90) { toast('Weld angle α is 0–90°.'); return; }
+    x[k] = v; commit(); refreshSettle(); return;
   }
   if (el.matches('[data-sg]')) {
     const sd = el.dataset.sg === 'p' ? S.job.roof.seal.primary : S.job.roof.seal.secondary;
@@ -1754,13 +1861,21 @@ function onIndField(el) {
 }
 
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.matches?.('input[data-st]')) {
+    e.preventDefault();
+    const inputs = $$('#settleBody input[data-st]'), i = inputs.indexOf(e.target), next = inputs[e.shiftKey ? i - 1 : i + 1];
+    const cur = e.target;
+    if (next) { next.focus(); next.select(); } // leaving the field fires its change event
+    else if (cur.value !== cur.defaultValue) cur.dispatchEvent(new Event('change', { bubbles: true }));
+    return;
+  }
   if (e.key === 'Enter' && e.target.matches?.('input[data-shut]')) {
     e.preventDefault();
     const inputs = $$(`#shellBody input[data-shut="${CSS.escape(e.target.dataset.shut)}"]`);
     const i = inputs.indexOf(e.target), next = inputs[e.shiftKey ? i - 1 : i + 1];
-    const key = next ? `input[data-shut="${CSS.escape(next.dataset.shut)}"][data-z="${CSS.escape(next.dataset.z)}"]` : null;
-    e.target.dispatchEvent(new Event('change', { bubbles: true }));
-    setTimeout(() => { const n = key && $('#shellBody ' + key); if (n) { n.focus(); n.select(); } }, 20);
+    const cur = e.target;
+    if (next) { next.focus(); next.select(); } // leaving the field fires its change event
+    else if (cur.value !== cur.defaultValue) cur.dispatchEvent(new Event('change', { bubbles: true }));
     return;
   }
   const typing = e.target.matches('input, textarea, select');

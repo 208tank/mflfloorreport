@@ -3,6 +3,7 @@ import { fromMm, u, fmt } from './units.js';
 import { RESULTS, nozzleUT, NZ_CONN_SHORT, UT_CLOCK } from './calc.js';
 import { floatingLayout, plateUT, pointStatus, PT5, hasFixed, hasFloating } from './roof.js';
 import { sealEval, activeStds } from './seal.js';
+import { settleCalc, edgeEval, depEval, ELEV_UNITS, PSI_PER_MPA } from './settle.js';
 import { utLocations, courseSummary, coursesWithElev, courseAt, readingElevations, getReading, fmtElev } from './shell.js';
 import { angleOf, toLocal, datumName, orientName } from './geometry.js';
 
@@ -143,6 +144,33 @@ export function roofCSV(job) {
     }
   }
   if (!rows.length) rows.push(['No roof recorded']);
+  return toCSV(rows);
+}
+
+export function settleCSV(job) {
+  const U = u(job), st = job.settle, c = settleCalc(job), F = c.fit, met = job.units === 'metric';
+  const sm = (mm) => r(fromMm(mm, 'small', job), met ? 1 : 3), bg = (mm) => r(fromMm(mm, 'big', job), U.bigDec + 1);
+  const eu = ELEV_UNITS[st.eu] || ELEV_UNITS.in;
+  const rows = [['Settlement survey — API 653 Annex B'], ['Date', st.date || ''], ['Surveyed by', st.surveyor || ''], ['Instrument', st.instrument || ''], ['Benchmark', st.benchmark || ''], ['Liquid level', st.level || ''],
+    [`Tank diameter (${U.big})`, bg(c.D)], [`Shell height H (${U.big})`, bg(c.H)], ['Stations N', c.N], [`Arc spacing L (${U.big})`, bg(c.L)],
+    [`Yield Y (${met ? 'MPa' : 'psi'})`, st.Y == null ? '' : met ? r(+st.Y, 1) : Math.round(st.Y * PSI_PER_MPA)], [`E (${met ? 'MPa' : 'psi'})`, st.E == null ? '' : met ? r(+st.E, 0) : Math.round(st.E * PSI_PER_MPA)], ['Readings', st.rod ? 'Rod readings (larger = lower)' : 'Elevations'], []];
+  rows.push(['Station', 'Angle (deg)', `Reading (${eu[1]})`, `Cosine fit (${U.small}, rel. mean)`, `Measured (${U.small}, rel. mean)`, `U (${U.small})`, `S (${U.small})`, 'Status']);
+  for (const p of c.pts) rows.push([p.i, r(p.angle, 2), p.raw == null ? '' : r(p.raw / eu[0], eu[2]), F && p.fit !== undefined ? sm(p.fit - F.a) : '', F && p.z !== null ? sm(p.z - F.a) : '', p.U !== undefined ? sm(p.U) : '', p.S != null ? sm(p.S) : '', p.ok === false ? 'Exceeds Smax' : p.ok ? 'OK' : '']);
+  rows.push([]);
+  if (F) {
+    rows.push(['Result', 'Value', 'Limit', 'Status']);
+    rows.push(['Cosine fit R2', r(F.R2, 4), '>= 0.90', c.valid ? 'OK' : 'Not valid']);
+    rows.push([`Planar tilt across diameter (${U.small})`, sm(F.tilt), '', `low side ${F.loDeg.toFixed(1)} deg`]);
+    rows.push([`Out-of-plumbness at top (${U.small})`, sm(F.plumb), sm(F.plumbLim), c.tiltOk ? 'OK' : c.tiltOk === false ? 'Fails' : '']);
+    rows.push([`Max out-of-plane |S| (${U.small})`, F.maxS == null ? '' : sm(Math.abs(F.maxS)), c.Smax == null ? '' : sm(c.Smax), c.oopOk ? 'OK' : c.oopOk === false ? 'Fails' : '']);
+    rows.push(['Shell settlement', c.status]);
+    rows.push([]);
+  }
+  rows.push(['Edge settlement', 'Angle (deg)', `R (${U.big})`, `B (${U.small})`, 'Weld', 'Alpha (deg)', `Bew (${U.small})`, `Be (${U.small})`, `Allowable (${U.small})`, 'B/allow (%)', 'Status', 'Notes']);
+  st.edge.forEach((x, i) => { const ev = edgeEval(x); rows.push([`E${i + 1}`, x.angle ?? '', bg(x.R), sm(x.B), x.weld, x.alpha ?? '', sm(x.Bew), sm(x.Be), sm(ev.allow), r(ev.pct, 0), ev.status, x.notes || '']); });
+  rows.push([]);
+  rows.push(['Depression', 'Angle (deg)', `From centre (${U.big})`, `R (${U.big})`, `Depth B (${U.small})`, `Allowable 0.37R (${U.small})`, 'B/allow (%)', 'Status', 'Notes']);
+  st.dep.forEach((x, i) => { const ev = depEval(x); rows.push([`D${i + 1}`, x.angle ?? '', bg(x.r), bg(x.R), sm(x.B), sm(ev.allow), r(ev.pct, 0), ev.status, x.notes || '']); });
   return toCSV(rows);
 }
 
