@@ -2,6 +2,7 @@
 import { newJob, uid } from './model.js';
 import { defaultZones, utLocations } from './shell.js';
 import { defaultRoof, floatingLayout, PT5 } from './roof.js';
+import * as SECT from './sections.js';
 import { buildLayout, plateAt, toLocal, polar } from './geometry.js';
 
 const IN = 25.4, FT = 304.8;
@@ -127,6 +128,15 @@ export function makeDemo() {
     job.settle.ep.st = { 8: { weld: 'par', notes: 'Annular lap weld parallel to shell' } };
     job.settle.curveMode = 'api';
     job.settle.dep = [{ id: uid(), angle: 300, r: 30 * FT, R: 4 * FT, B: 1.1 * IN, notes: 'Smooth dish, no creasing' }];
+  }
+  // inspection notes per section
+  {
+    const { typicalNDE, typicalObs } = SECT;
+    for (const k of Object.keys(job.secs)) job.secs[k].nde = typicalNDE(k).map((m) => ({ ...m, tech: k === 'settle' ? 'D. Surveyor' : 'B. Technician', date: job.info.inspDate, result: 'Satisfactory' }));
+    job.secs.floor.nde[0].result = 'Indications found'; job.secs.floor.nde[1].result = 'Repairs required';
+    const o = (k, item, cond, text, loc = '') => ({ ...typicalObs(k)[0], id: uid(), item, cond, text, loc });
+    job.secs.found.obs = [o('found', 'Ringwall / foundation cracking or spalling', 'fair', 'Hairline cracks in the concrete ringwall, no spalling.', '90°–150°'), o('found', 'Drainage away from the tank', 'poor', 'Ponding against the chime on the low side; grade slopes toward the tank.', '200°–240°'), o('found', 'Grout / sealant at the chime', 'fair', 'Chime sealant cracked and debonded in places.')];
+    job.secs.shell.obs = [o('shell', 'Coating / insulation', 'fair', 'Coating chalking with spot rust on course 1.', 'Course 1'), o('shell', 'Stairway, platforms and handrails', 'good', 'Sound; toe boards in place.')];
   }
   return job;
 }

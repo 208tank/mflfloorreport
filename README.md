@@ -28,6 +28,43 @@ Installed copies pick up the new version and show a *Reload* prompt.
 **Local testing:** service workers need `http://localhost` or HTTPS, so run
 `python3 -m http.server 8000` in this folder and open `http://localhost:8000`.
 
+## Organisation of the app (v3)
+
+The sidebar follows the parts of the tank:
+
+- **Jobs**, **Tank setup** (inspection details, tank, construction & design, floor layout, equipment) and
+  **Executive summary**.
+- **Floor, Shell, Fixed roof, Floating roof, Nozzles, Foundation, Settlement** — each opens to five pages:
+  - **NDE** — set up the NDE methods (method, extent, procedure, technician, date, result, notes; *Add
+    typical methods* fills in the usual ones) and enter the readings on the data pages, shown as tabs and
+    as a sub-list in the sidebar (Floor: Floor map / Indications / Plates; Shell: Shell UT; Fixed roof: Fixed
+    roof UT; Floating roof: Deck & pontoons / Rim seal; Nozzles: Nozzle UT; Settlement: Settlement survey).
+  - **Observations** — item, location, condition (good / fair / poor / not inspected) and the observation;
+    *Add typical items* gives a checklist for that part of the tank; *Make a recommendation* turns an
+    observation into a recommendation.
+  - **Photos** — add photos (camera on a tablet / phone), caption, comment, link to an observation, choose
+    whether it goes in the report, and **annotate** with arrows, circles, boxes, freehand and text in six
+    colours. Annotations are stored as drawings over the photo, so the original is kept. Photos are numbered
+    by section (FL-1, SH-1, FO-1 …).
+  - **Analysis** — the calculated results and the automatic findings that need action (Floor: API 653
+    bottom MRT; Shell: API 653 4.3.3 evaluation; roofs: readings and rim seal compliance; Nozzles: neck
+    evaluation; Settlement: summary with a link to the full survey; Foundation: observation summary).
+  - **Recommendations** — *Suggested from the analysis* lists the findings with a priority (P1 Immediate,
+    P2 Before return to service, P3 Within 12 months, P4 Next scheduled inspection, P5 Monitor /
+    maintenance); add them one at a time or all at once, or write your own. Each has the finding, the
+    recommended action, location, code reference, due date, status, a linked photo and a *Deficiency* tick.
+  - A coloured dot shows each section's condition: green satisfactory, amber attention, red deficient.
+- **Deficiencies** — every recommendation ticked as a deficiency, numbered D-001, D-002 … across the whole
+  tank. Filter open / closed / all, update priority, due date, status and client comment; status changes are
+  date-stamped. *Issue update* stamps the issue date and update number and opens the printable
+  **Deficiency report** for the client (Print / Save PDF); *Export CSV* for spreadsheets.
+- **Executive summary** — overall condition, return to service and next inspection dates, a condition table
+  by component (from the data), scope and summary of findings (with *Draft* buttons that write a first draft
+  from the NDE set-up and the findings), and the P1 / P2 items.
+- **Code tables** and **Report**. The report starts with the executive summary and the deficiency list, then
+  the technical sections, then *inspection findings by component* (NDE performed, observations,
+  recommendations and annotated photos). Each part can be turned off in the report options.
+
 ## Where the data lives — job files and OneDrive
 
 Jobs are kept in the browser's storage (IndexedDB) on the computer that entered them, so the app

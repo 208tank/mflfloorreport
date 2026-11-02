@@ -8,6 +8,7 @@ import { ROOF_TYPES, hasFixed, hasFloating, floatingLayout, floatingSVG, fixedSV
 import { rolloutSVG, utLocations, courseSummary, coursesWithElev, courseAt, readingElevations, getReading, fmtElev, coursePlates } from './shell.js';
 import { designBasis, fillFromT } from './design.js';
 import { jointLabel, TABLES_SOURCE } from './tables.js';
+import { SECTIONS, findings, allDefs, STATUS_TEXT, PRIORITY_LABEL, CONDITIONS } from './sections.js';
 import { itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
 
 const h = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -80,7 +81,7 @@ export function buildReport(job, layout, calc, company, photos, opts) {
   <header class="rp-head">
     ${company.logo ? `<img class="logo" src="${company.logo}" alt="">` : ''}
     <div class="co"><b>${h(company.name || '')}</b><br>${h(company.details || '').replace(/\n/g, '<br>')}</div>
-    <div class="rp-title"><h1>Tank Floor Inspection Report</h1><div>MFL scanning with UT / VT prove-up</div>
+    <div class="rp-title"><h1>Storage Tank Inspection Report</h1><div>API 653 inspection — floor, shell, roof, nozzles, foundation and settlement</div>
     <div class="meta">${I.reportNo ? 'Report ' + h(I.reportNo) + ' · ' : ''}${h(I.inspDate || '')}</div>
     <div class="meta">${job.rev ? `Rev ${job.rev} · saved ${h(new Date(job.savedAt).toLocaleString())}${(job.updated || 0) > (job.savedAt || 0) ? ' · <b>includes changes after Rev ' + job.rev + '</b>' : ''}` : 'Draft — not saved to a file'}</div></div>
   </header>
@@ -92,8 +93,10 @@ export function buildReport(job, layout, calc, company, photos, opts) {
     </div>
   </section>
 
+  ${opts.exec !== false ? execSummaryHTML(job, layout, calc) : ''}
+  ${opts.defs !== false ? defTableHTML(job, photos, 'Deficiencies and recommendations') : ''}
   <section>
-    <h2>Summary</h2>
+    <h2>Floor summary</h2>
     <div class="kpis">
       <div><b>${inds.length}</b><span>MFL indications</span></div>
       <div><b>${cnt('ps')}</b><span>Product side</span></div>
@@ -274,8 +277,90 @@ export function buildReport(job, layout, calc, company, photos, opts) {
     out.push('</section>');
     return out.join('');
   })() : ''}
+  ${opts.sections !== false ? sectionChaptersHTML(job, photos, opts) : ''}
   ${platesBlock}
   ${photoBlock}
   <footer class="rp-foot">${job.rev ? `${h(I.tankId || '')} Rev ${job.rev} (${h(new Date(job.savedAt).toLocaleDateString())}). ` : ''}${h(company.footer || '')} Calculation per API 653 §4.4.7 as configured in this report; verify limits against the edition and tank design in force.</footer>
+</article>`;
+}
+
+
+/* ---------------------------------------------------------- sections, summary, deficiencies --- */
+
+const photoNo = (p) => `${(SECTIONS.find((x) => x.key === p.sec)?.label || '').replace(/\s.*/, '').slice(0, 2).toUpperCase()}-${p.n || '?'}`;
+export function annoOverlay(p) {
+  if (!(p.anno || []).length) return '';
+  const W = 1000, H = Math.round(1000 * ((p.h || 3) / (p.w || 4))), sw = 6;
+  const o = [`<svg class="anno" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><defs><marker id="rh-${p.id}" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0 0L10 5 0 10z" fill="context-stroke"/></marker></defs>`];
+  for (const a of p.anno) {
+    const c = a.c || '#ff2d2d';
+    if (a.t === 'arrow') o.push(`<line x1="${a.x1}" y1="${a.y1}" x2="${a.x2}" y2="${a.y2}" stroke="${c}" stroke-width="${sw}" stroke-linecap="round" marker-end="url(#rh-${p.id})"/>`);
+    else if (a.t === 'ell') o.push(`<ellipse cx="${a.x}" cy="${a.y}" rx="${Math.abs(a.rx)}" ry="${Math.abs(a.ry)}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
+    else if (a.t === 'rect') o.push(`<rect x="${Math.min(a.x, a.x + a.w)}" y="${Math.min(a.y, a.y + a.h)}" width="${Math.abs(a.w)}" height="${Math.abs(a.h)}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
+    else if (a.t === 'pen') o.push(`<polyline points="${a.pts.map((q) => q.join(',')).join(' ')}" fill="none" stroke="${c}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    else if (a.t === 'text') o.push(`<text x="${a.x}" y="${a.y}" font-size="${a.s || 44}" font-family="Arial,sans-serif" font-weight="700" fill="${c}" stroke="#000" stroke-width="1.5" paint-order="stroke">${h(a.txt)}</text>`);
+  }
+  o.push('</svg>');
+  return o.join('');
+}
+const fig = (p, cap = true) => `<figure class="phr"><span class="phfig"><img src="${p.dataUrl}" alt="">${annoOverlay(p)}</span>${cap ? `<figcaption><b>${photoNo(p)}</b>${p.caption ? ' · ' + h(p.caption) : ''}${p.comment ? `<br><small>${h(p.comment)}</small>` : ''}</figcaption>` : ''}</figure>`;
+const condText = (c) => (CONDITIONS.find(([k]) => k === c) || [])[1] || '';
+
+export function execSummaryHTML(job, layout, calc) {
+  const F = findings(job, layout, calc), S2 = job.summary || {}, I = job.info || {};
+  const defs = allDefs(job), open = defs.filter((d) => d.status !== 'Closed');
+  const pri = open.filter((d) => ['P1', 'P2'].includes(d.priority));
+  return `<section class="pb exec"><h2>Executive summary</h2>
+    ${S2.condition ? `<p class="verdict ${/Not fit|Further/.test(S2.condition) ? 'bad' : /repairs/.test(S2.condition) ? 'warn' : 'ok'}">${h(S2.condition)}</p>` : ''}
+    ${S2.scope ? `<h3 class="rp-h3">Scope</h3><p>${h(S2.scope).replace(/\n/g, '<br>')}</p>` : ''}
+    ${S2.narrative ? `<h3 class="rp-h3">Summary of findings</h3><p>${h(S2.narrative).replace(/\n/g, '<br>')}</p>` : ''}
+    <table class="grid small"><thead><tr><th>Component</th><th>Condition</th><th>Key results</th><th class="n">Open deficiencies</th></tr></thead><tbody>
+    ${SECTIONS.map((s) => { const f = F[s.key], n = open.filter((d) => d.sec === s.key).length; return `<tr class="${f.status === 'bad' ? 'is-bad' : ''}"><td><b>${h(s.label)}</b></td><td>${STATUS_TEXT[f.status]}</td><td>${f.lines.slice(0, 3).join('<br>') || '—'}</td><td class="n">${n || '—'}</td></tr>`; }).join('')}
+    </tbody></table>
+    ${pri.length ? `<h3 class="rp-h3">Priority items (P1 / P2)</h3><ul>${pri.map((d) => `<li><b>${h(d.no || '')}</b> ${h(d.secLabel)}: ${h(d.finding)}${d.action ? ` — <i>${h(d.action)}</i>` : ''}</li>`).join('')}</ul>` : ''}
+    ${S2.rts || S2.nextExt || S2.nextInt || S2.nextUT ? `<table class="kv">${[['Return to service', S2.rts], ['Next external inspection', S2.nextExt], ['Next internal inspection', S2.nextInt], ['Next UT thickness inspection', S2.nextUT]].filter(([, v]) => v).map(([k, v]) => `<tr><th>${k}</th><td>${h(v)}</td></tr>`).join('')}</table>` : ''}
+  </section>`;
+}
+
+export function defTableHTML(job, photos, title, opts = {}) {
+  let defs = allDefs(job); if (opts.openOnly) defs = defs.filter((d) => d.status !== 'Closed');
+  if (!defs.length) return opts.always ? `<section class="pb-avoid"><h2>${title}</h2><p>No deficiencies recorded.</p></section>` : '';
+  const ph = new Map((photos || []).map((p) => [p.id, p]));
+  const cnt = (f) => defs.filter(f).length;
+  return `<section class="pb defs"><h2>${title}</h2>
+    <p class="note">${defs.length} item${defs.length > 1 ? 's' : ''}: ${['P1', 'P2', 'P3', 'P4', 'P5'].map((p) => `${p} ${cnt((d) => d.priority === p)}`).join(' · ')} · open ${cnt((d) => d.status !== 'Closed')}, closed ${cnt((d) => d.status === 'Closed')}. Priorities: ${Object.values(PRIORITY_LABEL).join('; ')}.</p>
+    <table class="grid small deft"><thead><tr><th>No.</th><th>Component / location</th><th>Deficiency</th><th>Recommended action</th><th>Priority</th><th>Due</th><th>Status</th>${opts.client ? '<th>Client comment</th>' : ''}</tr></thead><tbody>
+    ${defs.map((d) => { const p = d.photo && ph.get(d.photo); return `<tr class="${d.status === 'Closed' ? 'closed' : d.priority === 'P1' ? 'is-bad' : ''}"><td><b>${h(d.no || '')}</b></td><td>${h(d.secLabel)}${d.loc ? '<br><small>' + h(d.loc) + '</small>' : ''}</td><td>${h(d.finding)}${d.ref ? `<br><small>${h(d.ref)}</small>` : ''}${p ? `<div class="dthumb">${fig(p, false)}<small>${photoNo(p)}</small></div>` : ''}</td><td>${h(d.action)}</td><td>${h(d.priority)}</td><td>${h(d.due || '')}</td><td>${h(d.status)}${d.status === 'Closed' && d.closedOn ? `<br><small>${h(d.closedOn)}</small>` : ''}</td>${opts.client ? `<td>${h(d.client || '')}</td>` : ''}</tr>`; }).join('')}
+    </tbody></table></section>`;
+}
+
+export function sectionChaptersHTML(job, photos, opts = {}) {
+  const out = [];
+  for (const s of SECTIONS) {
+    const d = job.secs?.[s.key] || {}, ph = (photos || []).filter((p) => p.sec === s.key && p.inReport !== false).sort((a, b) => (a.n || 0) - (b.n || 0));
+    if (!d.nde?.length && !d.obs?.length && !d.recs?.length && !ph.length) continue;
+    out.push(`<section class="pb chap"><h2>${h(s.label)} — inspection findings</h2>
+      ${d.nde?.length ? `<h3 class="rp-h3">NDE performed</h3><table class="grid small"><thead><tr><th>Method</th><th>Extent</th><th>Procedure</th><th>Technician</th><th>Date</th><th>Result</th><th>Notes</th></tr></thead><tbody>${d.nde.map((n) => `<tr><td>${h(n.method)}</td><td>${h(n.extent)}</td><td>${h(n.proc)}</td><td>${h(n.tech)}</td><td>${h(n.date)}</td><td>${h(n.result)}</td><td>${h(n.notes)}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${d.obs?.length ? `<h3 class="rp-h3">Observations</h3><table class="grid small"><thead><tr><th>#</th><th>Item</th><th>Location</th><th>Condition</th><th>Observation</th><th>Photos</th></tr></thead><tbody>${d.obs.map((o, i) => `<tr class="${o.cond === 'poor' ? 'is-bad' : ''}"><td>${i + 1}</td><td>${h(o.item)}</td><td>${h(o.loc)}</td><td>${condText(o.cond)}</td><td>${h(o.text)}</td><td>${ph.filter((p) => p.obs === o.id).map(photoNo).join(', ')}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${d.recs?.length ? `<h3 class="rp-h3">Recommendations</h3><table class="grid small"><thead><tr><th>No.</th><th>Finding</th><th>Recommended action</th><th>Priority</th><th>Due</th><th>Status</th></tr></thead><tbody>${d.recs.map((r) => `<tr><td>${h(r.def ? r.no || '' : '—')}</td><td>${h(r.finding)}${r.loc ? `<br><small>${h(r.loc)}</small>` : ''}</td><td>${h(r.action)}</td><td>${h(r.priority)}</td><td>${h(r.due || '')}</td><td>${h(r.status)}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${ph.length && opts.photos !== false ? `<h3 class="rp-h3">Photographs</h3><div class="photos sec-ph">${ph.map((p) => fig(p)).join('')}</div>` : ''}
+    </section>`);
+  }
+  return out.join('');
+}
+
+/** Stand-alone deficiency report for client updates. */
+export function buildDefReport(job, company, photos) {
+  const I = job.info || {}, S2 = job.summary || {};
+  return `<article class="report">
+  <header class="rp-head">
+    ${company.logo ? `<img class="logo" src="${company.logo}" alt="">` : ''}
+    <div class="co"><b>${h(company.name || '')}</b><br>${h(company.details || '').replace(/\n/g, '<br>')}</div>
+    <div class="rp-title"><h1>Deficiency Report</h1><div>${h(I.tankId ? 'Tank ' + I.tankId : '')}${I.site ? ' · ' + h(I.site) : ''}</div>
+    <div class="meta">${I.reportNo ? 'Report ' + h(I.reportNo) + ' · ' : ''}Issued ${h(S2.issued || new Date().toISOString().slice(0, 10))}${S2.defRev ? ' · Update ' + S2.defRev : ''}</div></div>
+  </header>
+  <section><table class="kv">${[['Client', I.client], ['Facility / site', I.site], ['Tank ID', I.tankId], ['Inspection date', I.inspDate], ['API 653 inspector', I.inspector], ['Overall condition', S2.condition]].filter(([, v]) => v).map(([k, v]) => `<tr><th>${k}</th><td>${h(v)}</td></tr>`).join('')}</table></section>
+  ${defTableHTML(job, photos, 'Deficiencies', { always: true, client: true })}
+  <footer class="rp-foot">${h(company.footer || '')} Status as of ${h(new Date().toLocaleDateString())}.</footer>
 </article>`;
 }
