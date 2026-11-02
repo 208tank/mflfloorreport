@@ -38,6 +38,19 @@ Repairs table lists the repair / patch size (L × W × t) and, optionally, the i
 entered); the CSV includes them. Existing patches already on the floor are drawn with the floor feature *Patch plate / repair*
 (Floor map → + Feature).
 
+### Auto patch
+
+Every indication that needs repair (auto from the API 653 calculation, or Repair = Yes) gets a lap-welded
+patch plate, unless its repair method is something other than a patch. Settings on Floor → Analysis
+(API 653): **Auto patch repair indications** (on), **Default patch length / width** (12 × 12 in), and
+**Extend past the corrosion by at least** (1 in) — a patch grows beyond the default when the indication is
+bigger. Patches are centred on the indication; overlapping patches, and indications given the same
+Repair ID, are combined into one patch. They are numbered P-1, P-2 … (a Repair ID you type is kept).
+A size typed on the indication overrides the auto size. Patches are drawn on the floor map (toggle
+*Patches*; small patches are drawn at a minimum size with the true outline inside so they show on a large
+tank) and in the report, which also lists them in a *Patch plates* table with size, thickness (nominal
+bottom t unless entered), the indications covered, plates, and a flag when a patch reaches the critical zone.
+
 ## Organisation of the app (v3)
 
 The sidebar follows the parts of the tank:

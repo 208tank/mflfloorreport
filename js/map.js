@@ -1,6 +1,7 @@
 // SVG floor map rendering and interaction.
 import { polar, datumPoint, datumAxes } from './geometry.js';
 import { nozzleUT } from './calc.js';
+import { patchList } from './patches.js';
 
 export const COLORS = { ps: '#1f6feb', ss: '#d9480f', both: '#8250df', pending: '#6b7280', nri: '#9ca3af', other: '#9ca3af' };
 
@@ -123,6 +124,20 @@ export function renderMapSVG(job, layout, opts = {}) {
     out.push('</g>');
   }
   out.push('</g>');
+
+  // repair patch plates
+  if (opts.showPatches !== false && calc) {
+    const pl = opts.patches || patchList(job, layout, calc);
+    out.push('<g class="patches">');
+    const minD = s * 5.2; // drawn at least this big so a 12 in patch shows on a large tank; true size when zoomed in
+    for (const pt of pl) {
+      const L = Math.max(pt.L, minD), W = Math.max(pt.W, minD), x0 = pt.cx - L / 2, y1 = pt.cy + W / 2;
+      out.push(`<g class="patchp${pt.auto ? ' auto' : ''}${pt.cz ? ' cz' : ''}"><rect x="${f(x0)}" y="${f(-y1)}" width="${f(L)}" height="${f(W)}" stroke-width="${f(s * 0.3)}"/>` +
+        (L > pt.L + 1 ? `<rect x="${f(pt.x0)}" y="${f(-pt.y1)}" width="${f(pt.L)}" height="${f(pt.W)}" class="true" stroke-width="${f(s * 0.15)}"/>` : '') +
+        `<text x="${f(pt.cx)}" y="${f(-(pt.cy - W / 2) + s * 2.1)}" font-size="${f(s * 1.9)}" text-anchor="middle" class="plabel">${esc(pt.id)}</text></g>`);
+    }
+    out.push('</g>');
+  }
 
   // datum marks (X/Y origin of each plate)
   if (opts.showDatums !== false) {

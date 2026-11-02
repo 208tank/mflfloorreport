@@ -28,7 +28,11 @@ export function defaultCalc() {
     cp: false,            // UPr = 0 where effective cathodic protection
     includeUnverified: false,
     stprOverride: null,
-    uprOverride: null
+    uprOverride: null,
+    autoPatch: true,      // repair indications get a patch plate
+    patchL: 304.8,        // default patch 12 x 12 in
+    patchW: 304.8,
+    patchMargin: 25.4     // patch extends past the corrosion by at least this much
   };
 }
 

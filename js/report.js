@@ -9,6 +9,7 @@ import { rolloutSVG, utLocations, courseSummary, coursesWithElev, courseAt, read
 import { designBasis, fillFromT } from './design.js';
 import { jointLabel, TABLES_SOURCE } from './tables.js';
 import { SECTIONS, findings, allDefs, STATUS_TEXT, PRIORITY_LABEL, CONDITIONS } from './sections.js';
+import { patchList, patchOf } from './patches.js';
 import { itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
 
 const h = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -25,6 +26,7 @@ export function legendHTML() {
     ${item('nri', 'No indication', `<path d="M-4-4L4 4M-4 4L4-4" stroke="${COLORS.nri}" stroke-width="1.6"/>`)}
     ${item('rep', 'Repair', `<circle r="5" fill="none" stroke="#b91c1c" stroke-width="1.3" stroke-dasharray="2 1.3"/>`)}
     ${item('cz', 'Critical zone limit', `<path d="M-5 0H5" stroke="#c2410c" stroke-width="1.4" stroke-dasharray="2.5 1.5"/>`)}
+    ${item('patch', 'Patch plate', `<rect x="-5" y="-4" width="10" height="8" fill="rgba(234,88,12,.18)" stroke="#c2410c" stroke-width="1"/>`)}
     ${item('not', 'Not scanned', `<rect x="-5" y="-4" width="10" height="8" fill="url(#lg-hatch)" stroke="#5b6470" stroke-width=".6"/><defs><pattern id="lg-hatch" width="2.5" height="2.5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2.5" height="2.5" fill="#eceef1"/><line y2="2.5" stroke="#9aa3ad" stroke-width=".7"/></pattern></defs>`)}
   </div>`;
 }
@@ -44,6 +46,7 @@ export function buildReport(job, layout, calc, company, photos, opts) {
   for (const p of layout.plates) { aTot += p.area; const s = job.plates?.[p.key]?.scan; if (s === 'not') aNot += p.area; else if (s === 'partial') aPart += p.area; }
   const pct = (a) => (aTot ? ((a / aTot) * 100).toFixed(1) + '%' : '—');
   const listed = opts.provenOnly ? inds.filter((i) => !['nri', 'other'].includes(i.result)) : inds;
+  const patches = patchList(job, layout, calc);
   const showSize = opts.indSize !== false && inds.some((i) => i.len || i.wid);
   const allOk = calc.regions.every((r) => r.ok !== false) && !below.length;
 
@@ -143,7 +146,7 @@ export function buildReport(job, layout, calc, company, photos, opts) {
     <p class="note">Dimensions in ${U.small}. Remaining thickness from UT unless marked <sup>V</sup> (nominal − VT pit depth) or <sup>M</sup> (MFL estimate).</p>
   </section>
 
-  ${repairs.length || below.length ? `<section class="pb-avoid"><h2>Repairs</h2><table class="grid small"><thead><tr><th>No.</th><th>Plate</th><th>X</th><th>Y</th><th>Side</th><th>Remaining</th>${showSize ? '<th>Indication (L × W)</th>' : ''}<th>Method</th><th>Repair / patch (L × W × t)</th><th>Basis</th></tr></thead><tbody>${[...repairs, ...below].map((i) => { const a = per.get(i.id); return `<tr><td>${h(i.no)}</td><td>${h(a.plate?.label)}</td><td class="n">${fmt(i.x, 'small', job, false)}</td><td class="n">${fmt(i.y, 'small', job, false)}</td><td>${RESULT_SHORT[i.result]}</td><td class="n">${t(a.rem)}</td>${showSize ? `<td class="n">${i.len || i.wid ? `${fmt(i.len, 'small', job, false)} × ${fmt(i.wid, 'small', job, false)}` : '—'}</td>` : ''}<td>${h(i.repairMethod || '')}</td><td class="n">${i.repLen || i.repWid ? `${fmt(i.repLen, 'small', job, false)} × ${fmt(i.repWid, 'small', job, false)}${i.repT ? ' × ' + fmt(i.repT, 't', job, false) : ''}` : '—'}${i.repId ? `<br><small>${h(i.repId)}</small>` : ''}</td><td>${a.status === 'below MRT' ? '<b>Below MRT – repair declined</b>' : a.auto ? 'Below MRT at O<sub>r</sub>' : 'Specified'}</td></tr>`; }).join('')}</tbody></table></section>` : ''}
+  ${repairs.length || below.length ? `<section class="pb-avoid"><h2>Repairs</h2><table class="grid small"><thead><tr><th>No.</th><th>Plate</th><th>X</th><th>Y</th><th>Side</th><th>Remaining</th>${showSize ? '<th>Indication (L × W)</th>' : ''}<th>Method</th><th>Repair / patch (L × W × t)</th><th>Basis</th></tr></thead><tbody>${[...repairs, ...below].map((i) => { const a = per.get(i.id); return `<tr><td>${h(i.no)}</td><td>${h(a.plate?.label)}</td><td class="n">${fmt(i.x, 'small', job, false)}</td><td class="n">${fmt(i.y, 'small', job, false)}</td><td>${RESULT_SHORT[i.result]}</td><td class="n">${t(a.rem)}</td>${showSize ? `<td class="n">${i.len || i.wid ? `${fmt(i.len, 'small', job, false)} × ${fmt(i.wid, 'small', job, false)}` : '—'}</td>` : ''}<td>${h(i.repairMethod || '')}</td><td class="n">${(() => { const pp = patchOf(patches, i.id); if (pp) return `<b>${h(pp.id)}</b> ${fmt(pp.L, 'small', job, false)} × ${fmt(pp.W, 'small', job, false)}${pp.t ?? i.repT ? ' × ' + fmt(pp.t ?? i.repT, 't', job, false) : ''}${pp.auto ? ' <small>auto</small>' : ''}`; return i.repLen || i.repWid ? `${fmt(i.repLen, 'small', job, false)} × ${fmt(i.repWid, 'small', job, false)}${i.repT ? ' × ' + fmt(i.repT, 't', job, false) : ''}${i.repId ? `<br><small>${h(i.repId)}</small>` : ''}` : '—'; })()}</td><td>${a.status === 'below MRT' ? '<b>Below MRT – repair declined</b>' : a.auto ? 'Below MRT at O<sub>r</sub>' : 'Specified'}</td></tr>`; }).join('')}</tbody></table>${patches.length ? `<h3 class="rp-h3">Patch plates</h3><table class="grid small"><thead><tr><th>Patch</th><th class="n">Size (L × W)</th><th class="n">t</th><th>Covers indications</th><th>Plate(s)</th><th>Notes</th></tr></thead><tbody>${patches.map((pp) => `<tr><td><b>${h(pp.id)}</b></td><td class="n">${fmt(pp.L, 'small', job, false)} × ${fmt(pp.W, 'small', job, false)}</td><td class="n">${pp.t ? fmt(pp.t, 't', job, false) : (T.tBottom ? fmt(T.tBottom, 't', job, false) + '*' : '—')}</td><td>${pp.inds.map((x) => h(x.no)).join(', ')}</td><td>${[...new Set(pp.inds.map((x) => per.get(x.id)?.plate?.label).filter(Boolean))].map(h).join(', ')}</td><td>${pp.auto ? 'Auto size' : 'Size entered'}${pp.inds.length > 1 ? '; combined' : ''}${pp.cz ? '; <b>extends into the critical zone — check API 653 9.10.1.2</b>' : ''}</td></tr>`).join('')}</tbody></table><p class="note">Lap-welded patch plates centred on the repair indications: default ${fmt(+(job.calc?.patchL ?? 304.8), 'small', job)} × ${fmt(+(job.calc?.patchW ?? 304.8), 'small', job)}, larger where needed to extend at least ${fmt(+(job.calc?.patchMargin ?? 25.4), 'small', job)} past the corrosion; overlapping patches combined. Shown on the floor map. * nominal bottom thickness assumed. Check patch size, spacing and weld details against API 653 9.10.</p>` : ''}</section>` : ''}
 
   <section class="pb-avoid">
     <h2>Equipment and personnel</h2>

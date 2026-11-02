@@ -7,6 +7,7 @@ import { renderMapSVG, MapController } from './map.js';
 import { ROOF_TYPES, FIXED_TYPES, FIXED_SUPPORT, FLOAT_TYPES, PT5, PT5_SHORT, PONT_COND, hasFixed, hasFloating, floatingLayout, roofDiameter, autoPontCount, plateUT, pointStatus, floatingSVG, fixedSVG } from './roof.js';
 import { download, indicationsCSV, platesCSV, nozzlesCSV, shellCSV, roofCSV, settleCSV, svgForExport, svgToPng, fileBase } from './export.js';
 import { buildReport, legendHTML, buildDefReport } from './report.js';
+import { patchList, patchOf } from './patches.js';
 import { newJob, migrate, nextNo, uid, getPath, setPath } from './model.js';
 import { makeDemo } from './demo.js';
 import { defaultShell, defaultZones, autoLocCount, autoPlateCount, utLocations, coursesWithElev, courseAt, coursePlates, shellHeight, courseSummary, readingElevations, zoneCount, getReading, fmtElev, zKey, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
@@ -20,7 +21,7 @@ import { designBasis, courseDesigns, fillFromT, annularReq, defaultJoint, shellY
 import { SECTIONS, SEC, CHILDREN, viewPlace, childView, findings, allDefs, numberDefs, STATUS_TEXT, NDE_METHODS, NDE_RESULTS, CONDITIONS, PRIORITIES, PRIORITY_LABEL, STATUSES, typicalNDE, typicalObs, newObs, newNDE, newRec, defaultSummary } from './sections.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '3.0.2';
+const APP_VERSION = '3.1.0';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -28,7 +29,7 @@ const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<'
 const S = {
   jobs: [], job: null, layout: null, calc: null, photos: [], company: {},
   view: 'jobs', sel: null, selPlate: null, selFeature: null, selNozzle: null, mode: 'select', ftType: 'column',
-  plateLabels: true, indLabels: true, showCZ: true, showDatums: true, filter: new Set(Object.keys(RESULTS)),
+  plateLabels: true, indLabels: true, showCZ: true, showPatches: true, showDatums: true, filter: new Set(Object.keys(RESULTS)),
   search: '', resFilter: 'all', sort: { key: 'no', dir: 1 }, plateSearch: '',
   reportOpts: { exec: true, defs: true, sections: true, indSize: true, photos: true, plates: false, provenOnly: false, plateLabels: true, datums: true },
   mapCtl: null, vb: null, roofSel: null, roofPt: null, roofAdd: false, roofVB: { fixed: null, floating: null }, installEvt: null, saving: false,
@@ -497,6 +498,7 @@ function viewMap() {
         <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="indLabels" ${S.indLabels ? 'checked' : ''}><span>Ind. no.</span></label>
         <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="showDatums" ${S.showDatums ? 'checked' : ''}><span>Datums</span></label>
         <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="showCZ" ${S.showCZ ? 'checked' : ''}><span>Critical zone</span></label>
+        <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="showPatches" ${S.showPatches ? 'checked' : ''}><span>Patches</span></label>
       </div>
       <div class="seg zoom"><button class="btn sm icon" data-act="zoom-out" title="Zoom out">−</button><button class="btn sm icon" data-act="zoom-in" title="Zoom in">+</button><button class="btn sm" data-act="zoom-fit" title="Fit (F)">Fit</button></div>
     </div>
@@ -520,7 +522,7 @@ function drawMap() {
   const box = $('#mapbox'); if (!box) return;
   box.innerHTML = renderMapSVG(S.job, S.layout, {
     calc: S.calc, selected: S.sel, selPlate: S.selPlate, selFeature: S.selFeature, selNozzle: S.selNozzle,
-    plateLabels: S.plateLabels, indLabels: S.indLabels, filter: S.filter, showCZ: S.showCZ,
+    plateLabels: S.plateLabels, indLabels: S.indLabels, filter: S.filter, showCZ: S.showCZ, showPatches: S.showPatches,
     showDatums: S.showDatums || S.mode === 'datum', datumFocus: focusPlate(),
     floorOf: (ft) => itemFloor(S.layout, ft)
   });
@@ -698,7 +700,8 @@ function indEditor(ind, where) {
     <div class="ed-sum" data-part="sum">${summaryBox(a)}</div>
     <fieldset><legend>Repair &amp; remarks</legend><div class="fgrid">
       ${f('Repair', 'repair', 'sel', { options: [['auto', 'Auto (API 653 calc)'], ['yes', 'Yes'], ['no', 'No']] })}${f('Repair method', 'repairMethod', 'sel', { options: REPAIR_METHOD })}
-      ${f('Repair / patch plate length', 'repLen', 'small')}${f('Repair / patch plate width', 'repWid', 'small')}
+      ${(() => { const pp = patchOf(patchList(S.job, S.layout, S.calc), ind.id); return pp ? `<p class="small span2 patch-note"><b>${h(pp.id)}</b> ${pp.auto ? 'auto patch' : 'patch'} ${fmt(pp.L, 'small', S.job, false)} × ${fmt(pp.W, 'small', S.job)}${pp.inds.length > 1 ? ` — combined with ${pp.inds.filter((x) => x.id !== ind.id).map((x) => h(x.no)).join(', ')}` : ''}${pp.cz ? ' · <b class="bad">extends into the critical zone</b>' : ''}. Type a size below to override.</p>` : ''; })()}
+      ${f('Repair / patch plate length', 'repLen', 'small', { ph: S.job.calc.autoPatch !== false && S.calc.per.get(ind.id)?.repair ? 'auto' : '' })}${f('Repair / patch plate width', 'repWid', 'small', { ph: S.job.calc.autoPatch !== false && S.calc.per.get(ind.id)?.repair ? 'auto' : '' })}
       ${f('Patch plate thickness', 'repT', 't')}${f('Repair ID / patch no.', 'repId', 'text', { ph: 'e.g. P-3, or shared patch' })}
       ${f('Comments', 'comments', 'area', { rows: 2, cls: 'span2' })}
     </div></fieldset>
@@ -962,6 +965,10 @@ function viewApi() {
         <button class="btn sm" data-act="mrt-preset" data-v="2.54">${v(2.54)} — no leak detection / containment</button>
         <button class="btn sm" data-act="mrt-preset" data-v="1.27">${v(1.27)} — with leak detection &amp; containment</button>
         <button class="btn sm" data-act="mrt-preset" data-v="1.27">${v(1.27)} — reinforced lining &gt; 0.05 in</button></div>
+      <h3 class="span2" style="margin:8px 0 0">Repair patch plates</h3>
+      ${f('Auto patch repair indications', 'autoPatch', 'bool', { value: S.job.calc.autoPatch !== false, cls: 'span2' })}
+      ${f('Default patch length', 'patchL', 'small', { ph: met ? '300' : '12' })}${f('Default patch width', 'patchW', 'small', { ph: met ? '300' : '12' })}
+      ${f('Extend past the corrosion by at least', 'patchMargin', 'small', { hint: 'Patch grows beyond the default if the indication is larger' })}<p class="muted small" id="patchSum">${(() => { const pl = patchList(S.job, S.layout, S.calc); return pl.length ? `${pl.length} patch${pl.length > 1 ? 'es' : ''}: ${pl.map((p) => `${p.id} ${fmt(p.L, 'small', S.job, false)} × ${fmt(p.W, 'small', S.job)}`).join(', ')}` : 'No patches.'; })()}</p>
       ${f('Critical zone width (from shell)', 'czDist', 'small')}
       ${f('Critical zone limit', 'czLimit', 't', { ph: inVal(czLimitAuto(S.job), 't', S.job), hint: 'Blank = auto: ½ original plate t or ½ shell t-min, ≥ 0.1 in' })}
       ${f('Lower shell course t-min', 'shellTmin', 't', { hint: 'Optional, for the critical zone limit' })}<div></div>
@@ -977,6 +984,7 @@ function viewApi() {
 after.api = () => refreshApi();
 function refreshApi() {
   const el = $('#apiResults'); if (!el) return;
+  const ps = $('#patchSum'); if (ps) { const pl = patchList(S.job, S.layout, S.calc); ps.textContent = pl.length ? `${pl.length} patch${pl.length > 1 ? 'es' : ''}: ${pl.map((p) => `${p.id} ${fmt(p.L, 'small', S.job, false)} × ${fmt(p.W, 'small', S.job)}`).join(', ')}` : 'No patches.'; }
   const c = S.calc, t = (mm) => fmt(mm, 't', S.job), tn = (mm) => fmt(mm, 't', S.job, false);
   const reps = S.job.indications.filter((i) => c.per.get(i.id)?.repair || c.per.get(i.id)?.status === 'below MRT').sort(byNo);
   el.innerHTML = `<h2>Results</h2>

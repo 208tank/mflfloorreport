@@ -675,3 +675,9 @@ dialog.wide-dlg { max-width: 96vw; }
 .top-acts .save-state { white-space: nowrap; }
 @media (max-width: 1180px) { .top-acts .save-state { display: none; } .job-title span { display: none; } }
 @media (max-width: 900px) { .top-acts .file-state { display: none; } .brand span { display: none; } }
+.floormap .patchp rect { fill: rgb(234 88 12 / .14); stroke: #c2410c; }
+.floormap .patchp.cz rect { stroke: #b91c1c; fill: rgb(185 28 28 / .14); }
+.floormap .patchp .plabel { fill: #c2410c; font-weight: 700; pointer-events: none; }
+.floormap .patchp { pointer-events: none; }
+.patch-note { padding: 6px 10px; background: var(--warn-soft); border-radius: 6px; }
+.floormap .patchp rect.true { fill: none; stroke: #c2410c; stroke-dasharray: none; }
