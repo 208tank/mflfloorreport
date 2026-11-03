@@ -681,3 +681,34 @@ dialog.wide-dlg { max-width: 96vw; }
 .floormap .patchp { pointer-events: none; }
 .patch-note { padding: 6px 10px; background: var(--warn-soft); border-radius: 6px; }
 .floormap .patchp path.true { fill: none; stroke: #c2410c; }
+
+/* ---------------------------------------------------------------- dashboard */
+.dash { --s-upcoming: #64748b; --s-inspection: #2563eb; --s-reporting: #9333ea; --s-review: #d97706; --s-complete: #15803d; }
+.st-upcoming { --sc: var(--s-upcoming, #64748b); } .st-inspection { --sc: var(--s-inspection, #2563eb); } .st-reporting { --sc: var(--s-reporting, #9333ea); }
+.st-review { --sc: var(--s-review, #d97706); } .st-complete { --sc: var(--s-complete, #15803d); }
+.job-title .stg { font-style: normal; font-size: 11px; font-weight: 600; margin-left: 6px; padding: 1px 7px; border-radius: 8px; background: var(--sc, #2c3540); color: #fff; vertical-align: 1px; }
+.folderbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 12px; }
+.stiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.stile { text-align: left; background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--sc); border-radius: var(--radius); padding: 10px 12px; cursor: pointer; color: var(--ink); font: inherit; }
+.stile b { display: block; font-size: 24px; line-height: 1.1; } .stile span { font-size: 12px; color: var(--muted); }
+.stile.on { background: var(--panel2); box-shadow: 0 0 0 2px var(--sc) inset; }
+.dash-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.dash-tools input[type=search] { flex: 1; min-width: 200px; max-width: 420px; }
+.seg { display: inline-flex; } .seg .btn { border-radius: 0; } .seg .btn:first-child { border-radius: 6px 0 0 6px; } .seg .btn:last-child { border-radius: 0 6px 6px 0; }
+.seg .btn.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.board { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; align-items: start; }
+.bcol { background: var(--panel2); border: 1px solid var(--line); border-top: 4px solid var(--sc); border-radius: var(--radius); padding: 8px; min-height: 140px; display: flex; flex-direction: column; gap: 8px; transition: background .12s; }
+.bcol.over { background: var(--accent-soft); outline: 2px dashed var(--sc); }
+.bcol-h { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px; } .bcol-h em { font-style: normal; font-size: 12px; font-weight: 700; background: var(--sc); color: #fff; border-radius: 10px; padding: 0 8px; }
+.bempty { text-align: center; padding: 18px 0; margin: 0; }
+.tcard { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--sc); border-radius: 6px; padding: 9px 10px; display: flex; flex-direction: column; gap: 4px; cursor: grab; box-shadow: var(--shadow); }
+.bcol .tcard { --sc: inherit; }
+.tcard.cur { box-shadow: 0 0 0 2px var(--accent); } .tcard.late { border-left-color: var(--bad); } .tcard.dragging { opacity: .45; }
+.tc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; } .tc-top b { font-size: 15px; }
+.tc-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.cchip { font-size: 11px; padding: 1px 7px; border-radius: 9px; background: var(--line2); color: var(--ink2); }
+.cchip.ok { background: var(--ok-soft); color: var(--ok); } .cchip.warn { background: var(--warn-soft); color: var(--warn); } .cchip.bad { background: var(--bad-soft); color: var(--bad); }
+.tc-acts { display: flex; gap: 6px; margin-top: 4px; } .tc-acts select { flex: 1; min-width: 0; font-size: 12px; padding: 3px 4px; }
+.dlist select { font-size: 12px; padding: 2px 4px; }
+@media (max-width: 900px) { .stiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .stiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

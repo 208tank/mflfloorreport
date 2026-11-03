@@ -8,7 +8,7 @@ import { ROOF_TYPES, FIXED_TYPES, FIXED_SUPPORT, FLOAT_TYPES, PT5, PT5_SHORT, PO
 import { download, indicationsCSV, platesCSV, nozzlesCSV, shellCSV, roofCSV, settleCSV, svgForExport, svgToPng, fileBase } from './export.js';
 import { buildReport, legendHTML, buildDefReport } from './report.js';
 import { patchList, patchOf } from './patches.js';
-import { newJob, migrate, nextNo, uid, getPath, setPath } from './model.js';
+import { newJob, migrate, nextNo, uid, getPath, setPath, STAGES, STAGE_LABEL, defaultStatus } from './model.js';
 import { makeDemo } from './demo.js';
 import { defaultShell, defaultZones, autoLocCount, autoPlateCount, utLocations, coursesWithElev, courseAt, coursePlates, shellHeight, courseSummary, readingElevations, zoneCount, getReading, fmtElev, zKey, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
 import { buildLoader, readLoader, loaderAreas } from './loader.js';
@@ -21,7 +21,7 @@ import { designBasis, courseDesigns, fillFromT, annularReq, defaultJoint, shellY
 import { SECTIONS, SEC, CHILDREN, viewPlace, childView, findings, allDefs, numberDefs, STATUS_TEXT, NDE_METHODS, NDE_RESULTS, CONDITIONS, PRIORITIES, PRIORITY_LABEL, STATUSES, typicalNDE, typicalObs, newObs, newNDE, newRec, defaultSummary } from './sections.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '3.2.0';
+const APP_VERSION = '3.3.0';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -33,10 +33,11 @@ const S = {
   search: '', resFilter: 'all', sort: { key: 'no', dir: 1 }, plateSearch: '',
   reportOpts: { exec: true, defs: true, sections: true, indSize: true, photos: true, plates: false, provenOnly: false, plateLabels: true, datums: true },
   mapCtl: null, vb: null, roofSel: null, roofPt: null, roofAdd: false, roofVB: { fixed: null, floating: null }, installEvt: null, saving: false,
-  navOpen: new Set(), ndeTab: {}, roofPart: 'fixed', photoSel: null
+  navOpen: new Set(), ndeTab: {}, dash: { dir: null, perm: null, files: new Map(), scanned: false, scanning: false, mode: 'board', q: '', stage: '' }, roofPart: 'fixed', photoSel: null
 };
 
 const VIEWS = [
+  ['dash', 'Dashboard', 'M4 4h7v9H4zM13 4h7v5h-7zM13 11h7v9h-7zM4 15h7v5H4z'],
   ['jobs', 'Jobs', 'M4 5h16M4 12h16M4 19h10'],
   ['setup', 'Tank setup', 'M12 3v3m0 12v3M3 12h3m12 0h3M6 6l2 2m8 8 2 2M6 18l2-2m8-8 2-2M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z'],
   ['summary', 'Executive summary', 'M5 4h14v16H5zM8 8h8M8 12h8M8 16h5']
@@ -113,7 +114,7 @@ async function createJob(job) {
 /* ---------------------------------------------------------------- shell ---- */
 
 function go(view) {
-  if (!S.job && view !== 'jobs') view = 'jobs';
+  if (!S.job && view !== 'jobs' && view !== 'dash') view = 'jobs';
   if (view === 'roof') view = 'roofF';
   S.view = view;
   const pl = viewPlace(view); if (pl) S.navOpen = new Set([pl.sec]);
@@ -127,7 +128,7 @@ function renderAll() { renderHeader(); renderNav(); renderView(); }
 
 function renderHeader() {
   const j = S.job;
-  $('#jobTitle').innerHTML = j ? `<b>${h(j.info.tankId || 'Untitled tank')}${j.rev ? ` <em class="rev">Rev ${j.rev}</em>` : ''}</b><span>${h([j.info.client, j.info.site, j.info.inspDate].filter(Boolean).join(' · '))}</span>` : '<span>No job open</span>';
+  $('#jobTitle').innerHTML = j ? `<b>${h(j.info.tankId || 'Untitled tank')}${j.rev ? ` <em class="rev">Rev ${j.rev}</em>` : ''}${j.status?.stage ? ` <em class="stg st-${j.status.stage}">${h(STAGE_LABEL[j.status.stage])}</em>` : ''}</b><span>${h([j.info.client, j.info.site, j.info.inspDate].filter(Boolean).join(' · '))}</span>` : '<span>No job open</span>';
   const fs = $('#fileState');
   if (fs) {
     fs.hidden = !j;
@@ -145,7 +146,7 @@ function renderHeader() {
 function renderNav() {
   const job = S.job, place = viewPlace(S.view);
   const icon = (d, w = 18) => `<svg viewBox="0 0 24 24" width="${w}" height="${w}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
-  const btn = ([id, label, d], count) => `<button class="nav-btn${S.view === id ? ' active' : ''}" data-go="${id}" ${!job && id !== 'jobs' ? 'disabled' : ''}>${icon(d)}<span>${label}</span>${count ? `<em>${count}</em>` : ''}</button>`;
+  const btn = ([id, label, d], count) => `<button class="nav-btn${S.view === id ? ' active' : ''}" data-go="${id}" ${!job && id !== 'jobs' && id !== 'dash' ? 'disabled' : ''}>${icon(d)}<span>${label}</span>${count ? `<em>${count}</em>` : ''}</button>`;
   let F = null; try { F = job && S.layout ? findings(job, S.layout, S.calc) : null; } catch { F = null; }
   const openDefs = job ? allDefs(job).filter((d) => d.status !== 'Closed').length : 0;
   const secs = SECTIONS.map((sec) => {
@@ -167,7 +168,7 @@ function renderView() {
   main.className = 'main view-' + S.view;
   const pl = viewPlace(S.view);
   if (pl?.child === 'nde') S.ndeTab[pl.sec] = S.view;
-  const fn = { jobs: viewJobs, setup: viewSetup, summary: viewSummary, defs: viewDefs, defrep: viewDefRep, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, shell: viewShell, roofF: viewRoof, roofL: viewRoof, seal: viewRoof, nozzles: viewNozzles, settle: viewSettle, ref: viewRef, report: viewReport }[S.view]
+  const fn = { dash: viewDash, jobs: viewJobs, setup: viewSetup, summary: viewSummary, defs: viewDefs, defrep: viewDefRep, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, shell: viewShell, roofF: viewRoof, roofL: viewRoof, seal: viewRoof, nozzles: viewNozzles, settle: viewSettle, ref: viewRef, report: viewReport }[S.view]
     || (pl ? { nde: viewNDE, obs: viewObs, photos: viewPhotos, an: viewAnalysis, recs: viewRecs }[pl.child] : null) || viewJobs;
   main.innerHTML = (pl ? crumbHTML(pl) : '') + fn();
   (after[S.view] || (pl ? after['sec:' + pl.child] : null))?.();
@@ -211,6 +212,175 @@ function field(label, key, kind = 'text', extra = {}) {
   const un = unitFor(kind, extra);
   return `<label class="fld${extra.cls ? ' ' + extra.cls : ''}" for="${id}"><span class="lbl">${label}</span><span class="ctl">${input}${un ? `<i class="unit">${un}</i>` : ''}</span>${extra.hint ? `<small>${extra.hint}</small>` : ''}</label>`;
 }
+
+
+/* ------------------------------------------------------------------ dashboard */
+// All tanks on this device and in a linked folder (e.g. the team's OneDrive jobs folder), by stage.
+
+const canDir = () => 'showDirectoryPicker' in window && window.self === window.top;
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+/** Light summary of a job for the dashboard (works on raw stored jobs and on jobs read from files). */
+function jobCard(j) {
+  const st = { ...defaultStatus(), ...(j.status || {}) };
+  if (!j.status) st.stage = (j.indications || []).length || j.rev ? 'inspection' : 'upcoming';
+  let open = 0, pri = 0;
+  for (const k of Object.keys(j.secs || {})) for (const r of j.secs[k].recs || []) if (r.def && r.status !== 'Closed') { open++; if (r.priority === 'P1' || r.priority === 'P2') pri++; }
+  const since = (st.history || []).filter((x) => x.stage === st.stage).pop()?.at || null;
+  return { id: j.id, tankId: j.info?.tankId || 'Untitled', client: j.info?.client || '', site: j.info?.site || '', inspDate: j.info?.inspDate || '', reportNo: j.info?.reportNo || '',
+    inspector: j.info?.inspector || st.inspector || '', reviewer: st.reviewer || '', stage: st.stage, planned: st.planned || '', due: st.due || '', since,
+    rev: j.rev || 0, savedAt: j.savedAt || 0, updated: j.updated || j.created || 0, condition: j.summary?.condition || '', open, pri, inds: (j.indications || []).length, diameter: j.tank?.diameter || null };
+}
+
+async function dashInit() {
+  const D = S.dash;
+  if (!D.dir) D.dir = await db.getMeta('dashDir').catch(() => null);
+  if (D.dir) { try { D.perm = await D.dir.queryPermission({ mode: 'readwrite' }); } catch { D.perm = 'denied'; } }
+  if (D.dir && D.perm === 'granted' && !D.scanned && !D.scanning) await scanFolder();
+}
+
+async function scanFolder() {
+  const D = S.dash; if (!D.dir) return;
+  D.scanning = true; if (S.view === 'dash') renderView();
+  const files = new Map();
+  const walk = async (dir, path, depth) => {
+    for await (const [name, hnd] of dir.entries()) {
+      if (hnd.kind === 'directory') { if (depth < 2 && !name.startsWith('.')) await walk(hnd, path + name + '/', depth + 1); continue; }
+      if (!/\.json$/i.test(name)) continue;
+      try {
+        const f = await hnd.getFile();
+        if (!(await f.slice(0, 80).text()).includes('"tank-floor-inspector"')) continue;
+        const data = JSON.parse(await f.text());
+        if (data.format !== 'tank-floor-inspector' || !data.job?.id) continue;
+        const prev = files.get(data.job.id), card = jobCard(data.job);
+        if (!prev || card.updated > prev.card.updated) files.set(data.job.id, { name, path: path + name, fh: hnd, card, modified: f.lastModified });
+      } catch { /* not readable — skip */ }
+    }
+  };
+  try { await walk(D.dir, '', 0); D.files = files; D.scanned = true; D.scannedAt = Date.now(); }
+  catch (e) { toast('Could not read the folder: ' + e.message); }
+  D.scanning = false;
+  if (S.view === 'dash') renderView();
+}
+
+async function linkFolder() {
+  if (!canDir()) { toast('Linking a folder needs the installed app in Chrome or Edge.'); return; }
+  try {
+    const dir = await window.showDirectoryPicker({ id: 'tank-jobs-folder', mode: 'readwrite', startIn: 'documents' });
+    S.dash.dir = dir; S.dash.perm = 'granted'; S.dash.scanned = false; await db.setMeta('dashDir', dir);
+    await scanFolder();
+  } catch (e) { if (e.name !== 'AbortError') toast('Could not link the folder: ' + e.message); }
+}
+
+/** Write a job's stage back into its folder file without changing its revision. */
+async function writeStageToFile(id, status) {
+  const D = S.dash; let fh = D.files.get(id)?.fh || null;
+  if (!fh) { fh = await db.getMeta('fh:' + id).catch(() => null); }
+  if (!fh) return false;
+  try {
+    let perm = await fh.queryPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') perm = await fh.requestPermission({ mode: 'readwrite' }).catch(() => 'denied');
+    if (perm !== 'granted') return false;
+    const data = JSON.parse(await (await fh.getFile()).text());
+    if (data.format !== 'tank-floor-inspector' || data.job?.id !== id) return false;
+    data.job.status = { ...(data.job.status || {}), ...status };
+    const w = await fh.createWritable(); await w.write(JSON.stringify(data)); await w.close();
+    const e = D.files.get(id); if (e) e.card = jobCard(data.job);
+    return true;
+  } catch (e) { console.warn('stage write failed', e); return false; }
+}
+
+async function setStage(id, stage) {
+  const now = Date.now();
+  let status = null;
+  if (S.job?.id === id) {
+    if (S.job.status.stage === stage) return;
+    S.job.status.stage = stage; (S.job.status.history = S.job.status.history || []).push({ stage, at: now }); status = S.job.status;
+    commit(); await flushSave(); renderHeader();
+  } else {
+    const j = await db.getJob(id);
+    if (j) {
+      j.status = { ...defaultStatus(), ...(j.status || jobCard(j)) };
+      if (j.status.stage === stage) return;
+      j.status.stage = stage; j.status.history = [...(j.status.history || []), { stage, at: now }]; j.updated = now; status = j.status;
+      await db.putJob(j);
+    }
+  }
+  const f = S.dash.files.get(id);
+  if (!status && f) status = { ...defaultStatus(), ...f.card, history: [] , stage };
+  if (f || (await db.getMeta('fh:' + id).catch(() => null))) {
+    const ok = await writeStageToFile(id, { stage, history: [...((status?.history) || []).slice(-50)] });
+    if (!ok && f) toast('Stage changed on this device; the folder file could not be updated.');
+  }
+  await loadJobs(); if (S.view === 'dash') renderView();
+  toast(`${(S.jobs.find((j) => j.id === id)?.info?.tankId) || f?.card.tankId || 'Tank'} → ${STAGE_LABEL[stage]}`);
+}
+
+async function openFromDash(id) {
+  const local = S.jobs.find((j) => j.id === id), f = S.dash.files.get(id);
+  if (f && (!local || f.card.updated > (local.updated || 0) + 1000)) {
+    const nid = await importJobFile(await f.fh.getFile());
+    if (nid) { await db.setMeta('fh:' + nid, f.fh); if (S.job?.id === nid) { S.fileName = f.name; renderHeader(); } }
+    return;
+  }
+  if (local) { await openJob(id, 'setup'); if (f) { await db.setMeta('fh:' + id, f.fh); S.fileName = f.name; renderHeader(); } }
+}
+
+function dashRows() {
+  const D = S.dash, rows = new Map();
+  for (const j of S.jobs) rows.set(j.id, { ...jobCard(S.job?.id === j.id ? S.job : j), where: 'device' });
+  for (const [id, f] of D.files) {
+    const r = rows.get(id);
+    if (!r) rows.set(id, { ...f.card, where: 'folder', file: f.path });
+    else { const newer = f.card.updated > r.updated + 1000; rows.set(id, { ...(newer ? f.card : r), where: 'both', file: f.path, fileNewer: newer, stage: newer ? f.card.stage : r.stage }); }
+  }
+  let list = [...rows.values()];
+  const q = D.q.trim().toLowerCase();
+  if (q) list = list.filter((r) => [r.tankId, r.client, r.site, r.reportNo, r.inspector, r.reviewer].join(' ').toLowerCase().includes(q));
+  const key = (r) => (r.stage === 'upcoming' ? r.planned || r.inspDate || '9' : r.due || r.inspDate || '9');
+  return list.sort((a, b) => key(a).localeCompare(key(b)) || a.tankId.localeCompare(b.tankId, undefined, { numeric: true }));
+}
+
+function viewDash() {
+  const D = S.dash, rows = dashRows(), today = todayISO();
+  const by = Object.fromEntries(STAGES.map(([k]) => [k, rows.filter((r) => r.stage === k)]));
+  const fmtD = (d) => (d ? new Date(d + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '');
+  const card = (r) => {
+    const late = r.due && r.due < today && r.stage !== 'complete';
+    const dates = [r.stage === 'upcoming' ? (r.planned ? `Planned ${fmtD(r.planned)}` : '') : r.inspDate ? `Inspected ${fmtD(r.inspDate)}` : '', r.due ? `<span class="${late ? 'bad' : ''}">Due ${fmtD(r.due)}${late ? ' — overdue' : ''}</span>` : ''].filter(Boolean).join(' · ');
+    return `<div class="tcard${S.job?.id === r.id ? ' cur' : ''}${late ? ' late' : ''}" draggable="true" data-dash="${r.id}">
+      <div class="tc-top"><b>${h(r.tankId)}</b>${r.rev ? `<span class="muted small">Rev ${r.rev}</span>` : ''}</div>
+      <div class="small">${h([r.client, r.site].filter(Boolean).join(' · ')) || '<span class="muted">No client / site</span>'}</div>
+      ${dates ? `<div class="small">${dates}</div>` : ''}
+      ${r.inspector || r.reviewer ? `<div class="small muted">${r.inspector ? 'Insp. ' + h(r.inspector) : ''}${r.reviewer ? ' · Review ' + h(r.reviewer) : ''}</div>` : ''}
+      <div class="tc-chips">${r.condition ? `<span class="cchip ${/Not fit|Further/.test(r.condition) ? 'bad' : /repairs/.test(r.condition) ? 'warn' : 'ok'}">${h(r.condition.replace('Fit for continued service', 'Fit for service'))}</span>` : ''}${r.open ? `<span class="cchip ${r.pri ? 'bad' : 'warn'}">${r.open} open deficienc${r.open === 1 ? 'y' : 'ies'}${r.pri ? ` · ${r.pri} P1/P2` : ''}</span>` : ''}
+        <span class="cchip loc" title="${h(r.file || '')}">${r.where === 'device' ? 'This device' : r.where === 'folder' ? 'Folder' : 'Device + folder'}</span>${r.fileNewer ? '<span class="cchip warn" title="The folder file was changed more recently than the copy on this device">Folder copy newer</span>' : ''}</div>
+      <div class="tc-acts"><select data-stage-of="${r.id}" aria-label="Stage">${STAGES.map(([k, l]) => `<option value="${k}" ${r.stage === k ? 'selected' : ''}>${l}</option>`).join('')}</select><button class="btn sm primary" data-act="dash-open" data-id="${r.id}">Open</button></div></div>`;
+  };
+  const folderBar = !canDir() ? `<span class="muted small">Folder linking works in the installed app (Chrome / Edge). Showing tanks on this device.</span>`
+    : !D.dir ? `<button class="btn" data-act="dash-link">Link jobs folder…</button><span class="muted small">Pick the shared folder (e.g. OneDrive) where the job files are saved.</span>`
+      : D.perm !== 'granted' ? `<button class="btn primary" data-act="dash-reconnect">Reconnect ${h(D.dir.name)}</button><span class="muted small">The browser asks again each session before the app can read the folder.</span><button class="btn sm ghost" data-act="dash-link">Change folder…</button>`
+        : `<span class="small">Folder <b>${h(D.dir.name)}</b> · ${D.scanning ? 'scanning…' : `${D.files.size} job file${D.files.size === 1 ? '' : 's'}`}</span><button class="btn sm" data-act="dash-rescan" ${D.scanning ? 'disabled' : ''}>Rescan</button><button class="btn sm ghost" data-act="dash-link">Change folder…</button>`;
+  const tiles = STAGES.map(([k, l]) => `<button class="stile st-${k}${D.stage === k ? ' on' : ''}" data-act="dash-stage" data-k="${k}"><b>${by[k].length}</b><span>${l}</span></button>`).join('');
+  const body = D.mode === 'list'
+    ? `<section class="card"><div class="tblwrap"><table class="grid dlist"><thead><tr><th>Tank</th><th>Client / site</th><th>Stage</th><th>Planned / inspected</th><th>Due</th><th>Inspector</th><th>Reviewer</th><th>Condition</th><th class="n">Open def.</th><th>Where</th><th></th></tr></thead><tbody>
+        ${rows.filter((r) => !D.stage || r.stage === D.stage).map((r) => `<tr class="${r.due && r.due < today && r.stage !== 'complete' ? 'is-bad' : ''}"><td><b>${h(r.tankId)}</b>${r.rev ? `<br><small class="muted">Rev ${r.rev}</small>` : ''}</td><td>${h(r.client)}<br><small class="muted">${h(r.site)}</small></td><td><select data-stage-of="${r.id}">${STAGES.map(([k, l]) => `<option value="${k}" ${r.stage === k ? 'selected' : ''}>${l}</option>`).join('')}</select></td><td>${fmtD(r.stage === 'upcoming' ? r.planned : r.inspDate)}</td><td>${fmtD(r.due)}</td><td>${h(r.inspector)}</td><td>${h(r.reviewer)}</td><td class="small">${h(r.condition)}</td><td class="n">${r.open || '—'}${r.pri ? ` <small class="bad">(${r.pri} P1/P2)</small>` : ''}</td><td class="small">${r.where === 'device' ? 'Device' : r.where === 'folder' ? 'Folder' : 'Both'}${r.fileNewer ? ' <b class="warn-txt">· folder newer</b>' : ''}</td><td><button class="btn sm primary" data-act="dash-open" data-id="${r.id}">Open</button></td></tr>`).join('') || '<tr><td colspan="11" class="empty">No tanks.</td></tr>'}
+      </tbody></table></div></section>`
+    : `<div class="board">${STAGES.filter(([k]) => !D.stage || D.stage === k).map(([k, l]) => `<div class="bcol st-${k}" data-drop="${k}"><div class="bcol-h"><b>${l}</b><em>${by[k].length}</em></div>${by[k].map(card).join('') || '<p class="muted small bempty">Drag a tank here</p>'}</div>`).join('')}</div>`;
+  return `<div class="page wide dash"><div class="page-head"><div><h1>Dashboard</h1><p class="muted">Every tank on this device and in the linked jobs folder, by stage. Drag a card to another column, or use its stage list. Stage changes are written to the job file in the folder so everyone sees them.</p></div>
+    <div class="acts"><button class="btn primary" data-act="job-new">New tank</button><button class="btn" data-act="job-open-file">Open job file…</button></div></div>
+    <div class="folderbar">${folderBar}</div>
+    <div class="stiles">${tiles}</div>
+    <div class="dash-tools"><input type="search" id="dashQ" placeholder="Search tank, client, site, inspector…" value="${h(D.q)}"><div class="seg"><button class="btn sm${D.mode === 'board' ? ' on' : ''}" data-act="dash-mode" data-k="board">Board</button><button class="btn sm${D.mode === 'list' ? ' on' : ''}" data-act="dash-mode" data-k="list">List</button></div>${D.stage ? `<button class="btn sm ghost" data-act="dash-stage" data-k="${D.stage}">Show all stages</button>` : ''}</div>
+    ${body}</div>`;
+}
+after.dash = async () => { const before = S.dash.scanned; await dashInit(); if (!before && S.dash.scanned && S.view === 'dash') renderView(); };
+
+document.addEventListener('dragstart', (e) => { const c = e.target.closest?.('[data-dash]'); if (!c) return; e.dataTransfer.setData('text/plain', c.dataset.dash); e.dataTransfer.effectAllowed = 'move'; c.classList.add('dragging'); });
+document.addEventListener('dragend', (e) => { e.target.closest?.('[data-dash]')?.classList.remove('dragging'); $$('.bcol.over').forEach((x) => x.classList.remove('over')); });
+document.addEventListener('dragover', (e) => { const col = e.target.closest?.('[data-drop]'); if (!col) return; e.preventDefault(); $$('.bcol.over').forEach((x) => x !== col && x.classList.remove('over')); col.classList.add('over'); });
+document.addEventListener('drop', (e) => { const col = e.target.closest?.('[data-drop]'); if (!col) return; e.preventDefault(); col.classList.remove('over'); const id = e.dataTransfer.getData('text/plain'); if (id) setStage(id, col.dataset.drop); });
+document.addEventListener('input', (e) => { if (e.target.id === 'dashQ') { S.dash.q = e.target.value; clearTimeout(S.dash.qt); S.dash.qt = setTimeout(() => { const pos = e.target.selectionStart; renderView(); const n = $('#dashQ'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch { /* */ } } }, 200); } });
 
 /* ------------------------------------------------------------- jobs view --- */
 
@@ -274,6 +444,8 @@ function viewSetup() {
         ${field('Inspection date', 'info.inspDate', 'date')}${field('0° reference label', 'info.zeroRef', 'text', { ph: 'e.g. N, manway, inlet' })}
         ${field('MFL operator', 'info.mflTech')}${field('UT technician', 'info.utTech')}
         ${field('API 653 inspector', 'info.inspector')}${field('Date of UT readings', 'info.utDate', 'text', { ph: 'from the UT loader sheet' })}
+        ${field('Job stage', 'status.stage', 'sel', { options: STAGES })}${field('Peer reviewer', 'status.reviewer')}
+        ${field('Planned inspection date', 'status.planned', 'date')}${field('Report due', 'status.due', 'date')}
       </div></section>
 
       <section class="card"><h2>Tank</h2><div class="fgrid">
@@ -2104,6 +2276,12 @@ document.addEventListener('click', async (e) => {
       for (const d of allDefs(S.job)) rows.push([d.no || '', d.secLabel, d.loc || '', d.finding || '', d.action || '', d.priority, d.due || '', d.status, d.closedOn || '', d.client || '', d.ref || '', (d.history || []).map((x) => x.date + ' ' + x.status).join('; ')]);
       return download(fileBase(S.job) + '_deficiencies.csv', '\ufeff' + rows.map((r) => r.map((v) => /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : v).join(',')).join('\r\n'), 'text/csv');
     }
+    case 'dash-link': return linkFolder();
+    case 'dash-reconnect': { try { S.dash.perm = await S.dash.dir.requestPermission({ mode: 'readwrite' }); } catch { S.dash.perm = 'denied'; } if (S.dash.perm === 'granted') { S.dash.scanned = false; await scanFolder(); } else renderView(); return; }
+    case 'dash-rescan': S.dash.scanned = false; return scanFolder();
+    case 'dash-open': return openFromDash(id);
+    case 'dash-mode': S.dash.mode = el.dataset.k; renderView(); return;
+    case 'dash-stage': S.dash.stage = S.dash.stage === el.dataset.k ? '' : el.dataset.k; renderView(); return;
     case 'nav-sec': {
       const k = el.dataset.sec, pl = viewPlace(S.view);
       if (S.navOpen.has(k)) { S.navOpen.delete(k); renderNav(); return; }
@@ -2153,7 +2331,9 @@ document.addEventListener('change', async (e) => {
     if (path === 'layout.annN' && v !== null) v = Math.max(1, Math.round(v));
     const before = S.layout;
     if (path === 'layout.mode' && v === 'measured' && !(S.job.layout.mrows || []).length) S.job.layout.mrows = measuredFromDrawing(S.job);
+    if (path === 'status.stage' && S.job.status?.stage !== v) (S.job.status.history = S.job.status.history || []).push({ stage: v, at: Date.now() });
     setPath(S.job, path, v);
+    if (path === 'status.stage') { commit(); renderHeader(); writeStageToFile(S.job.id, S.job.status); }
     if (path === 'layout.mode' && v === 'custom' && !(S.job.layout.rows || []).length) { recompute(); S.job.layout.rows = rowsFromGrid(S.job); }
     commit();
     if (path.startsWith('layout.') || path === 'tank.diameter') relocateOrphans(before);
@@ -2343,6 +2523,7 @@ document.addEventListener('change', async (e) => {
     commit(); drawMap(); if (k === 'type') renderSide(); return;
   }
   if (el.matches('[data-cb]')) { S.company[el.dataset.cb] = el.value; await db.setMeta('company', S.company); return; }
+  if (el.matches('[data-stage-of]')) { setStage(el.dataset.stageOf, el.value); return; }
   if (el.matches('[data-ph]')) {
     const p = S.photos.find((x) => x.id === el.dataset.ph); if (!p) return;
     const f = el.dataset.f; p[f] = el.type === 'checkbox' ? el.checked : el.value;
@@ -2659,8 +2840,8 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   S.company = (await db.getMeta('company')) || {};
   await loadJobs();
   const last = await db.getMeta('lastJob');
-  if (last && S.jobs.some((j) => j.id === last)) await openJob(last, 'map');
-  else renderAll();
+  if (last && S.jobs.some((j) => j.id === last)) await openJob(last, 'dash');
+  else go('dash');
 })();
 
 window.__app = S; // handy for debugging in the console

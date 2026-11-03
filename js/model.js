@@ -6,6 +6,10 @@ import { defaultRoof, migrateRoof } from './roof.js';
 import { defaultSettle, migrateSettle } from './settle.js';
 import { defaultSecs, migrateSecs, defaultSummary } from './sections.js';
 
+export const STAGES = [['upcoming', 'Upcoming'], ['inspection', 'Inspection ongoing'], ['reporting', 'Reporting'], ['review', 'Peer review'], ['complete', 'Complete']];
+export const STAGE_LABEL = Object.fromEntries(STAGES);
+export const defaultStatus = () => ({ stage: 'upcoming', planned: '', due: '', inspector: '', reviewer: '', notes: '', history: [] });
+
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 export function newJob(units = 'imperial') {
@@ -18,7 +22,7 @@ export function newJob(units = 'imperial') {
     equip: {},
     calc: units === 'metric' ? { ...defaultCalc(), czDist: 75 } : defaultCalc(),
     plates: {}, indications: [], features: [], nozzles: [], shell: defaultShell(units), roof: defaultRoof(units), settle: defaultSettle(units),
-    secs: defaultSecs(), summary: defaultSummary(), defSeq: 0
+    secs: defaultSecs(), summary: defaultSummary(), defSeq: 0, status: { ...defaultStatus(), history: [{ stage: 'upcoming', at: Date.now() }] }
   };
 }
 
@@ -36,7 +40,8 @@ export function migrate(job) {
     shell: migrateShell(job.shell, job.units || 'imperial'),
     roof: migrateRoof(job.roof, job.units || 'imperial'),
     settle: migrateSettle(job.settle, job.units || 'imperial'),
-    secs: migrateSecs(job.secs), summary: { ...defaultSummary(), ...(job.summary || {}) }, defSeq: job.defSeq || 0
+    secs: migrateSecs(job.secs), summary: { ...defaultSummary(), ...(job.summary || {}) }, defSeq: job.defSeq || 0,
+    status: job.status ? { ...defaultStatus(), ...job.status } : { ...defaultStatus(), stage: (job.indications || []).length || job.rev ? 'inspection' : 'upcoming' }
   };
   if (out.calc.patchMargin === 25.4) out.calc.patchMargin = 50.8; // v3.1 default was 1 in; API 653 9.10.1.1 b asks for 2 in
   // schema 2: X/Y on shell-cut plates are measured from the plate edges, not the seam/shell point.

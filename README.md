@@ -7,6 +7,25 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Dashboard (v3.3)
+
+The app opens on the **Dashboard**: every tank on this device and in the linked jobs folder, in five columns —
+**Upcoming → Inspection ongoing → Reporting → Peer review → Complete** — with a count tile for each stage.
+
+- **Link jobs folder…** — pick the shared folder (e.g. the team's OneDrive jobs folder). The app reads every job file
+  in it (and two levels of subfolders, e.g. one per client). The browser asks again each session — click **Reconnect**.
+- **Move a tank** — drag its card to another column, or use the stage list on the card. The change is saved on this
+  device *and written into the job file in the folder* (without bumping the revision), so the rest of the team sees it
+  on their next rescan.
+- Each card shows tank, client / site, planned or inspection date, report due date (red when overdue), inspector and
+  peer reviewer, overall condition, open deficiencies (P1/P2 flagged), and where the job lives (this device, folder,
+  or both — "Folder copy newer" if someone saved a later version).
+- **Open** loads the job; if the folder copy is newer it is imported from the file.
+- **List** view shows the same tanks as a table; the search box filters by tank, client, site, report number or names;
+  click a stage tile to show only that stage.
+- Stage, peer reviewer, planned inspection date and report due date are also in **Tank setup → Inspection**, and the
+  current stage is shown next to the tank name in the top bar. Each stage change is recorded with its date.
+
 ## Deploy to GitHub Pages
 
 1. Create a new repository on GitHub (e.g. `tank-floor-inspector`).
