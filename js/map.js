@@ -2,6 +2,7 @@
 import { polar, datumPoint, datumAxes } from './geometry.js';
 import { nozzleUT } from './calc.js';
 import { patchList, patchPath } from './patches.js';
+import { coursesWithElev, coursePlates } from './shell.js';
 
 export const COLORS = { ps: '#1f6feb', ss: '#d9480f', both: '#8250df', pending: '#6b7280', nri: '#9ca3af', other: '#9ca3af' };
 
@@ -62,6 +63,17 @@ export function renderMapSVG(job, layout, opts = {}) {
   const czDist = +(job.calc?.czDist ?? 76.2);
   out.push(`<circle cx="0" cy="0" r="${f(R)}" class="shell" stroke-width="${f(s * 0.9)}"/>`);
   if (czDist > 0 && opts.showCZ !== false) out.push(`<circle cx="0" cy="0" r="${f(R - czDist)}" class="cz" stroke-width="${f(s * 0.25)}" stroke-dasharray="${f(s * 1.5)} ${f(s)}"/>`);
+
+  // bottom shell course: vertical seams where the shell meets the floor
+  if (opts.shellSeams !== false) {
+    const c1 = coursesWithElev(job)[0];
+    const seams = c1 ? coursePlates(job, c1, 0).seams : [];
+    if (seams.length) {
+      out.push(`<g class="shseams" stroke-width="${f(s * 0.5)}">`);
+      for (const a of seams) { const [x1, y1] = polar(R - s * 1.6, a), [x2, y2] = polar(R + s * 1.6, a); out.push(`<line x1="${f(x1)}" y1="${f(-y1)}" x2="${f(x2)}" y2="${f(-y2)}"><title>Shell seam ${(Math.round(a * 10) / 10) % 360}°</title></line>`); }
+      out.push('</g>');
+    }
+  }
 
   // degree ticks
   out.push('<g class="ticks">');

@@ -746,3 +746,14 @@ dialog.wide-dlg { max-width: 96vw; }
 .reg-link .acts { display: flex; gap: 6px; }
 .nav-note { font-size: 11.5px; color: var(--muted); padding: 8px 10px; margin: 6px 0 0; line-height: 1.4; }
 @media (max-width: 640px) { .ni-scope { grid-template-columns: 1fr; } }
+
+/* tank builder: shell & nozzles on setup (v3.4.1) */
+.floormap .shseams line { stroke: #c2410c; stroke-linecap: round; }
+.sp-ro { margin-top: 14px; }
+.grid.courses.build input { width: 100%; min-width: 64px; }
+.grid.courses.build input.xs { min-width: 52px; }
+#nozzleCard[data-design] .grid.nozzles input.num { min-width: 64px; }
+.sp-ro h3 { margin: 0; font-size: 14px; }
+.sp-key { margin: 8px 0 0; display: flex; align-items: center; gap: 6px; }
+.sp-key .k-seam { display: inline-block; width: 3px; height: 12px; background: #c2410c; border-radius: 2px; }
+#nozzleCard[data-design] .grid.nozzles select { min-width: 110px; }

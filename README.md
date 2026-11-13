@@ -30,6 +30,16 @@ Enter each tank once, then start every inspection from it.
   scope and show everything; the scope can be changed on Tank setup at any time.
 - **Build registry from jobs** (shown when there are unlinked jobs) creates one tank per client + site +
   tank ID from the most recent job and links all of them.
+- **Tank builder (v3.4.1)** — Tank setup (and the registry tank editor) now builds the whole tank on one page:
+  - **Shell**: courses from the bottom up with height, nominal t and plates — number of plates or plate
+    length — and the **first vertical seam located from the 0° datum**, either as a distance around the shell
+    or as an angle (enter one, the other follows). *Copy course 1 plates up* fills empty courses. A shell
+    roll-out under the table shows plates, seams and nozzles.
+  - **Nozzles**: a design table (mark, type, connection, angle or distance from the datum, size, elevation,
+    schedule, wall, service). **Place on the floor drawing…** opens the Floor map in nozzle mode to click
+    nozzles in around the shell.
+  - The floor drawing and preview show the nozzles outside the shell and the **bottom-course shell seams**
+    as short orange marks across the shell line.
 - Saved job files carry their registry tank, so opening a job file on another device adds the tank there.
   Sharing the registry itself through the jobs folder is planned for v3.5.
 

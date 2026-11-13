@@ -22,7 +22,7 @@ import { SECTIONS, SEC, CHILDREN, viewPlace, childView, findings, allDefs, numbe
 import { SCOPE, SCOPE_HINT, inScope, scopeText, tankFromJob, newTank, jobFromTank, editJobFor, diffFromTank, tankKeyOf, normKey } from './registry.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '3.4.0';
+const APP_VERSION = '3.4.1';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -667,6 +667,9 @@ function viewSetup() {
 
       ${L.mode !== 'grid' ? `<section class="card" id="builderCard">${L.mode === 'measured' ? measuredHTML() : builderHTML()}</section>` : ''}
 
+      <section class="card" id="shellBuild">${shellBuildHTML()}</section>
+      <section class="card" id="nozzleCard" data-design="1">${nozzleTableHTML(true)}</section>
+
       ${reg ? '' : `<section class="card"><h2>Equipment</h2><div class="fgrid">
         ${field('MFL scanner make', 'equip.mflMake')}${field('MFL model', 'equip.mflModel')}
         ${field('MFL serial no.', 'equip.mflSerial')}${field('MFL calibration date', 'equip.mflCal')}
@@ -678,7 +681,8 @@ function viewSetup() {
       </div></section>
       <section class="card"><h2>Notes</h2>${field('General notes for the report', 'info.notes', 'area', { rows: 4 })}</section>`}
     </div>
-    <aside class="setup-preview card"><div class="sp-head"><h2>Layout preview</h2><span id="spStats" class="muted small"></span></div><div id="spMap" class="sp-map"></div></aside>
+    <aside class="setup-preview card"><div class="sp-head"><h2>Layout preview</h2><span id="spStats" class="muted small"></span></div><div id="spMap" class="sp-map"></div>
+      <p class="muted small sp-key"><i class="k-seam"></i> bottom-course shell seams · nozzles outside the shell</p></aside>
   </div></div>`;
 }
 after.setup = () => refreshSetupPreview();
@@ -824,6 +828,7 @@ function refreshSetupPreview() {
   const box = $('#spMap'); if (!box) return;
   box.innerHTML = renderMapSVG(S.job, S.layout, { calc: S.calc, floorOf: (ft) => itemFloor(S.layout, ft), plateLabels: true, indLabels: false });
   const fl = S.layout.plates.filter((p) => p.kind === 'floor'), an = S.layout.plates.length - fl.length;
+  const ro = $('#spRoll'); if (ro) ro.innerHTML = rolloutSVG(S.job);
   $('#spStats').textContent = S.layout.R ? `${fl.length} bottom plates (${fl.filter((p) => p.cut).length} cut)${an ? `, ${an} annular` : ''}` : '';
 }
 
@@ -1129,14 +1134,21 @@ function nozzleUTBox(nz) {
     <div><span>Status</span><b class="${r.status === 'OK' ? 'ok' : r.status ? 'bad' : ''}">${r.status || '—'}</b><small>${(() => { const w = nozzleWall(nz, S.job); return w.tMin ? 't-min ' + fmt(w.tMin, 't', S.job) + (w.minTbl ? ' (table)' : '') : 'enter t-min'; })()}</small></div></div>`;
 }
 
-function nozzleTableHTML() {
+function nozzleTableHTML(design = false) {
   const list = (S.job.nozzles || []);
-  const U = u(S.job);
+  const U = u(S.job), Cc = Math.PI * (+S.job.tank?.diameter || 0);
+  const arcIn = (n) => `<input data-nb="arc" data-id="${n.id}" data-kind="big" inputmode="decimal" class="num" value="${h(Cc > 0 && Number.isFinite(+n.angle) && n.angle !== null && n.angle !== '' ? inVal((+n.angle / 360) * Cc, 'big', S.job) : '')}" ${Cc > 0 ? '' : 'disabled title="Enter the tank diameter first"'}>`;
   const inp = (n, k, kind, extra = '') => kind === 'sel'
     ? `<select data-nb="${k}" data-id="${n.id}" data-kind="text">${NZ_TYPES.map((t) => `<option ${n[k] === t ? 'selected' : ''}>${t}</option>`).join('')}</select>`
     : kind === 'conn'
       ? `<select data-nb="${k}" data-id="${n.id}" data-kind="text">${NZ_CONN.map(([v, l]) => `<option value="${v}" ${(n[k] || '') === v ? 'selected' : ''}>${v ? NZ_CONN_SHORT[v] : '—'}</option>`).join('')}</select>`
       : `<input data-nb="${k}" data-id="${n.id}" data-kind="${kind}" ${kind !== 'text' ? 'inputmode="decimal" class="num"' : ''} value="${h(kind === 'small' || kind === 't' ? inVal(n[k], kind, S.job) : n[k] ?? '')}" ${(k === 'tNom' || k === 'tMin') && !(n[k] > 0) ? (() => { const w = nozzleWall(n, S.job); const v = k === 'tNom' ? w.tNom : w.tMin; return v ? `placeholder="${inVal(v, 't', S.job)}" title="From the nozzle table: ${h(w.src)}"` : ''; })() : ''} ${extra}>`;
+  if (design) return `<div class="sp-head"><h2>Nozzles</h2><span class="muted small">${list.length} on the shell</span></div>
+    <p class="muted small">Position each nozzle by <b>angle</b> or by <b>distance around the shell</b>, both clockwise from the 0° datum (${h(S.job.info.zeroRef || 'set the 0° reference label above')}) — enter either one and the other follows. Elevation is to the nozzle centreline above the bottom. Nozzles are drawn on the floor drawing and the shell roll-out; neck UT readings are entered on the Nozzles page during an inspection.</p>
+    <div class="tblwrap"><table class="grid nozzles"><thead><tr><th>Mark</th><th>Type</th><th>Connection</th><th>Angle (°)</th><th title="Distance around the shell, clockwise from the datum">From datum (${U.big})</th><th>Size (${U.small})</th><th>Elev. (${U.small})</th><th>Schedule</th><th>Nom. wall</th><th>t-min</th><th>Service / description</th><th></th></tr></thead><tbody>
+    ${list.slice().sort((a, b) => (+a.angle || 0) - (+b.angle || 0)).map((n) => `<tr><td>${inp(n, 'mark', 'text', 'class="mk"')}</td><td>${inp(n, 'type', 'sel')}</td><td>${inp(n, 'conn', 'conn')}</td><td>${inp(n, 'angle', 'num')}</td><td>${arcIn(n)}</td><td>${inp(n, 'size', 'small')}</td><td>${inp(n, 'elev', 'small')}</td><td>${inp(n, 'sched', 'text', 'class="sch"')}</td><td>${inp(n, 'tNom', 't')}</td><td>${inp(n, 'tMin', 't')}</td><td>${inp(n, 'service', 'text')}</td><td><button class="btn sm icon ghost danger" data-act="nozzle-del" data-id="${n.id}" title="Delete">✕</button></td></tr>`).join('') || '<tr><td colspan="12" class="empty">No nozzles yet. Add them here, or place them by clicking around the shell on the floor drawing.</td></tr>'}
+    </tbody></table></div>
+    <div class="acts"><button class="btn sm" data-act="nozzle-add">+ Nozzle</button><button class="btn sm" data-act="nozzle-place">Place on the floor drawing…</button></div>`;
   return `<div class="sp-head"><h2>Shell nozzles</h2><span class="muted small">${list.length} on the shell</span></div>
     <p class="muted small">Angle is clockwise from 0° (${h(S.job.info.zeroRef || 'the 0° reference')}). Neck UT readings at 12, 3, 6 and 9 o’clock; add more readings by clicking the nozzle on the Floor map. Thickness in ${U.small}.</p>
     <div class="tblwrap"><table class="grid nozzles"><thead><tr><th>Mark</th><th>Type</th><th>Connection</th><th>Angle (°)</th><th>Size (${U.small})</th><th>Elev. (${U.small})</th><th>Schedule</th><th>Nom. wall</th><th>t-min</th>${UT_CLOCK.map(([, l]) => `<th>${l}:00</th>`).join('')}<th>Min</th><th>Status</th><th>Service / description</th><th></th></tr></thead><tbody>
@@ -1678,8 +1690,42 @@ function shellEvalHTML() {
   </section>`;
 }
 
+
+/** Tank setup: shell courses as designed — height, thickness, plates per course and seam offset from the datum. */
+function shellBuildHTML() {
+  const job = S.job, U = u(job), courses = coursesWithElev(job), H = shellHeight(job), Cc = Math.PI * (+job.tank?.diameter || 0), autoN = autoPlateCount(job);
+  const inp = (c, k, kind, ph = '', cls = '') => `<input data-shc="${k}" data-course="${c.id}" data-kind="${kind}" inputmode="decimal" value="${h(kind === 'num' ? c[k] ?? '' : inVal(c[k], kind, job))}" placeholder="${h(ph)}" class="${cls}">`;
+  const rows = courses.slice().reverse().map((c) => {
+    const cp = coursePlates(job, c, c.no - 1), set = c.seam0 !== null && c.seam0 !== undefined && c.seam0 !== '';
+    const arcV = set && Cc > 0 ? inVal((+c.seam0 / 360) * Cc, 'big', job) : '';
+    const arcPh = Cc > 0 ? inVal((cp.seam0 / 360) * Cc, 'big', job) : '';
+    const closure = cp.plates.find((p) => p.closure);
+    return `<tr><td><b>${c.no}</b>${c.no === 1 ? ' <span class="muted small">bottom</span>' : ''}</td><td>${inp(c, 'h', 'big')}</td><td>${inp(c, 'tNom', 't')}</td>
+      <td>${inp(c, 'pn', 'num', String(c.plen ? cp.n : autoN), 'xs')}</td>
+      <td><input data-shc="seam0arc" data-course="${c.id}" data-kind="big" inputmode="decimal" value="${h(arcV)}" placeholder="${h(arcPh)}" ${Cc > 0 ? '' : 'disabled title="Enter the tank diameter first"'}></td>
+      <td>${inp(c, 'seam0', 'num', (Math.round(cp.seam0 * 10) / 10).toString(), 'xs')}</td>
+      <td>${inp(c, 'plen', 'big', cp.plates[0] ? inVal(cp.plates[0].len, 'big', job) : '')}</td>
+      <td class="small muted">${cp.n ? `${cp.n} × ${fmt(cp.plates[0]?.len, 'big', job)}${closure ? `<br>closure ${fmt(closure.len, 'big', job)}` : ''}` : '—'}</td>
+      <td><button class="btn sm icon ghost danger" data-act="course-del" data-course="${c.id}" title="Delete course">✕</button></td></tr>`;
+  }).join('');
+  return `<div class="sp-head"><h2>Shell</h2><span class="muted small">${courses.length} course${courses.length === 1 ? '' : 's'}${H > 0 ? ' · ' + fmt(H, 'big', job) + ' high' : ''}${Cc > 0 ? ' · circumference ' + fmt(Cc, 'big', job) : ''}</span></div>
+    <p class="muted small">Build the shell from the bottom course up. For each course give the height, nominal thickness and the plates — either the <b>number of plates</b> (equal lengths) or a <b>plate length</b> (full plates from the first seam; the last is the closure plate). Locate the <b>first vertical seam</b> by its distance around the shell or its angle, clockwise from the 0° datum (${h(job.info.zeroRef || 'set the 0° reference label above')}). Blank = alternate courses staggered by half a plate. Grey values are what will be used.</p>
+    <div class="tblwrap"><table class="grid courses build"><thead><tr><th>Course</th><th>Height (${U.big})</th><th>Nominal t (${U.small})</th><th>Plates</th><th title="Distance around the shell from the datum to the first vertical seam, clockwise">1st seam from datum (${U.big})</th><th>1st seam (°)</th><th>Plate length (${U.big})</th><th>Plates in course</th><th></th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="9" class="empty">No courses yet. Start with <button class="btn sm" data-act="courses-std" data-n="5">5 courses</button> <button class="btn sm" data-act="courses-std" data-n="6">6 courses</button> <button class="btn sm" data-act="courses-std" data-n="8">8 courses</button> or add them one at a time.</td></tr>`}</tbody></table></div>
+    <div class="acts"><button class="btn sm" data-act="course-add">+ Course on top</button>${courses.length ? `<span class="spacer"></span><button class="btn sm ghost" data-act="courses-fill" title="Copy the bottom course's number of plates and plate length to empty courses above">Copy course 1 plates up</button>` : ''}</div>
+    ${courses.length ? `<div class="sp-head sp-ro"><h3>Shell roll-out</h3><span class="muted small">viewed from outside, clockwise from the 0° datum · plates, seams and nozzles</span></div><div id="spRoll" class="ro-wrap">${rolloutSVG(job)}</div>
+    <p class="muted small">Materials, joint efficiency and t-min are set on the Shell page.</p>` : ''}`;
+}
+
+/** Re-render a block, keeping keyboard focus on the same input. */
+function rerenderKeep(c, html) {
+  const a = document.activeElement, key = a && c.contains(a) ? focusSel(a) : null;
+  c.innerHTML = html;
+  if (key) { const n = c.querySelector(key); if (n) { n.focus(); try { n.select(); } catch { /* */ } } }
+}
 function refreshShell() {
   setTimeout(() => {
+    const sb = $('#shellBuild'); if (sb) { rerenderKeep(sb, shellBuildHTML()); refreshSetupPreview(); }
     const c = $('#shellBody'); if (!c) return;
     const a = document.activeElement, key = a && c.contains(a) ? focusSel(a) : null, typed = a && a.value !== undefined && a.value !== a.defaultValue ? a.value : null;
     c.innerHTML = shellBodyHTML();
@@ -2307,7 +2353,7 @@ document.addEventListener('click', async (e) => {
     case 'nozzle-add': {
       const nz = { id: uid(), mark: nextMark('Nozzle'), type: 'Nozzle', angle: null, size: null, elev: null, service: '' };
       S.job.nozzles = S.job.nozzles || []; S.job.nozzles.push(nz); commit();
-      const c = $('#nozzleCard'); if (c) c.innerHTML = nozzleTableHTML();
+      const c = $('#nozzleCard'); if (c) c.innerHTML = nozzleTableHTML(c.dataset.design === '1');
       setTimeout(() => $(`#nozzleCard input[data-nb="angle"][data-id="${nz.id}"]`)?.focus(), 30); return;
     }
     case 'nozzle-del': {
@@ -2315,7 +2361,7 @@ document.addEventListener('click', async (e) => {
       if (!(await askConfirm(`Delete nozzle ${nz.mark || ''}?`, { ok: 'Delete', danger: true }))) return;
       S.job.nozzles = S.job.nozzles.filter((x) => x.id !== id); if (S.selNozzle === id) S.selNozzle = null; commit();
       if (S.view === 'map') { drawMap(); renderSide(); }
-      const c = $('#nozzleCard'); if (c) { c.innerHTML = nozzleTableHTML(); if (S.view === 'setup') refreshSetupPreview(); }
+      const c = $('#nozzleCard'); if (c) { c.innerHTML = nozzleTableHTML(c.dataset.design === '1'); if (S.view === 'setup') refreshSetupPreview(); }
       return;
     }
     case 'utl-down': {
@@ -2420,6 +2466,15 @@ document.addEventListener('click', async (e) => {
       const n = Math.max(1, Math.round(+el.dataset.n || 5)), ch = S.job.units === 'metric' ? 2400 : 2438.4;
       if ((sh.courses || []).length && !(await askConfirm('Replace the current courses?', { ok: 'Replace' }))) return;
       sh.courses = Array.from({ length: n }, () => ({ id: uid(), h: ch, tNom: null, tMin: null })); commit(); refreshShell(); return;
+    }
+    case 'courses-fill': {
+      const cs = S.job.shell?.courses || [], c1 = cs[0]; if (!c1) return;
+      for (const c of cs.slice(1)) { for (const k of ['pn', 'plen']) if ((c[k] === null || c[k] === undefined || c[k] === '') && c1[k] != null) c[k] = c1[k]; }
+      commit(); refreshShell(); toast('Course 1 plates copied to the courses above (where empty).'); return;
+    }
+    case 'nozzle-place': {
+      if (!(S.job.tank?.diameter > 0)) { toast('Enter the tank diameter first.'); return; }
+      go('map'); setMode('nozzle'); toast('Click around the shell to place each nozzle (Shift-click to keep placing). Set its details in the panel.'); return;
     }
     case 'exp-noz': return download(fileBase(S.job) + '_nozzles.csv', nozzlesCSV(S.job), 'text/csv');
     case 'feature-del': {
@@ -2546,6 +2601,7 @@ document.addEventListener('change', async (e) => {
     if (path === 'tank.code' && !editionsFor(v || 'Unknown').includes(S.job.tank.edition)) { S.job.tank.edition = ''; S.job.tank.supp = ''; }
     if (path === 'tank.edition' && !supplementsFor(v).includes(S.job.tank.supp)) S.job.tank.supp = '';
     const structural = path === 'tank.code' || path === 'tank.edition' || path === 'units' || path === 'layout.annular' || path === 'layout.scheme' || path === 'layout.orient' || path === 'layout.refCorner' || path === 'layout.mode';
+    if (S.view === 'setup' && !structural && (path === 'tank.diameter' || path === 'info.zeroRef')) { const sb = $('#shellBuild'), nc = $('#nozzleCard'); setTimeout(() => { if (sb) rerenderKeep(sb, shellBuildHTML()); if (nc) rerenderKeep(nc, nozzleTableHTML(true)); }, 0); }
     if (S.view === 'setup') { if (structural) renderView(); else if (S.job.layout.mode !== 'grid' && path.startsWith('layout.')) refreshBuilder(); else refreshSetupPreview(); renderHeader(); }
     else if (S.view === 'api') refreshApi();
     else if (S.view === 'shell') refreshShell();
@@ -2652,6 +2708,11 @@ document.addEventListener('change', async (e) => {
     const c = S.job.shell?.courses?.find((x) => x.id === el.dataset.course); if (!c) return;
     let v = readInput(el); const k = el.dataset.shc;
     if (v !== null && v < 0 && k !== 'seam0') { toast('Values can’t be negative.'); return; }
+    if (k === 'seam0arc') {
+      const Cc = Math.PI * (+S.job.tank?.diameter || 0); if (!(Cc > 0)) return;
+      if (v === null) delete c.seam0; else c.seam0 = Math.round(((((v / Cc) * 360) % 360 + 360) % 360) * 100) / 100;
+      commit(); refreshShell(); return;
+    }
     if (k === 'seam0' && v !== null) v = ((v % 360) + 360) % 360;
     if (k === 'pn' && v !== null) v = Math.max(1, Math.round(v));
     if (v === null) { if (k === 'h') return; delete c[k]; } else c[k] = v;
@@ -2677,14 +2738,18 @@ document.addEventListener('change', async (e) => {
   }
   if (el.matches('[data-nb]')) {
     const nz = (S.job.nozzles || []).find((x) => x.id === el.dataset.id); if (!nz) return;
-    const k = el.dataset.nb; let v = readInput(el);
+    let k = el.dataset.nb; let v = readInput(el);
+    if (k === 'arc') {
+      const Cc = Math.PI * (+S.job.tank?.diameter || 0); if (!(Cc > 0)) return;
+      k = 'angle'; v = v === null ? null : Math.round(((((v / Cc) * 360) % 360 + 360) % 360) * 100) / 100;
+    }
     if (k === 'angle' && v !== null) v = ((v % 360) + 360) % 360;
     if (k === 'type' && (!nz.mark || /^(N|MH|CO)\d+$/.test(nz.mark)) && nzPrefix(v) !== nzPrefix(nz.type)) nz.mark = nextMark(v);
     if (v === null || v === '') delete nz[k]; else nz[k] = v;
     commit();
     refreshNozzleUT(nz);
     if (S.view === 'map') { drawMap(); if (k === 'mark' || k === 'type') renderSide(); }
-    if (S.view === 'setup' || S.view === 'nozzles') { const c = $('#nozzleCard'); if (c && (k === 'angle' || k === 'type' || k === 'mark')) setTimeout(() => { c.innerHTML = nozzleTableHTML(); }, 0); if (S.view === 'setup') refreshSetupPreview(); }
+    if (S.view === 'setup' || S.view === 'nozzles') { const c = $('#nozzleCard'); if (c && (k === 'angle' || k === 'type' || k === 'mark' || el.dataset.nb === 'arc')) setTimeout(() => { c.innerHTML = nozzleTableHTML(c.dataset.design === '1'); }, 0); if (S.view === 'setup') refreshSetupPreview(); }
     return;
   }
   if (el.matches('[data-nbx]')) {
