@@ -11,6 +11,7 @@ import { jointLabel, TABLES_SOURCE } from './tables.js';
 import { SECTIONS, findings, allDefs, STATUS_TEXT, PRIORITY_LABEL, CONDITIONS } from './sections.js';
 import { patchList, patchOf } from './patches.js';
 import { itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
+import { inScope } from './registry.js';
 
 const h = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const yn = (b) => (b ? 'Yes' : 'No');
@@ -99,7 +100,7 @@ export function buildReport(job, layout, calc, company, photos, opts) {
 
   ${opts.exec !== false ? execSummaryHTML(job, layout, calc) : ''}
   ${opts.defs !== false ? defTableHTML(job, photos, 'Deficiencies and recommendations') : ''}
-  <section>
+  ${inScope(job, 'floor') ? `<section>
     <h2>Floor summary</h2>
     <div class="kpis">
       <div><b>${inds.length}</b><span>MFL indications</span></div>
@@ -136,17 +137,17 @@ export function buildReport(job, layout, calc, company, photos, opts) {
     <div class="map-wrap">${map}</div>
     ${legendHTML()}
     <p class="note">Plate offsets X/Y are measured from each plate's datum corner, marked with a small triangle in that corner. Unless listed in the plate register, the datum is the plate's ${refCornerName(job.layout?.refCorner || 'BL')} corner${layout.Ri < layout.R ? '; on annular plates X runs along the shell from the datum seam and Y is measured in from the shell' : ''}.${(() => { const own = layout.plates.filter((p) => p.datum?.own || p.datumOwn); return own.length ? ` Plates measured from a different corner: ${own.map((p) => `${h(p.label)} (${h(datumName(p))})`).join(', ')}.` : ''; })()} 0° ${h(I.zeroRef || '')}.</p>
-  </section>
+  </section>` : ''}
 
-  ${(job.nozzles || []).length ? `<section class="pb-avoid"><h2>Shell nozzles</h2><table class="grid small"><thead><tr><th>Mark</th><th>Type</th><th>Connection</th><th>Service</th><th class="n">Angle</th><th class="n">Size</th><th class="n">Elev.</th><th>Sched.</th><th class="n">Nom.</th><th class="n">t-min</th>${UT_CLOCK.map(([, l]) => `<th class="n">${l}:00</th>`).join('')}<th class="n">Min</th><th class="n">Loss</th><th>Status</th></tr></thead><tbody>${job.nozzles.slice().sort((a, b) => (+a.angle || 0) - (+b.angle || 0)).map((n) => { const r = nozzleUT(n, job); const extra = (n.utx || []).filter((x) => x.t != null); return `<tr class="${r.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${h(n.mark)}</b></td><td>${h(n.type)}</td><td>${h(NZ_CONN_SHORT[n.conn] || '')}</td><td>${h(n.service)}${extra.length ? `<br><small>${extra.map((x) => `${h(x.loc || 'other')}: ${fmt(x.t, 't', job, false)}`).join('; ')}</small>` : ''}${n.notes ? `<br><small>${h(n.notes)}</small>` : ''}</td><td class="n">${n.angle != null && n.angle !== '' ? (+n.angle).toFixed(1) + '°' : '—'}</td><td class="n">${fmt(n.size, 'small', job, false)}</td><td class="n">${fmt(n.elev, 'small', job, false)}</td><td>${h(n.sched)}</td>${(() => { const w = nozzleWall(n, job); return `<td class="n">${fmt(w.tNom, 't', job, false)}${w.nomTbl ? '<sup>T</sup>' : ''}</td><td class="n">${fmt(w.tMin, 't', job, false)}${w.minTbl ? '<sup>T</sup>' : ''}</td>`; })()}${UT_CLOCK.map(([k]) => `<td class="n">${fmt(n[k], 't', job, false)}</td>`).join('')}<td class="n"><b>${r.count ? fmt(r.min, 't', job, false) : '—'}</b></td><td class="n">${r.lossPct != null ? r.lossPct.toFixed(0) + '%' : '—'}</td><td>${r.status === 'Below t-min' ? '<b>Below t-min</b>' : h(r.status)}</td></tr>`; }).join('')}</tbody></table><p class="note">Angles clockwise from 0° ${h(I.zeroRef || '')}; elevation to centreline above the bottom. Sizes and thicknesses in ${U.small}. Neck UT at clock positions looking at the nozzle from outside the tank; other readings listed under service. <sup>T</sup> nominal / t-min not entered — taken from the nozzle neck table for the construction code (XS or STD pipe; t-min = nominal less 12.5 % mill tolerance; NPS 26 and over by shell thickness).</p></section>` : ''}
+  ${inScope(job, 'nozzles') && (job.nozzles || []).length ? `<section class="pb-avoid"><h2>Shell nozzles</h2><table class="grid small"><thead><tr><th>Mark</th><th>Type</th><th>Connection</th><th>Service</th><th class="n">Angle</th><th class="n">Size</th><th class="n">Elev.</th><th>Sched.</th><th class="n">Nom.</th><th class="n">t-min</th>${UT_CLOCK.map(([, l]) => `<th class="n">${l}:00</th>`).join('')}<th class="n">Min</th><th class="n">Loss</th><th>Status</th></tr></thead><tbody>${job.nozzles.slice().sort((a, b) => (+a.angle || 0) - (+b.angle || 0)).map((n) => { const r = nozzleUT(n, job); const extra = (n.utx || []).filter((x) => x.t != null); return `<tr class="${r.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${h(n.mark)}</b></td><td>${h(n.type)}</td><td>${h(NZ_CONN_SHORT[n.conn] || '')}</td><td>${h(n.service)}${extra.length ? `<br><small>${extra.map((x) => `${h(x.loc || 'other')}: ${fmt(x.t, 't', job, false)}`).join('; ')}</small>` : ''}${n.notes ? `<br><small>${h(n.notes)}</small>` : ''}</td><td class="n">${n.angle != null && n.angle !== '' ? (+n.angle).toFixed(1) + '°' : '—'}</td><td class="n">${fmt(n.size, 'small', job, false)}</td><td class="n">${fmt(n.elev, 'small', job, false)}</td><td>${h(n.sched)}</td>${(() => { const w = nozzleWall(n, job); return `<td class="n">${fmt(w.tNom, 't', job, false)}${w.nomTbl ? '<sup>T</sup>' : ''}</td><td class="n">${fmt(w.tMin, 't', job, false)}${w.minTbl ? '<sup>T</sup>' : ''}</td>`; })()}${UT_CLOCK.map(([k]) => `<td class="n">${fmt(n[k], 't', job, false)}</td>`).join('')}<td class="n"><b>${r.count ? fmt(r.min, 't', job, false) : '—'}</b></td><td class="n">${r.lossPct != null ? r.lossPct.toFixed(0) + '%' : '—'}</td><td>${r.status === 'Below t-min' ? '<b>Below t-min</b>' : h(r.status)}</td></tr>`; }).join('')}</tbody></table><p class="note">Angles clockwise from 0° ${h(I.zeroRef || '')}; elevation to centreline above the bottom. Sizes and thicknesses in ${U.small}. Neck UT at clock positions looking at the nozzle from outside the tank; other readings listed under service. <sup>T</sup> nominal / t-min not entered — taken from the nozzle neck table for the construction code (XS or STD pipe; t-min = nominal less 12.5 % mill tolerance; NPS 26 and over by shell thickness).</p></section>` : ''}
 
-  <section class="pb">
+  ${inScope(job, 'floor') ? `<section class="pb">
     <h2>Indications</h2>
     <table class="grid small"><thead><tr><th>No.</th><th>Plate</th><th>X</th><th>Y</th><th>Angle</th><th>MFL %</th><th>Result</th><th>UT min</th><th>VT pit</th><th>Remaining</th><th>Loss %</th><th>t at O<sub>r</sub></th><th>Status</th><th>Remarks</th></tr></thead><tbody>${indRows || '<tr><td colspan="14">No indications recorded.</td></tr>'}</tbody></table>
     <p class="note">Dimensions in ${U.small}. Remaining thickness from UT unless marked <sup>V</sup> (nominal − VT pit depth) or <sup>M</sup> (MFL estimate).</p>
-  </section>
+  </section>` : ''}
 
-  ${repairs.length || below.length ? `<section class="pb-avoid"><h2>Repairs</h2><table class="grid small"><thead><tr><th>No.</th><th>Plate</th><th>X</th><th>Y</th><th>Side</th><th>Remaining</th>${showSize ? '<th>Indication (L × W)</th>' : ''}<th>Method</th><th>Repair / patch (L × W × t)</th><th>Basis</th></tr></thead><tbody>${[...repairs, ...below].map((i) => { const a = per.get(i.id); return `<tr><td>${h(i.no)}</td><td>${h(a.plate?.label)}</td><td class="n">${fmt(i.x, 'small', job, false)}</td><td class="n">${fmt(i.y, 'small', job, false)}</td><td>${RESULT_SHORT[i.result]}</td><td class="n">${t(a.rem)}</td>${showSize ? `<td class="n">${i.len || i.wid ? `${fmt(i.len, 'small', job, false)} × ${fmt(i.wid, 'small', job, false)}` : '—'}</td>` : ''}<td>${h(i.repairMethod || '')}</td><td class="n">${(() => { const pp = patchOf(patches, i.id); if (pp) return `<b>${h(pp.id)}</b> ${fmt(pp.L, 'small', job, false)} × ${fmt(pp.W, 'small', job, false)}${pp.t ?? i.repT ? ' × ' + fmt(pp.t ?? i.repT, 't', job, false) : ''}${pp.auto ? ' <small>auto</small>' : ''}`; return i.repLen || i.repWid ? `${fmt(i.repLen, 'small', job, false)} × ${fmt(i.repWid, 'small', job, false)}${i.repT ? ' × ' + fmt(i.repT, 't', job, false) : ''}${i.repId ? `<br><small>${h(i.repId)}</small>` : ''}` : '—'; })()}</td><td>${a.status === 'below MRT' ? '<b>Below MRT – repair declined</b>' : a.auto ? 'Below MRT at O<sub>r</sub>' : 'Specified'}</td></tr>`; }).join('')}</tbody></table>${patches.length ? `<h3 class="rp-h3">Patch plates</h3><table class="grid small"><thead><tr><th>Patch</th><th>Shape</th><th class="n">Size (L × W)</th><th class="n">t</th><th>Covers indications</th><th>Plate(s)</th><th>Critical zone (9.10.1.2)</th><th>Notes</th></tr></thead><tbody>${patches.map((pp) => `<tr class="${pp.status === 'Fails' ? 'is-bad' : ''}"><td><b>${h(pp.id)}</b></td><td>${pp.kind === 'tomb' ? `Tombstone at ${pp.th.toFixed(0)}°` : 'Rectangular'}</td><td class="n">${fmt(pp.L, 'small', job, false)} × ${fmt(pp.W, 'small', job, false)}</td><td class="n">${fmt(pp.t, 't', job, false)}${pp.tAssumed ? '*' : ''}</td><td>${pp.inds.map((x) => h(x.no)).join(', ')}</td><td>${[...new Set(pp.inds.map((x) => per.get(x.id)?.plate?.label).filter(Boolean))].map(h).join(', ')}</td><td>${pp.checks.length ? `<b>${pp.status}</b>` : '—'}</td><td>${pp.auto ? 'Auto size' : 'Size entered'}${pp.inds.length > 1 ? '; combined' : ''}</td></tr>`).join('')}</tbody></table>
+  ${inScope(job, 'floor') && (repairs.length || below.length) ? `<section class="pb-avoid"><h2>Repairs</h2><table class="grid small"><thead><tr><th>No.</th><th>Plate</th><th>X</th><th>Y</th><th>Side</th><th>Remaining</th>${showSize ? '<th>Indication (L × W)</th>' : ''}<th>Method</th><th>Repair / patch (L × W × t)</th><th>Basis</th></tr></thead><tbody>${[...repairs, ...below].map((i) => { const a = per.get(i.id); return `<tr><td>${h(i.no)}</td><td>${h(a.plate?.label)}</td><td class="n">${fmt(i.x, 'small', job, false)}</td><td class="n">${fmt(i.y, 'small', job, false)}</td><td>${RESULT_SHORT[i.result]}</td><td class="n">${t(a.rem)}</td>${showSize ? `<td class="n">${i.len || i.wid ? `${fmt(i.len, 'small', job, false)} × ${fmt(i.wid, 'small', job, false)}` : '—'}</td>` : ''}<td>${h(i.repairMethod || '')}</td><td class="n">${(() => { const pp = patchOf(patches, i.id); if (pp) return `<b>${h(pp.id)}</b> ${fmt(pp.L, 'small', job, false)} × ${fmt(pp.W, 'small', job, false)}${pp.t ?? i.repT ? ' × ' + fmt(pp.t ?? i.repT, 't', job, false) : ''}${pp.auto ? ' <small>auto</small>' : ''}`; return i.repLen || i.repWid ? `${fmt(i.repLen, 'small', job, false)} × ${fmt(i.repWid, 'small', job, false)}${i.repT ? ' × ' + fmt(i.repT, 't', job, false) : ''}${i.repId ? `<br><small>${h(i.repId)}</small>` : ''}` : '—'; })()}</td><td>${a.status === 'below MRT' ? '<b>Below MRT – repair declined</b>' : a.auto ? 'Below MRT at O<sub>r</sub>' : 'Specified'}</td></tr>`; }).join('')}</tbody></table>${patches.length ? `<h3 class="rp-h3">Patch plates</h3><table class="grid small"><thead><tr><th>Patch</th><th>Shape</th><th class="n">Size (L × W)</th><th class="n">t</th><th>Covers indications</th><th>Plate(s)</th><th>Critical zone (9.10.1.2)</th><th>Notes</th></tr></thead><tbody>${patches.map((pp) => `<tr class="${pp.status === 'Fails' ? 'is-bad' : ''}"><td><b>${h(pp.id)}</b></td><td>${pp.kind === 'tomb' ? `Tombstone at ${pp.th.toFixed(0)}°` : 'Rectangular'}</td><td class="n">${fmt(pp.L, 'small', job, false)} × ${fmt(pp.W, 'small', job, false)}</td><td class="n">${fmt(pp.t, 't', job, false)}${pp.tAssumed ? '*' : ''}</td><td>${pp.inds.map((x) => h(x.no)).join(', ')}</td><td>${[...new Set(pp.inds.map((x) => per.get(x.id)?.plate?.label).filter(Boolean))].map(h).join(', ')}</td><td>${pp.checks.length ? `<b>${pp.status}</b>` : '—'}</td><td>${pp.auto ? 'Auto size' : 'Size entered'}${pp.inds.length > 1 ? '; combined' : ''}</td></tr>`).join('')}</tbody></table>
 ${patches.some((pp) => pp.checks.length) ? `<h3 class="rp-h3">Critical zone patch plates — API 653 9.10.1.2</h3><table class="grid small"><thead><tr><th>Patch</th><th>Requirement</th><th>Result</th><th>Note</th></tr></thead><tbody>${patches.filter((pp) => pp.checks.length).map((pp) => pp.checks.map((k, i) => `<tr class="${k.ok === false ? 'is-bad' : ''}"><td>${i ? '' : `<b>${h(pp.id)}</b>`}</td><td>${h(k.item)}</td><td>${k.ok === true ? 'OK' : k.ok === false ? '<b>Fails</b>' : 'Verify'}</td><td>${h(k.note)}</td></tr>`).join('')).join('')}</tbody></table>` : ''}<p class="note">Tombstone patches (within 6 in of the shell) are turned so their sides run radially and meet the shell-to-bottom joint at 90°, and extend to the shell; L is measured radially from the shell, W along the shell. Lap-welded patch plates centred on the repair indications: default ${fmt(+(job.calc?.patchL ?? 304.8), 'small', job)} × ${fmt(+(job.calc?.patchW ?? 304.8), 'small', job)}, larger where needed to extend at least ${fmt(+(job.calc?.patchMargin ?? 25.4), 'small', job)} past the corrosion; overlapping patches combined. Shown on the floor map. * default patch thickness (no thickness entered). Check patch size, spacing and weld details against API 653 9.10.</p>` : ''}</section>` : ''}
 
   <section class="pb-avoid">
@@ -160,7 +161,7 @@ ${patches.some((pp) => pp.checks.length) ? `<h3 class="rp-h3">Critical zone patc
   </section>
 
   ${(() => {
-    const cs = courseSummary(job); if (!cs.length) return '';
+    const cs = courseSummary(job); if (!cs.length || !inScope(job, 'shell')) return '';
     const locs = utLocations(job), top = cs.slice().reverse(), sh = job.shell || {}, courses = coursesWithElev(job), zs = readingElevations(job);
     const csm = new Map(cs.map((c) => [c.id, c]));
     let cur = null; const rows = [];
@@ -190,9 +191,9 @@ ${patches.some((pp) => pp.checks.length) ? `<h3 class="rp-h3">Critical zone patc
       <p class="note">Elevation above the bottom of the shell. Readings below the course t-min in bold. Thickness in ${U.small}.</p></section>`;
   })()}
   ${(() => {
-    if (!job.roof || job.roof.type === 'none') return '';
+    if (!job.roof || job.roof.type === 'none' || (!inScope(job, 'froof') && !inScope(job, 'flroof'))) return '';
     const out = [`<section class="pb"><h2>Roof</h2><p><b>${h((ROOF_TYPES.find(([k]) => k === job.roof.type) || [])[1] || '')}</b></p>`];
-    if (hasFixed(job)) {
+    if (hasFixed(job) && inScope(job, 'froof')) {
       const Fx = job.roof.fixed, pts = Fx.pts || [];
       const vals = pts.map((p) => pointStatus(job, p)).filter((x) => x.t !== null);
       out.push(`<h3 class="rp-h3">Fixed roof</h3><div class="cols">${kv([['Roof', h(Fx.kind)], ['Support', h(Fx.support)], ['Slope / radius', h(Fx.slope)]])}${kv([['Nominal plate t', t(Fx.tNom)], ['t-min', t(Fx.tMin)], ['Minimum reading', vals.length ? t(Math.min(...vals.map((x) => x.t))) : '—']])}</div>
@@ -202,11 +203,11 @@ ${patches.some((pp) => pp.checks.length) ? `<h3 class="rp-h3">Critical zone patc
         ${pts.map((pt) => { const st = pointStatus(job, pt); return `<tr class="${st.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${h(pt.label)}</b></td><td class="n">${pt.angle != null ? (+pt.angle).toFixed(1) + '°' : '—'}</td><td class="n">${fmt(pt.r, 'big', job)}</td><td class="n">${fmt(pt.t, 't', job, false)}</td><td class="n">${st.lossPct != null ? st.lossPct.toFixed(0) + '%' : '—'}</td><td>${st.status === 'Below t-min' ? '<b>Below t-min</b>' : h(st.status)}</td></tr>`; }).join('') || '<tr><td colspan="6">No readings.</td></tr>'}
         </tbody></table><p class="note">Thickness in ${U.small}. Angles clockwise from 0° ${h(I.zeroRef || '')}.</p>`);
     }
-    if (hasFloating(job)) {
+    if (hasFloating(job) && inScope(job, 'flroof')) {
       const F = job.roof.floating, lay = floatingLayout(job);
       const all = lay.plates.filter((p) => p.kind !== 'annular').map((p) => ({ p, s: plateUT(job, p) })), pons = lay.plates.filter((p) => p.kind === 'annular');
       const vals = all.filter((x) => x.s.min !== null);
-      out.push(`${hasFixed(job) ? '</section><section class="pb"><h2>Roof (continued)</h2>' : ''}<h3 class="rp-h3">${job.roof.type === 'fixed-ifr' ? 'Internal' : 'External'} floating roof</h3>
+      out.push(`${hasFixed(job) && inScope(job, 'froof') ? '</section><section class="pb"><h2>Roof (continued)</h2>' : ''}<h3 class="rp-h3">${job.roof.type === 'fixed-ifr' ? 'Internal' : 'External'} floating roof</h3>
         <div class="cols">${kv([['Roof', h(F.kind)], ['Roof diameter', fmt(roofDiameter(job), 'big', job)], ['Rim gap', fmt(F.rimGap, 'small', job)], ['Pontoons', `${lay.nPont} × ${fmt(F.pontW, 'big', job)} wide`]])}${kv([['Deck plates', `${lay.plates.filter((p) => p.kind !== 'annular').length} (${fmt(F.plateW, 'big', job, false)} × ${fmt(F.plateL, 'big', job)})`], ['Deck nominal / t-min', `${t(F.deckNom)} / ${t(F.deckMin)}`], ['Pontoons with liquid / leaking', String(pons.filter((p) => ['Liquid present', 'Leaking'].includes(F.pont?.[p.key]?.cond)).length)], ['Minimum reading', vals.length ? t(Math.min(...vals.map((x) => x.s.min))) : '—']])}</div>
         ${F.notes ? `<p class="note">${h(F.notes)}</p>` : ''}
         <div class="roof-print">${floatingSVG(job, lay)}</div>
@@ -217,7 +218,7 @@ ${patches.some((pp) => pp.checks.length) ? `<h3 class="rp-h3">Critical zone patc
         </tbody></table><p class="note">Thickness in ${U.small}. TL / TR / C / BL / BR = top-left, top-right, centre, bottom-left, bottom-right of each plate as drawn.</p>
         ${pons.length ? `<h3 class="rp-h3">Pontoons</h3><table class="grid small"><thead><tr><th>Pontoon</th><th>Condition</th><th>Notes</th></tr></thead><tbody>${pons.map((p) => { const pc = F.pont?.[p.key] || {}; return `<tr class="${['Liquid present', 'Leaking'].includes(pc.cond) ? 'is-bad' : ''}"><td><b>${h(p.label)}</b></td><td>${h(pc.cond || '—')}</td><td>${h(pc.notes)}</td></tr>`; }).join('')}</tbody></table>` : ''}`);
     }
-    if (hasFloating(job) && job.roof.seal) {
+    if (hasFloating(job) && inScope(job, 'flroof') && job.roof.seal) {
       const seal = job.roof.seal, D = +job.tank.diameter || 0, met = job.units === 'metric';
       const ga = (v) => (v === null || v === undefined ? '—' : met ? `${v.toFixed(1)} cm²/m` : `${cm2mToIn2ft(v).toFixed(2)} in²/ft (${v.toFixed(1)} cm²/m)`);
       const gw = (cm) => (cm === null || cm === undefined ? '—' : met ? `${cm.toFixed(cm >= 5 ? 1 : 2)} cm` : `${(cm / 2.54).toFixed(cm >= 5 ? 1 : 3)} in (${cm.toFixed(cm >= 5 ? 1 : 2)} cm)`);
@@ -236,7 +237,7 @@ ${patches.some((pp) => pp.checks.length) ? `<h3 class="rp-h3">Critical zone patc
     out.push('</section>');
     return out.join('');
   })()}
-  ${hasSettle(job) ? (() => {
+  ${hasSettle(job) && inScope(job, 'settle') ? (() => {
     const st = job.settle, c = settleCalc(job), F = c.fit, met = job.units === 'metric', sU = U.small;
     const fS = (mm, sign = false) => (mm === null || mm === undefined ? '—' : (sign && mm > 0 ? '+' : '') + (met ? mm.toFixed(1) : (mm / 25.4).toFixed(2)));
     const eu = ELEV_UNITS[st.eu] || ELEV_UNITS.in, okc = (ok) => (ok === true ? 'OK' : ok === false ? '<b class="bad">Fails</b>' : '—');
@@ -283,8 +284,8 @@ ${patches.some((pp) => pp.checks.length) ? `<h3 class="rp-h3">Critical zone patc
     return out.join('');
   })() : ''}
   ${opts.sections !== false ? sectionChaptersHTML(job, photos, opts) : ''}
-  ${platesBlock}
-  ${photoBlock}
+  ${inScope(job, 'floor') ? platesBlock : ''}
+  ${inScope(job, 'floor') ? photoBlock : ''}
   <footer class="rp-foot">${job.rev ? `${h(I.tankId || '')} Rev ${job.rev} (${h(new Date(job.savedAt).toLocaleDateString())}). ` : ''}${h(company.footer || '')} Calculation per API 653 §4.4.7 as configured in this report; verify limits against the edition and tank design in force.</footer>
 </article>`;
 }
@@ -320,7 +321,7 @@ export function execSummaryHTML(job, layout, calc) {
     ${S2.scope ? `<h3 class="rp-h3">Scope</h3><p>${h(S2.scope).replace(/\n/g, '<br>')}</p>` : ''}
     ${S2.narrative ? `<h3 class="rp-h3">Summary of findings</h3><p>${h(S2.narrative).replace(/\n/g, '<br>')}</p>` : ''}
     <table class="grid small"><thead><tr><th>Component</th><th>Condition</th><th>Key results</th><th class="n">Open deficiencies</th></tr></thead><tbody>
-    ${SECTIONS.map((s) => { const f = F[s.key], n = open.filter((d) => d.sec === s.key).length; return `<tr class="${f.status === 'bad' ? 'is-bad' : ''}"><td><b>${h(s.label)}</b></td><td>${STATUS_TEXT[f.status]}</td><td>${f.lines.slice(0, 3).join('<br>') || '—'}</td><td class="n">${n || '—'}</td></tr>`; }).join('')}
+    ${SECTIONS.filter((s) => inScope(job, s.key)).map((s) => { const f = F[s.key], n = open.filter((d) => d.sec === s.key).length; return `<tr class="${f.status === 'bad' ? 'is-bad' : ''}"><td><b>${h(s.label)}</b></td><td>${STATUS_TEXT[f.status]}</td><td>${f.lines.slice(0, 3).join('<br>') || '—'}</td><td class="n">${n || '—'}</td></tr>`; }).join('')}
     </tbody></table>
     ${pri.length ? `<h3 class="rp-h3">Priority items (P1 / P2)</h3><ul>${pri.map((d) => `<li><b>${h(d.no || '')}</b> ${h(d.secLabel)}: ${h(d.finding)}${d.action ? ` — <i>${h(d.action)}</i>` : ''}</li>`).join('')}</ul>` : ''}
     ${S2.rts || S2.nextExt || S2.nextInt || S2.nextUT ? `<table class="kv">${[['Return to service', S2.rts], ['Next external inspection', S2.nextExt], ['Next internal inspection', S2.nextInt], ['Next UT thickness inspection', S2.nextUT]].filter(([, v]) => v).map(([k, v]) => `<tr><th>${k}</th><td>${h(v)}</td></tr>`).join('')}</table>` : ''}
@@ -342,6 +343,7 @@ export function defTableHTML(job, photos, title, opts = {}) {
 export function sectionChaptersHTML(job, photos, opts = {}) {
   const out = [];
   for (const s of SECTIONS) {
+    if (!inScope(job, s.key)) continue;
     const d = job.secs?.[s.key] || {}, ph = (photos || []).filter((p) => p.sec === s.key && p.inReport !== false).sort((a, b) => (a.n || 0) - (b.n || 0));
     if (!d.nde?.length && !d.obs?.length && !d.recs?.length && !ph.length) continue;
     out.push(`<section class="pb chap"><h2>${h(s.label)} — inspection findings</h2>

@@ -19,15 +19,16 @@ import { WELDS, ELEV_UNITS, PSI_PER_MPA, DEP_K, newEdge, newDep, epOffsets, xKey
 import { MATERIALS, MAT, CODES, editionsFor, supplementsFor, jointOptions, jointLabel, JE_42, JE_43, JE_NOTES, EDGE_D, EDGE_BEW, EDGE_BE, K_TABLE, T45, T51B, NOZZLE_PIPE, NOZZLE_WALL_BY_SHELL, CODE_SCHED, E_DEFAULT, PSI_MPA, TABLES_SOURCE } from './tables.js';
 import { designBasis, courseDesigns, fillFromT, annularReq, defaultJoint, shellYE } from './design.js';
 import { SECTIONS, SEC, CHILDREN, viewPlace, childView, findings, allDefs, numberDefs, STATUS_TEXT, NDE_METHODS, NDE_RESULTS, CONDITIONS, PRIORITIES, PRIORITY_LABEL, STATUSES, typicalNDE, typicalObs, newObs, newNDE, newRec, defaultSummary } from './sections.js';
+import { SCOPE, SCOPE_HINT, inScope, scopeText, tankFromJob, newTank, jobFromTank, editJobFor, diffFromTank, tankKeyOf, normKey } from './registry.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '3.3.0';
+const APP_VERSION = '3.4.0';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const S = {
-  jobs: [], job: null, layout: null, calc: null, photos: [], company: {},
+  jobs: [], tanks: [], reg: { q: '', open: new Set() }, job: null, layout: null, calc: null, photos: [], company: {},
   view: 'jobs', sel: null, selPlate: null, selFeature: null, selNozzle: null, mode: 'select', ftType: 'column',
   plateLabels: true, indLabels: true, showCZ: true, showPatches: true, showDatums: true, filter: new Set(Object.keys(RESULTS)),
   search: '', resFilter: 'all', sort: { key: 'no', dir: 1 }, plateSearch: '',
@@ -38,6 +39,7 @@ const S = {
 
 const VIEWS = [
   ['dash', 'Dashboard', 'M4 4h7v9H4zM13 4h7v5h-7zM13 11h7v9h-7zM4 15h7v5H4z'],
+  ['reg', 'Tank registry', 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3v12c0 1.7-3.6 3-8 3s-8-1.3-8-3zM4 6c0 1.7 3.6 3 8 3s8-1.3 8-3M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3'],
   ['jobs', 'Jobs', 'M4 5h16M4 12h16M4 19h10'],
   ['setup', 'Tank setup', 'M12 3v3m0 12v3M3 12h3m12 0h3M6 6l2 2m8 8 2 2M6 18l2-2m8-8 2-2M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z'],
   ['summary', 'Executive summary', 'M5 4h14v16H5zM8 8h8M8 12h8M8 16h5']
@@ -49,6 +51,7 @@ const VIEWS_END = [
 ];
 const CHILD_ICON = { nde: 'M3 12h4l3-8 4 16 3-8h4', obs: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', photos: 'M4 7h4l2-3h4l2 3h4v12H4zM12 10a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', an: 'M4 19V5M4 19h16M8 15l4-5 3 3 5-6', recs: 'M9 11l3 3 8-8M20 12v7H4V5h11' };
 
+const REG_VIEWS = ['setup', 'map', 'shell', 'nozzles', 'roofF', 'roofL', 'seal', 'settle'];
 const RESULT_OPTS = Object.entries(RESULTS);
 const VT_COND = ['', 'None visible', 'Isolated pit', 'Pitting cluster', 'General corrosion', 'Lake / area corrosion', 'Weld corrosion', 'Mechanical damage', 'Lamination / inclusion', 'Other'];
 const COATING = ['', 'None', 'Intact', 'Blistered', 'Disbonded', 'Failed / missing'];
@@ -81,6 +84,15 @@ function scheduleSave() {
 async function flushSave() {
   clearTimeout(saveTimer); saveTimer = null;
   if (!S.job) return;
+  if (S.job.regEdit) {
+    const job = S.job;
+    try {
+      const prev = await db.getTank(job.regEdit), t = tankFromJob(job, prev);
+      t.info.location = job.info.location || ''; t.info.notes = job.info.tankNotes || '';
+      await db.putTank(t); await loadTanks(); setSaveState('Saved to registry');
+    } catch (e) { setSaveState('Not saved'); toast('Could not save the tank: ' + e.message); }
+    return;
+  }
   try { await db.putJob(S.job); setSaveState('Saved locally'); renderFileState(); }
   catch (e) { setSaveState('Not saved'); toast('Could not save to this device: ' + e.message); }
 }
@@ -90,6 +102,7 @@ function setSaveState(t) { const el = $('#saveState'); if (el) { el.textContent 
 function commit() { recompute(); scheduleSave(); }
 
 async function loadJobs() { S.jobs = (await db.allJobs()).sort((a, b) => (b.updated || 0) - (a.updated || 0)); }
+async function loadTanks() { S.tanks = (await db.allTanks()).sort((a, b) => tankKeyOf(a).localeCompare(tankKeyOf(b), undefined, { numeric: true })); }
 
 async function openJob(id, view = 'map') {
   await flushSave();
@@ -114,7 +127,8 @@ async function createJob(job) {
 /* ---------------------------------------------------------------- shell ---- */
 
 function go(view) {
-  if (!S.job && view !== 'jobs' && view !== 'dash') view = 'jobs';
+  if (!S.job && !['jobs', 'dash', 'reg'].includes(view)) view = 'jobs';
+  if (S.job?.regEdit && !REG_VIEWS.includes(view)) { if (saveTimer) flushSave(); S.job = null; recompute(); S.photos = []; }
   if (view === 'roof') view = 'roofF';
   S.view = view;
   const pl = viewPlace(view); if (pl) S.navOpen = new Set([pl.sec]);
@@ -127,17 +141,19 @@ window.tfi = { go: (v) => go(v), zoom: (x, y, r) => { S.mapCtl?.focus(x, y, r); 
 function renderAll() { renderHeader(); renderNav(); renderView(); }
 
 function renderHeader() {
-  const j = S.job;
-  $('#jobTitle').innerHTML = j ? `<b>${h(j.info.tankId || 'Untitled tank')}${j.rev ? ` <em class="rev">Rev ${j.rev}</em>` : ''}${j.status?.stage ? ` <em class="stg st-${j.status.stage}">${h(STAGE_LABEL[j.status.stage])}</em>` : ''}</b><span>${h([j.info.client, j.info.site, j.info.inspDate].filter(Boolean).join(' · '))}</span>` : '<span>No job open</span>';
+  const j = S.job, reg = !!j?.regEdit;
+  if (reg) $('#jobTitle').innerHTML = `<b>${h(j.info.tankId || 'New tank')} <em class="stg st-reg">Registry</em></b><span>${h([j.info.client, j.info.site, 'editing the tank data'].filter(Boolean).join(' · '))}</span>`;
+  else $('#jobTitle').innerHTML = j ? `<b>${h(j.info.tankId || 'Untitled tank')}${j.rev ? ` <em class="rev">Rev ${j.rev}</em>` : ''}${j.status?.stage ? ` <em class="stg st-${j.status.stage}">${h(STAGE_LABEL[j.status.stage])}</em>` : ''}</b><span>${h([j.info.client, j.info.site, j.info.inspDate].filter(Boolean).join(' · '))}</span>` : '<span>No job open</span>';
   const fs = $('#fileState');
   if (fs) {
-    fs.hidden = !j;
+    fs.hidden = !j || reg;
     fs.textContent = j ? (j.rev ? (unsavedSinceRev(j) ? `Rev ${j.rev} · unsaved changes` : revText(j)) : 'Not saved to a file') : '';
     fs.dataset.state = j && (!j.rev || unsavedSinceRev(j)) ? 'dirty' : 'clean';
     fs.title = j?.rev ? `${revText(j, true)}${S.fileName ? ' to ' + S.fileName : ''}` : 'Save file… keeps a copy in OneDrive and starts the revision count';
   }
-  $('#exportMenu').hidden = !j;
-  $('#saveFileBtn').hidden = !j;
+  $('#exportMenu').hidden = !j || reg;
+  $('#saveFileBtn').hidden = !j || reg;
+  const rb = $('.top-acts [data-go="report"]'); if (rb) rb.hidden = reg;
   $('#saveFileBtn').title = S.fileName ? `Save to ${S.fileName} (Ctrl+S)` : 'Save this job to a file, e.g. in OneDrive (Ctrl+S)';
   $('#saveFileBtn').textContent = S.fileName ? 'Save' : 'Save file…';
   $('#installBtn').hidden = !S.installEvt;
@@ -146,10 +162,17 @@ function renderHeader() {
 function renderNav() {
   const job = S.job, place = viewPlace(S.view);
   const icon = (d, w = 18) => `<svg viewBox="0 0 24 24" width="${w}" height="${w}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
-  const btn = ([id, label, d], count) => `<button class="nav-btn${S.view === id ? ' active' : ''}" data-go="${id}" ${!job && id !== 'jobs' && id !== 'dash' ? 'disabled' : ''}>${icon(d)}<span>${label}</span>${count ? `<em>${count}</em>` : ''}</button>`;
+  if (job?.regEdit) {
+    const items = [['setup', 'Tank data & layout', VIEWS.find((v) => v[0] === 'setup')[2]], ['map', 'Floor map', SEC.get('floor').icon], ['shell', 'Shell courses', SEC.get('shell').icon], ['nozzles', 'Nozzles', SEC.get('nozzles').icon], ['roofF', 'Fixed roof', SEC.get('froof').icon], ['roofL', 'Floating roof', SEC.get('flroof').icon], ['settle', 'Settlement set-up', SEC.get('settle').icon]];
+    $('#nav').innerHTML = `<button class="nav-btn" data-act="reg-done">${icon('M15 18l-6-6 6-6')}<span>Done — back to registry</span></button><div class="nav-group">Editing tank ${h(job.info.tankId || '')}</div>` +
+      items.map(([id, label, d]) => `<button class="nav-btn${S.view === id ? ' active' : ''}" data-go="${id}">${icon(d)}<span>${label}</span></button>`).join('') +
+      `<p class="nav-note">Readings entered here are not kept — the registry stores the tank, not inspection results.</p><div class="nav-foot">v${APP_VERSION}</div>`;
+    return;
+  }
+  const btn = ([id, label, d], count) => `<button class="nav-btn${S.view === id ? ' active' : ''}" data-go="${id}" ${!job && !['jobs', 'dash', 'reg'].includes(id) ? 'disabled' : ''}>${icon(d)}<span>${label}</span>${count ? `<em>${count}</em>` : ''}</button>`;
   let F = null; try { F = job && S.layout ? findings(job, S.layout, S.calc) : null; } catch { F = null; }
   const openDefs = job ? allDefs(job).filter((d) => d.status !== 'Closed').length : 0;
-  const secs = SECTIONS.map((sec) => {
+  const secs = SECTIONS.filter((sec) => !job || inScope(job, sec.key)).map((sec) => {
     const open = S.navOpen.has(sec.key), st = F?.[sec.key]?.status || 'none', d = job?.secs?.[sec.key] || {};
     const counts = { obs: d.obs?.length, photos: S.photos.filter((p) => p.sec === sec.key).length, recs: d.recs?.length };
     const kids = !open ? '' : CHILDREN.map(([c, label]) => {
@@ -168,7 +191,7 @@ function renderView() {
   main.className = 'main view-' + S.view;
   const pl = viewPlace(S.view);
   if (pl?.child === 'nde') S.ndeTab[pl.sec] = S.view;
-  const fn = { dash: viewDash, jobs: viewJobs, setup: viewSetup, summary: viewSummary, defs: viewDefs, defrep: viewDefRep, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, shell: viewShell, roofF: viewRoof, roofL: viewRoof, seal: viewRoof, nozzles: viewNozzles, settle: viewSettle, ref: viewRef, report: viewReport }[S.view]
+  const fn = { dash: viewDash, reg: viewReg, jobs: viewJobs, setup: viewSetup, summary: viewSummary, defs: viewDefs, defrep: viewDefRep, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, shell: viewShell, roofF: viewRoof, roofL: viewRoof, seal: viewRoof, nozzles: viewNozzles, settle: viewSettle, ref: viewRef, report: viewReport }[S.view]
     || (pl ? { nde: viewNDE, obs: viewObs, photos: viewPhotos, an: viewAnalysis, recs: viewRecs }[pl.child] : null) || viewJobs;
   main.innerHTML = (pl ? crumbHTML(pl) : '') + fn();
   (after[S.view] || (pl ? after['sec:' + pl.child] : null))?.();
@@ -229,7 +252,7 @@ function jobCard(j) {
   const since = (st.history || []).filter((x) => x.stage === st.stage).pop()?.at || null;
   return { id: j.id, tankId: j.info?.tankId || 'Untitled', client: j.info?.client || '', site: j.info?.site || '', inspDate: j.info?.inspDate || '', reportNo: j.info?.reportNo || '',
     inspector: j.info?.inspector || st.inspector || '', reviewer: st.reviewer || '', stage: st.stage, planned: st.planned || '', due: st.due || '', since,
-    rev: j.rev || 0, savedAt: j.savedAt || 0, updated: j.updated || j.created || 0, condition: j.summary?.condition || '', open, pri, inds: (j.indications || []).length, diameter: j.tank?.diameter || null };
+    tankRef: j.tankRef || null, scope: j.scope || null, rev: j.rev || 0, savedAt: j.savedAt || 0, updated: j.updated || j.created || 0, condition: j.summary?.condition || '', open, pri, inds: (j.indications || []).length, diameter: j.tank?.diameter || null };
 }
 
 async function dashInit() {
@@ -382,6 +405,144 @@ document.addEventListener('dragover', (e) => { const col = e.target.closest?.('[
 document.addEventListener('drop', (e) => { const col = e.target.closest?.('[data-drop]'); if (!col) return; e.preventDefault(); col.classList.remove('over'); const id = e.dataTransfer.getData('text/plain'); if (id) setStage(id, col.dataset.drop); });
 document.addEventListener('input', (e) => { if (e.target.id === 'dashQ') { S.dash.q = e.target.value; clearTimeout(S.dash.qt); S.dash.qt = setTimeout(() => { const pos = e.target.selectionStart; renderView(); const n = $('#dashQ'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch { /* */ } } }, 200); } });
 
+
+/* -------------------------------------------------------------- tank registry */
+// Tanks entered once; each inspection starts from a copy of the tank's data.
+
+/** All inspections of a tank: jobs on this device plus job files in the linked folder. */
+function tankInspections(tid) {
+  const rows = new Map();
+  for (const j of S.jobs) if (j.tankRef === tid) rows.set(j.id, { ...jobCard(S.job?.id === j.id ? S.job : j), where: 'device' });
+  for (const [id, f] of S.dash.files) if (f.card.tankRef === tid && !rows.has(id)) rows.set(id, { ...f.card, where: 'folder' });
+  return [...rows.values()].sort((a, b) => (b.inspDate || b.planned || '').localeCompare(a.inspDate || a.planned || ''));
+}
+/** Jobs with a tank ID that are not yet linked to the registry. */
+const unlinkedJobs = () => S.jobs.filter((j) => !j.tankRef && (j.info?.tankId || '').trim() && !S.tanks.some((t) => t.id === j.tankRef));
+
+function viewReg() {
+  const R = S.reg, q = R.q.trim().toLowerCase(), today = todayISO();
+  const fmtD = (d) => (d ? new Date(d + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '');
+  const list = S.tanks.filter((t) => !q || [t.info?.client, t.info?.site, t.info?.tankId, t.info?.location].join(' ').toLowerCase().includes(q));
+  const groups = new Map();
+  for (const t of list) {
+    const c = t.info?.client || 'No client', st = t.info?.site || 'No site';
+    if (!groups.has(c)) groups.set(c, new Map());
+    const g = groups.get(c); if (!g.has(st)) g.set(st, []); g.get(st).push(t);
+  }
+  const roofTxt = (t) => (ROOF_TYPES.find(([k]) => k === t.roof?.type) || [])[1] || '';
+  const card = (t) => {
+    const ins = tankInspections(t.id), last = ins[0], open = R.open.has(t.id), T = t.tank || {};
+    const facts = [t.tank?.diameter ? `Ø ${fmt(T.diameter, 'big', t)}` : 'Diameter not set', T.bottomType, t.layout?.annular ? 'annular ring' : '', t.roof?.type && t.roof.type !== 'none' ? roofTxt(t) : '', (t.shell?.courses || []).length ? `${t.shell.courses.length} courses` : '', (t.nozzles || []).length ? `${t.nozzles.length} nozzles` : '', T.yearBuilt ? `built ${T.yearBuilt}` : ''].filter(Boolean).join(' · ');
+    const insRows = ins.map((r) => `<tr><td>${r.inspDate ? fmtD(r.inspDate) : r.planned ? 'Planned ' + fmtD(r.planned) : '—'}</td><td>${h(r.reportNo)}</td><td class="small">${h(r.scope ? scopeText(r.scope) : 'Full')}</td><td><span class="stg st-${r.stage}">${h(STAGE_LABEL[r.stage] || '')}</span>${r.due && r.due < today && r.stage !== 'complete' ? ' <small class="bad">overdue</small>' : ''}</td><td class="small">${h(r.condition)}</td><td class="n">${r.open || '—'}</td><td class="small muted">${r.where === 'folder' ? 'Folder' : 'Device'}</td><td><button class="btn sm" data-act="dash-open" data-id="${r.id}">Open</button></td></tr>`).join('');
+    return `<div class="tank-card">
+      <div class="tk-head"><div><b class="tk-id">${h(t.info?.tankId || 'Unnamed tank')}</b>${t.info?.location ? ` <span class="muted small">${h(t.info.location)}</span>` : ''}<div class="muted small">${h(facts)}</div></div>
+        <div class="acts"><button class="btn sm primary" data-act="reg-insp" data-id="${t.id}">New inspection</button><button class="btn sm" data-act="reg-edit" data-id="${t.id}">Edit tank data</button>
+        <details class="menu"><summary class="btn sm ghost icon" title="More">⋯</summary><div class="menu-pop right"><button data-act="reg-dup" data-id="${t.id}">Duplicate tank (same design)</button><button data-act="reg-del" data-id="${t.id}" class="danger-txt">Delete from registry</button></div></details></div></div>
+      <button class="tk-ins-toggle" data-act="reg-toggle" data-id="${t.id}">${open ? '▾' : '▸'} ${ins.length ? `${ins.length} inspection${ins.length > 1 ? 's' : ''} · last ${last.inspDate ? fmtD(last.inspDate) : last.planned ? 'planned ' + fmtD(last.planned) : 'not dated'} · <span class="stg st-${last.stage}">${h(STAGE_LABEL[last.stage] || '')}</span>` : 'No inspections yet'}</button>
+      ${open && ins.length ? `<div class="tblwrap"><table class="grid small"><thead><tr><th>Date</th><th>Report</th><th>Scope</th><th>Stage</th><th>Condition</th><th class="n">Open def.</th><th>Where</th><th></th></tr></thead><tbody>${insRows}</tbody></table></div>` : ''}
+    </div>`;
+  };
+  const body = [...groups].map(([c, sites]) => `<section class="reg-client"><h2>${h(c)}</h2>${[...sites].map(([st, ts]) => `<div class="reg-site"><h3>${h(st)} <em>${ts.length}</em></h3>${ts.map(card).join('')}</div>`).join('')}</section>`).join('');
+  const un = unlinkedJobs();
+  return `<div class="page wide reg"><div class="page-head"><div><h1>Tank registry</h1><p class="muted">Each tank's static data — identity, construction, floor layout, nozzles, shell courses, roof and settlement set-up — entered once. <b>New inspection</b> copies it into a new job with the scope you choose; the job keeps its own copy, so reports always show the tank as inspected.</p></div>
+      <div class="acts"><button class="btn primary" data-act="reg-new">Add tank</button></div></div>
+    ${un.length ? `<div class="callout info reg-mig"><span><b>${un.length} job${un.length > 1 ? 's' : ''}</b> on this device ${un.length > 1 ? 'are' : 'is'} not in the registry yet. Build tank records from them — jobs for the same client, site and tank ID are grouped under one tank, using the most recent job's data.</span><button class="btn sm primary" data-act="reg-build">Build registry from jobs</button></div>` : ''}
+    <div class="dash-tools"><input type="search" id="regQ" placeholder="Search client, site, tank…" value="${h(R.q)}"><span class="muted small">${S.tanks.length} tank${S.tanks.length === 1 ? '' : 's'}</span></div>
+    ${body || `<div class="card empty">${S.tanks.length ? 'No tanks match the search.' : 'No tanks in the registry yet. <b>Add tank</b> to enter one, or build the registry from your existing jobs.'}</div>`}
+  </div>`;
+}
+document.addEventListener('input', (e) => { if (e.target.id === 'regQ') { S.reg.q = e.target.value; clearTimeout(S.reg.qt); S.reg.qt = setTimeout(() => { const pos = e.target.selectionStart; renderView(); const n = $('#regQ'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch { /* */ } } }, 200); } });
+after.reg = async () => { const before = S.dash.scanned; await dashInit(); if (!before && S.dash.scanned && S.view === 'reg') renderView(); };
+
+async function openTankEdit(tid, view = 'setup') {
+  await flushSave();
+  const t = await db.getTank(tid); if (!t) return toast('Tank not found');
+  S.job = editJobFor(t); S.job.info.location = t.info?.location || ''; S.job.info.tankNotes = t.info?.notes || '';
+  S.photos = []; S.fileName = null; S.sel = S.selPlate = S.selFeature = null; S.mode = 'select'; S.vb = null;
+  recompute(); go(view);
+}
+
+async function addTank(fromJob = null) {
+  const t = fromJob ? tankFromJob(fromJob) : newTank(S.jobs[0]?.units || 'imperial');
+  await db.putTank(t); await loadTanks();
+  return t;
+}
+
+/** Link every unlinked job to a tank record (one per client + site + tank ID). */
+async function buildRegistry() {
+  const un = unlinkedJobs(); if (!un.length) return;
+  const byKey = new Map();
+  for (const j of un) { const k = normKey(j.info.client, j.info.site, j.info.tankId); if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(j); }
+  let made = 0, linked = 0;
+  for (const [k, js] of byKey) {
+    let t = S.tanks.find((x) => tankKeyOf(x) === k);
+    if (!t) {
+      const latest = js.slice().sort((a, b) => (b.info.inspDate || '').localeCompare(a.info.inspDate || '') || (b.updated || 0) - (a.updated || 0))[0];
+      t = tankFromJob(migrate(latest)); await db.putTank(t); S.tanks.push(t); made++;
+    }
+    for (const j of js) { const full = await db.getJob(j.id); full.tankRef = t.id; await db.putJob(full); if (S.job?.id === j.id) S.job.tankRef = t.id; linked++; }
+  }
+  await loadJobs(); await loadTanks(); renderView();
+  toast(`${made} tank${made === 1 ? '' : 's'} added, ${linked} job${linked === 1 ? '' : 's'} linked.`);
+}
+
+/** Dialog: start an inspection of a registry tank. */
+async function newInspectionDlg(tid) {
+  const t = await db.getTank(tid); if (!t) return;
+  const ins = tankInspections(tid).filter((r) => r.where === 'device');
+  const lastCard = ins.find((r) => r.inspDate) || ins[0];
+  const last = lastCard ? migrate(await db.getJob(lastCard.id)) : null;
+  const sug = new Set(last?.scope || ['floor', 'nozzles', 'found', ...(t.shell?.courses?.length ? ['shell'] : []), ...(hasFixed(t) ? ['froof'] : []), ...(hasFloating(t) ? ['flroof'] : [])]);
+  const lastTxt = last ? `${last.info.inspDate || 'undated'}${last.info.reportNo ? ', ' + last.info.reportNo : ''}` : '';
+  const dlg = $('#dlg');
+  $('#dlgBody').innerHTML = `<form class="ni-dlg" method="dialog">
+    <div class="ed-head"><h2>New inspection — ${h(t.info?.tankId || 'tank')}</h2><button type="button" class="btn sm ghost" data-ni="close">✕</button></div>
+    <p class="muted small">${h([t.info?.client, t.info?.site].filter(Boolean).join(' · '))}</p>
+    <h3>Scope</h3><div class="ni-scope">${SCOPE.map(([k, l]) => `<label class="chk"><input type="checkbox" name="scope" value="${k}" ${sug.has(k) ? 'checked' : ''}><span><b>${l}</b><small class="muted"> ${SCOPE_HINT[k] || ''}</small></span></label>`).join('')}</div>
+    <h3>Floor layout</h3><div class="ni-floor">
+      <label class="chk"><input type="radio" name="floor" value="last" ${last ? 'checked' : 'disabled'}><span><b>As found at the last inspection</b><small class="muted"> ${last ? `${h(lastTxt)} — includes plate corrections and patches recorded then` : 'no earlier inspection on this device'}</small></span></label>
+      <label class="chk"><input type="radio" name="floor" value="registry" ${last ? '' : 'checked'}><span><b>Registry layout</b><small class="muted"> the floor as stored for this tank</small></span></label>
+      <label class="chk"><input type="radio" name="floor" value="new"><span><b>New floor — start a blank layout</b><small class="muted"> the floor has been replaced; keeps the tank, shell and nozzles</small></span></label>
+    </div>
+    <h3>Job</h3><div class="fgrid">
+      <label class="fld"><span class="lbl">Planned inspection date</span><span class="ctl"><input type="date" name="planned"></span></label>
+      <label class="fld"><span class="lbl">Report due</span><span class="ctl"><input type="date" name="due"></span></label>
+      <label class="fld"><span class="lbl">Report no.</span><span class="ctl"><input name="reportNo" autocomplete="off"></span></label>
+      <label class="fld"><span class="lbl">Work order</span><span class="ctl"><input name="workOrder" autocomplete="off"></span></label>
+      <label class="fld"><span class="lbl">API 653 inspector</span><span class="ctl"><input name="inspector" value="${h(last?.info?.inspector || '')}" autocomplete="off"></span></label>
+      <label class="fld"><span class="lbl">Product</span><span class="ctl"><input name="product" value="${h(last?.info?.product || '')}" autocomplete="off"></span></label>
+    </div>
+    ${last ? `<label class="chk"><input type="checkbox" name="equip" checked><span>Copy MFL / UT equipment from the last inspection (check serials and calibration dates)</span></label>` : ''}
+    <p class="ni-err bad small" hidden></p>
+    <div class="acts end"><button type="button" class="btn" data-ni="close">Cancel</button><button type="button" class="btn primary" data-ni="go">Create inspection</button></div>
+  </form>`;
+  const form = $('.ni-dlg', dlg);
+  form.onclick = async (e) => {
+    const b = e.target.closest('[data-ni]'); if (!b) return;
+    if (b.dataset.ni === 'close') { dlg.close(); return; }
+    const fd = new FormData(form), scope = fd.getAll('scope');
+    if (!scope.length) { const er = $('.ni-err', form); er.textContent = 'Pick at least one item for the scope.'; er.hidden = false; return; }
+    const j = jobFromTank(t, { scope, floorSrc: fd.get('floor') || 'registry', last, copyEquip: fd.get('equip') === 'on', info: { reportNo: fd.get('reportNo') || '', workOrder: fd.get('workOrder') || '', inspector: fd.get('inspector') || '', product: fd.get('product') || '' } });
+    j.status.planned = fd.get('planned') || ''; j.status.due = fd.get('due') || '';
+    if (j.status.planned) j.info.inspDate = j.status.planned;
+    dlg.close();
+    await createJob(j);
+    toast(`Inspection created for ${t.info?.tankId || 'the tank'} — ${scopeText(scope)}`);
+  };
+  dlg.showModal();
+}
+
+/** Push a job's static data (layout, nozzles, courses…) back to its registry tank. */
+async function updateRegistryFromJob() {
+  const j = S.job; if (!j?.tankRef) return;
+  const prev = await db.getTank(j.tankRef);
+  if (!prev) { if (!(await askConfirm('The registry tank for this job is not on this device. Add this tank to the registry from this job?', { ok: 'Add to registry' }))) return; }
+  const diff = prev ? diffFromTank(j, prev) : [];
+  if (prev && !diff.length) { toast('The registry already matches this inspection.'); return; }
+  if (prev && !(await askConfirm(`Update the registry record for ${prev.info?.tankId || 'this tank'} with this inspection's data?\n\nChanges: ${diff.join(', ')}.\n\nEarlier inspections keep their own copies.`, { ok: 'Update registry' }))) return;
+  const t = tankFromJob(j, prev || { id: j.tankRef }); await db.putTank(t); await loadTanks(); renderView(); toast('Registry updated.');
+}
+
 /* ------------------------------------------------------------- jobs view --- */
 
 function viewJobs() {
@@ -430,14 +591,29 @@ after.jobs = async () => {
 /* ------------------------------------------------------------ setup view --- */
 
 function viewSetup() {
-  const j = S.job, L = j.layout, hasInd = j.indications.length > 0;
+  const j = S.job, L = j.layout, hasInd = j.indications.length > 0, reg = !!j.regEdit;
   const yesno = [['true', 'Yes'], ['false', 'No']];
+  const regT = j.tankRef ? S.tanks.find((t) => t.id === j.tankRef) : null, diff = regT ? diffFromTank(j, regT) : [];
+  const scopeCard = reg ? '' : `<section class="card scope-card"><h2>Scope &amp; registry</h2>
+      <div class="scope-chips">${SCOPE.map(([k, l]) => `<label class="chk chip-chk"><input type="checkbox" data-act="scope-tog" data-k="${k}" ${inScope(j, k) ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+      <p class="muted small">Items not in scope are hidden from the menu and left out of the report.</p>
+      ${regT ? `<div class="reg-link"><span>From the registry: <b>${h(regT.info?.tankId || 'tank')}</b>${diff.length ? ` · <span class="warn-txt">differs from the registry: ${h(diff.join(', '))}</span>` : ' · <span class="muted">matches the registry</span>'}</span>
+          <span class="acts">${diff.length ? '<button class="btn sm" data-act="reg-update">Update registry from this inspection</button>' : ''}<button class="btn sm ghost" data-act="reg-edit" data-id="${regT.id}">Open registry tank</button></span></div>`
+        : j.tankRef ? `<div class="reg-link"><span class="muted">Linked to a registry tank that is not on this device.</span><span class="acts"><button class="btn sm" data-act="reg-update">Add to registry from this job</button></span></div>`
+        : `<div class="reg-link"><span class="muted">Not in the tank registry.</span><span class="acts"><button class="btn sm" data-act="reg-from-job">Add this tank to the registry</button></span></div>`}
+    </section>`;
+  const idCard = `<section class="card"><h2>Tank identity</h2><div class="fgrid">
+        ${field('Client', 'info.client')}${field('Facility / site', 'info.site')}
+        ${field('Tank ID', 'info.tankId')}${field('Location / area', 'info.location', 'text', { ph: 'e.g. north tank farm, unit 3' })}
+        ${field('0° reference label', 'info.zeroRef', 'text', { ph: 'e.g. N, manway, inlet' })}<div></div>
+        ${field('Notes about this tank', 'info.tankNotes', 'area', { rows: 2, cls: 'span2' })}
+      </div></section>`;
   return `<div class="page">
-  <div class="page-head"><div><h1>Tank setup</h1><p class="muted">Tank details, plate layout and equipment. The floor map updates as you type.</p></div>
-    <div class="acts"><button class="btn primary" data-go="map">Go to floor map →</button></div></div>
+  <div class="page-head"><div><h1>${reg ? 'Registry — tank data' : 'Tank setup'}</h1><p class="muted">${reg ? 'The tank as stored in the registry: construction, floor layout, nozzles (Floor map / Nozzles), shell courses, roof and settlement set-up. New inspections start from this. Changes save automatically.' : 'Tank details, plate layout and equipment. The floor map updates as you type.'}</p></div>
+    <div class="acts">${reg ? '<button class="btn" data-act="reg-done">Done</button>' : ''}<button class="btn primary" data-go="map">Go to floor map →</button></div></div>
   <div class="setup-grid">
     <div class="setup-forms">
-      <section class="card"><h2>Inspection</h2><div class="fgrid">
+      ${scopeCard}${reg ? idCard : `<section class="card"><h2>Inspection</h2><div class="fgrid">
         ${field('Client', 'info.client')}${field('Facility / site', 'info.site')}
         ${field('Tank ID', 'info.tankId')}${field('Product', 'info.product')}
         ${field('Report no.', 'info.reportNo')}${field('Work order', 'info.workOrder')}
@@ -446,7 +622,7 @@ function viewSetup() {
         ${field('API 653 inspector', 'info.inspector')}${field('Date of UT readings', 'info.utDate', 'text', { ph: 'from the UT loader sheet' })}
         ${field('Job stage', 'status.stage', 'sel', { options: STAGES })}${field('Peer reviewer', 'status.reviewer')}
         ${field('Planned inspection date', 'status.planned', 'date')}${field('Report due', 'status.due', 'date')}
-      </div></section>
+      </div></section>`}
 
       <section class="card"><h2>Tank</h2><div class="fgrid">
         ${field('Units', 'units', 'sel', { options: Object.entries(UNITS).map(([k, v]) => [k, v.label]) })}
@@ -463,9 +639,9 @@ function viewSetup() {
         ${field('Construction code', 'tank.code', 'sel', { options: CODES })}
         ${field('Code edition', 'tank.edition', 'sel', { options: ['', ...editionsFor(S.job.tank.code || 'Unknown')].map((x) => [x, x || '—']) })}
         ${field('Supplement / revision / addendum', 'tank.supp', 'sel', { options: ['', ...supplementsFor(S.job.tank.edition)].map((x) => [x, x || '—']) })}
-        ${field('Product specific gravity G', 'tank.sg', 'num', { ph: 'e.g. 0.85', hint: 'Needed for the shell t-min calculation (highest SG stored)' })}
+        ${reg ? '' : `${field('Product specific gravity G', 'tank.sg', 'num', { ph: 'e.g. 0.85', hint: 'Needed for the shell t-min calculation (highest SG stored)' })}
         ${field(`Max. operating temperature (${S.job.units === 'metric' ? '°C' : '°F'})`, 'tank.opTemp', 'num', { hint: 'Patch plates are not permitted in the critical zone over 200 °F / 93 °C' })}
-        ${field('Maximum fill height', 'tank.fillH', 'big', { ph: shellHeight(S.job) ? fmt(shellHeight(S.job), 'big', S.job, false) + ' (shell height)' : '' })}
+        ${field('Maximum fill height', 'tank.fillH', 'big', { ph: shellHeight(S.job) ? fmt(shellHeight(S.job), 'big', S.job, false) + ' (shell height)' : '' })}`}
         <p class="muted small span2">The code and edition set the joint efficiencies offered for the shell courses (API 653 Table 4.2: ${h(jointOptions(S.job.tank.code, S.job.tank.edition).group)}). Materials, stresses and Young's modulus come from the reference tables (<button class="linkbtn" data-go="ref">Code tables</button>).</p>
       </div></section>
 
@@ -491,7 +667,7 @@ function viewSetup() {
 
       ${L.mode !== 'grid' ? `<section class="card" id="builderCard">${L.mode === 'measured' ? measuredHTML() : builderHTML()}</section>` : ''}
 
-      <section class="card"><h2>Equipment</h2><div class="fgrid">
+      ${reg ? '' : `<section class="card"><h2>Equipment</h2><div class="fgrid">
         ${field('MFL scanner make', 'equip.mflMake')}${field('MFL model', 'equip.mflModel')}
         ${field('MFL serial no.', 'equip.mflSerial')}${field('MFL calibration date', 'equip.mflCal')}
         ${field('MFL reference plate', 'equip.mflRef')}${field('MFL reporting threshold', 'equip.mflThreshold', 'text', { unit: '%' })}
@@ -500,7 +676,7 @@ function viewSetup() {
         ${field('UT serial no.', 'equip.utSerial')}${field('UT probe', 'equip.utProbe')}
         ${field('UT calibration block', 'equip.utBlock')}${field('VT tools', 'equip.vtTools')}
       </div></section>
-      <section class="card"><h2>Notes</h2>${field('General notes for the report', 'info.notes', 'area', { rows: 4 })}</section>
+      <section class="card"><h2>Notes</h2>${field('General notes for the report', 'info.notes', 'area', { rows: 4 })}</section>`}
     </div>
     <aside class="setup-preview card"><div class="sp-head"><h2>Layout preview</h2><span id="spStats" class="muted small"></span></div><div id="spMap" class="sp-map"></div></aside>
   </div></div>`;
@@ -1973,6 +2149,36 @@ document.addEventListener('click', async (e) => {
   const menu = el.closest('details.menu'); if (menu) menu.open = false;
   switch (act) {
     case 'job-new': { const j = newJob(); return createJob(j); }
+    case 'reg-new': { const t = await addTank(); return openTankEdit(t.id); }
+    case 'reg-edit': return openTankEdit(id);
+    case 'reg-done': { await flushSave(); S.job = null; S.photos = []; recompute(); go('reg'); return; }
+    case 'reg-insp': return newInspectionDlg(id);
+    case 'reg-toggle': { S.reg.open.has(id) ? S.reg.open.delete(id) : S.reg.open.add(id); renderView(); return; }
+    case 'reg-build': return buildRegistry();
+    case 'reg-dup': {
+      const t = await db.getTank(id); if (!t) return;
+      const c = { ...JSON.parse(JSON.stringify(t)), id: uid(), created: Date.now(), updated: Date.now() };
+      c.info.tankId = (c.info.tankId || 'Tank') + ' (copy)'; await db.putTank(c); await loadTanks(); return openTankEdit(c.id);
+    }
+    case 'reg-del': {
+      const t = S.tanks.find((x) => x.id === id), n = tankInspections(id).length;
+      if (!(await askConfirm(`Delete ${t?.info?.tankId || 'this tank'} from the registry?${n ? `\n\nIts ${n} inspection${n > 1 ? 's' : ''} are kept; they just won't be linked to a registry tank.` : ''}`, { ok: 'Delete tank', danger: true }))) return;
+      await db.deleteTank(id); await loadTanks(); renderView(); return;
+    }
+    case 'reg-from-job': {
+      if (!S.job) return;
+      const dupe = S.tanks.find((x) => tankKeyOf(x) === normKey(S.job.info.client, S.job.info.site, S.job.info.tankId));
+      if (dupe && await askConfirm(`${dupe.info.tankId} at ${dupe.info.site || 'this site'} is already in the registry. Link this job to it?`, { ok: 'Link to it', cancel: 'Add as a new tank' })) { S.job.tankRef = dupe.id; commit(); renderView(); toast('Linked to the registry tank.'); return; }
+      const t = await addTank(S.job); S.job.tankRef = t.id; commit(); renderView(); toast('Tank added to the registry.'); return;
+    }
+    case 'reg-update': return updateRegistryFromJob();
+    case 'scope-tog': {
+      if (!S.job) return;
+      const all = SCOPE.map(([k]) => k), cur = new Set(Array.isArray(S.job.scope) ? S.job.scope : all);
+      el.checked ? cur.add(el.dataset.k) : cur.delete(el.dataset.k);
+      if (!cur.size) { el.checked = true; toast('Keep at least one item in scope.'); return; }
+      S.job.scope = all.filter((k) => cur.has(k)); commit(); renderNav(); return;
+    }
     case 'job-demo': { const j = makeDemo(); return createJob(j); }
     case 'job-open': return openJob(id);
     case 'job-dup': {
@@ -2672,7 +2878,8 @@ async function jobFileText(id) {
   const at = Date.now();
   const stamp = { rev: (stored.rev || 0) + 1, savedAt: at };
   const job = { ...stored, ...stamp, updated: at, revisions: [...(stored.revisions || []), { rev: stamp.rev, at }].slice(-100) };
-  return { job, stamp, text: JSON.stringify({ format: 'tank-floor-inspector', version: 1, saved: new Date(at).toISOString(), rev: stamp.rev, job, photos }) };
+  const tank = stored.tankRef ? await db.getTank(stored.tankRef).catch(() => null) : null;
+  return { job, stamp, text: JSON.stringify({ format: 'tank-floor-inspector', version: 1, saved: new Date(at).toISOString(), rev: stamp.rev, job, photos, ...(tank ? { tank } : {}) }) };
 }
 
 /** After a successful save, record the new revision on the stored job (and the open one). */
@@ -2748,6 +2955,7 @@ async function importJobFile(file) {
     const data = JSON.parse(await file.text());
     if (data.format !== 'tank-floor-inspector' || !data.job) throw new Error('This is not a Tank Floor Inspector job file.');
     const job = migrate(data.job);
+    if (data.tank?.id && data.tank.id === job.tankRef && !(await db.getTank(data.tank.id))) { await db.putTank(data.tank); await loadTanks(); }
     const exists = await db.getJob(job.id);
     const oldId = job.id;
     if (exists) {
@@ -2838,7 +3046,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 
 (async function init() {
   S.company = (await db.getMeta('company')) || {};
-  await loadJobs();
+  await loadJobs(); await loadTanks();
   const last = await db.getMeta('lastJob');
   if (last && S.jobs.some((j) => j.id === last)) await openJob(last, 'dash');
   else go('dash');

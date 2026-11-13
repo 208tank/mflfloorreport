@@ -7,6 +7,32 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Tank registry (v3.4)
+
+Enter each tank once, then start every inspection from it.
+
+- **Tank registry** (side menu) lists tanks by client → site. **Add tank** opens the tank data editor:
+  identity (client, site, tank ID, location), construction and design, floor layout, floor features and
+  patches, nozzles, shell courses, roof and settlement set-up. Changes save automatically; **Done** returns
+  to the registry. Readings entered while editing a registry tank are not kept.
+- **New inspection** on a tank asks for the **scope** (Floor, Shell, Fixed roof, Floating roof, Nozzles,
+  Foundation, Settlement) and the **floor layout** to start from:
+  - *As found at the last inspection* — the previous job's layout, plate corrections and patches;
+  - *Registry layout* — the floor as stored for the tank;
+  - *New floor* — a blank layout when the floor has been replaced (tank, shell and nozzles are kept).
+  It also takes the planned date, report due, report no., work order, inspector and product, and can copy
+  the MFL / UT equipment from the last inspection. Product, specific gravity, fill height and operating
+  temperature are per inspection (pre-filled from the last one).
+- Each inspection keeps **its own copy** of the tank data, so finished reports never change. On **Tank
+  setup** the *Scope & registry* card shows whether the job differs from the registry and offers
+  **Update registry from this inspection** (e.g. after recording new patches or a corrected layout).
+- Sections outside the scope are hidden from the menu and left out of the report. Older jobs have no
+  scope and show everything; the scope can be changed on Tank setup at any time.
+- **Build registry from jobs** (shown when there are unlinked jobs) creates one tank per client + site +
+  tank ID from the most recent job and links all of them.
+- Saved job files carry their registry tank, so opening a job file on another device adds the tank there.
+  Sharing the registry itself through the jobs folder is planned for v3.5.
+
 ## Dashboard (v3.3)
 
 The app opens on the **Dashboard**: every tank on this device and in the linked jobs folder, in five columns —

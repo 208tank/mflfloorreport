@@ -1,6 +1,6 @@
-// Minimal IndexedDB wrapper. Stores: jobs, photos, meta.
+// Minimal IndexedDB wrapper. Stores: jobs, photos, meta, tanks (the tank registry).
 const DB_NAME = 'tank-floor-inspector';
-const DB_VER = 1;
+const DB_VER = 2;
 let dbp = null;
 
 function open() {
@@ -15,6 +15,7 @@ function open() {
         s.createIndex('jobId', 'jobId');
       }
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
+      if (!db.objectStoreNames.contains('tanks')) db.createObjectStore('tanks', { keyPath: 'id' });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -50,6 +51,10 @@ export const db = {
   async getPhoto(id) { return tx('photos', 'readonly', (s) => reqP(s.get(id))); },
   async putPhoto(p) { return tx('photos', 'readwrite', (s) => reqP(s.put(p))); },
   async deletePhoto(id) { return tx('photos', 'readwrite', (s) => reqP(s.delete(id))); },
+  async allTanks() { return tx('tanks', 'readonly', (s) => reqP(s.getAll())); },
+  async getTank(id) { return tx('tanks', 'readonly', (s) => reqP(s.get(id))); },
+  async putTank(t) { return tx('tanks', 'readwrite', (s) => reqP(s.put(t))); },
+  async deleteTank(id) { return tx('tanks', 'readwrite', (s) => reqP(s.delete(id))); },
   async getMeta(key) { const r = await tx('meta', 'readonly', (s) => reqP(s.get(key))); return r?.value; },
   async setMeta(key, value) { return tx('meta', 'readwrite', (s) => reqP(s.put({ key, value }))); }
 };
