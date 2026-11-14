@@ -14,7 +14,7 @@
   ],
   "tol": 0.0127,
   "unit": "mm (shown in in)",
-  "source": "API 653 §4.4.7.1: MRT = (minimum of RTbc or RTip) − Or (StPr + UPr)",
+  "source": "API 653 (2025) §4.4.5.1: MRT = (minimum of RTbc or RTip) − Or (StPr + UPr); Table 4.4 limit 0.10 in",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -58,7 +58,7 @@
   ],
   "tol": 0.005,
   "unit": "mm",
-  "source": "API 653 §4.4.7.1",
+  "source": "API 653 (2025) §4.4.5.1; Table 4.4a (2.54 mm)",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -230,7 +230,7 @@
   ],
   "tol": 0.0127,
   "unit": "mm (shown in in)",
-  "source": "App rule; API 653 requires the MRT from the inspected bottom — unproven calls are an open item",
+  "source": "App rule; API 653 (2025) §4.4.4 — UT is used to confirm and quantify MFL data; unproven calls are an open item",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -311,7 +311,7 @@
   ],
   "tol": null,
   "unit": "",
-  "source": "API 653 §4.4.7.1 note on StPr (coated areas); this review (proposed correction C-05)",
+  "source": "API 653 (2025) §4.4.5.1: StPr = 0 only for coated areas with coating life ≥ Or — C-05",
   "status": "FAIL",
   "error": null,
   "checks": [
@@ -336,7 +336,7 @@
   ],
   "tol": 0.0127,
   "unit": "mm (shown in in)",
-  "source": "API 653 §4.4.7.1 note on UPr (effective cathodic protection)",
+  "source": "API 653 (2025) §4.4.5.1: UPr = 0 for areas with effective cathodic protection",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -569,7 +569,7 @@
   ],
   "tol": 0.0005,
   "unit": "in",
-  "source": "API 653 §4.3.3.1: t-min = 2.6 (H − 1) D G / (S E), not less than 0.1 in; S per Table 4.1",
+  "source": "API 653 (2025) §4.3.3.1 a): t-min = 2.6 (H − 1) D G / (S E), not less than 0.10 in; S per Table 4.1b",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -611,7 +611,7 @@
   ],
   "tol": 0.01,
   "unit": "mm",
-  "source": "API 653 §4.3.3.1; Table 4.2 (E = 0.85 for API 650 7th ed.+ Annex A spot RT)",
+  "source": "API 653 (2025) §4.3.3.1 a) (USC form, as the app computes); Table 4.2b E = 0.85 — the SI form 4.9 (H − 0.3) D G / (S E) gives about 10.29 mm (C-27)",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -638,7 +638,7 @@
   ],
   "tol": 1,
   "unit": "psi",
-  "source": "API 653 Table 4.1 rules for materials not listed",
+  "source": "API 653 (2025) §4.3.3.1 (S) and §4.3.3.2 (St) rules; Table 4.1b",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -681,7 +681,7 @@
   ],
   "tol": 0.01,
   "unit": "ft",
-  "source": "API 653 §4.3.3.2 (hydrotest height); inverse of §4.3.3.1",
+  "source": "API 653 (2025) §4.3.3.2 (hydrotest height); inverse of §4.3.3.1 a)",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -711,7 +711,7 @@
   ],
   "tol": 0.0127,
   "unit": "mm",
-  "source": "API 653 §4.3.3.1 (whole course). §4.3.2 averaging over L for locally thinned areas is not applied — see report",
+  "source": "API 653 (2025) §4.3.3.1 a) (whole course). §4.3.2 averaging and §4.3.3.1 b) (H for a location) are not applied — C-18",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -915,7 +915,7 @@
   ],
   "tol": 0.001,
   "unit": "mm / °",
-  "source": "API 653 Annex B.2.2.4 (optimum cosine curve by least squares)",
+  "source": "API 653 (2025) B.2.2.4 e) (least-squares optimum cosine curve)",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -966,7 +966,7 @@
   ],
   "tol": 0.0254,
   "unit": "mm",
-  "source": "API 653 B.3.2.1: S = U_i − ½(U_i−1 + U_i+1); Smax = L² Y 11 / (2 E H)",
+  "source": "API 653 (2025) B.3.2.1 and Figure B.3: Smax = (L² × Y × 11) / [2 (E × H)]",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -1009,7 +1009,7 @@
   ],
   "tol": 0.01,
   "unit": "mm",
-  "source": "API 653 B.3.2.1 (dimensionally consistent: L²/H is a length, Y/E is dimensionless)",
+  "source": "API 653 (2025) B.3.2.1 SI form (consistent units: L²/H is a length, Y/E dimensionless)",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -1045,7 +1045,7 @@
   ],
   "tol": null,
   "unit": "",
-  "source": "API 653 B.2.2.4 R² criterion as implemented (0.90) — confirm value and wording in the edition used",
+  "source": "API 653 (2025) B.2.2.4 e): cosine curve valid only if R² ≥ 0.9",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -1076,7 +1076,7 @@
   ],
   "tol": 0,
   "unit": "",
-  "source": "API 653 B.2.2.1 / §12.5 as quoted in the app (even-number rounding to be confirmed)",
+  "source": "API 653 (2025) §12.5.2 (even number, N ≥ D/10) and Figure B.1 (≥ 8 points, spacing ≤ 32 ft)",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -1118,7 +1118,7 @@
   ],
   "tol": 0.0127,
   "unit": "mm",
-  "source": "API 653 B.3.4 (angled lap welds) — α definition (from the radius or from the shell) must be confirmed",
+  "source": "API 653 (2025) B.3.4.4: α = angle of the weld to a tank centreline (Figure B.13)",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -1181,7 +1181,7 @@
   ],
   "tol": null,
   "unit": "",
-  "source": "API 653 B.3.4.1 (as implemented) — confirm threshold in the edition used",
+  "source": "API 653 (2025) B.3.4.1–3 (measured B exceeds 75 %); the app uses ≥ 75 % (slightly stricter)",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -1294,7 +1294,7 @@
   ],
   "tol": 0.254,
   "unit": "mm",
-  "source": "API 653 Fig. B.6 (definitions of B and R); breakover tolerance is an engineering choice",
+  "source": "API 653 (2025) Figure B.6 and B.2.3.3 (definitions of B and R); breakover tolerance is an engineering choice",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -1325,7 +1325,7 @@
   ],
   "tol": 0.0254,
   "unit": "mm",
-  "source": "API 653 B.3.3: BB = 0.37 R (BB in in, R in ft)",
+  "source": "API 653 (2025) B.3.3: BB = 0.37 R (BB in in, R in ft)",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -1356,7 +1356,7 @@
   ],
   "tol": 0.01,
   "unit": "mm",
-  "source": "API 653 B.3.3 with exact unit conversion",
+  "source": "API 653 (2025) B.3.3; SI form BB = 0.031 R gives 93.0 mm — the app’s 92.5 mm is 0.5 % stricter",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -1555,7 +1555,7 @@
   "input": "Critical-zone repair location with no length / width entered.",
   "steps": [
    "Patch defaults to 12 × 12 in centred on the point",
-   "Coverage of the corrosion is unknown → the 9.10.1.1 check must be \"Verify\", not OK"
+   "Coverage of the corrosion is unknown → the coverage check must be \"Verify\", not OK"
   ],
   "tol": null,
   "unit": "",
