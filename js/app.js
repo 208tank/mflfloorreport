@@ -6,7 +6,7 @@ import { createJournal, recoveryDiff } from './journal.js';
 import { checkIntegrity, SAFE_REPAIRS } from './integrity.js';
 import { lite } from './db.js';
 import { sha256 } from './util.js';
-import { u, toMm, inVal, fmt, fmtRate, unitLabel, num, UNITS } from './units.js';
+import { u, toMm, inVal, fmt, fmtRate, num, UNITS } from './units.js';
 import { buildLayout, stackSections, suggestCount, halfChord, plateAt, toLocal, itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
 import { api653, RESULTS, RESULT_SHORT, czLimitAuto, plateNominal, NZ_CONN, NZ_CONN_SHORT, UT_CLOCK, nozzleUT, nozzleWall, statusText } from './calc.js';
 import { renderMapSVG, MapController } from './map.js';
@@ -14,65 +14,28 @@ import { roofBad, ROOF_NOTE, ROOF_TYPES, FIXED_TYPES, FIXED_SUPPORT, FLOAT_TYPES
 import { download, indicationsCSV, platesCSV, nozzlesCSV, shellCSV, roofCSV, settleCSV, svgForExport, svgToPng, fileBase } from './export.js';
 import { buildReport, legendHTML, buildDefReport } from './report.js';
 import { patchList, patchOf } from './patches.js';
-import { newJob, migrate, nextNo, uid, getPath, setPath, STAGES, STAGE_LABEL, defaultStatus, copyPhotos, SCHEMA, FILE_VERSION, migrationNotes } from './model.js';
+import { newJob, migrate, nextNo, uid, setPath, STAGES, STAGE_LABEL, defaultStatus, copyPhotos, SCHEMA, FILE_VERSION, migrationNotes } from './model.js';
 import { makeDemo } from './demo.js';
 import { defaultShell, defaultZones, autoLocCount, autoPlateCount, utLocations, coursesWithElev, courseAt, coursePlates, shellHeight, courseSummary, readingElevations, zoneCount, getReading, fmtElev, zKey, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
 import { buildLoader, readLoader, loaderAreas } from './loader.js';
 import { SEAL_STDS, PRIMARY_TYPES, SECONDARY_TYPES, SEAL_CHECKS, newGap, gapSummary, cm2mToIn2ft, sealEval, activeStds, nextDue } from './seal.js';
-import { settleYE, kRoofFixed, edgeCurve } from './settle.js';
+import { kRoofFixed, edgeCurve } from './settle.js';
 import { edgeAllow as edgeAllowT } from './tables.js';
-import { WELDS, ELEV_UNITS, PSI_PER_MPA, DEP_K, newEdge, newDep, epOffsets, xKey, profileEval, profileSVG, curveAt, stations, stationCount, autoN, settleHeight, settleCalc, slopeText, edgeEval, depEval, EDGE_NOTE, settlePlanSVG, settleChartSVG } from './settle.js';
-import { MATERIALS, MAT, CODES, editionsFor, supplementsFor, jointOptions, jointLabel, JE_42, JE_43, JE_NOTES, EDGE_D, EDGE_BEW, EDGE_BE, K_TABLE, T45, T51B, NOZZLE_PIPE, NOZZLE_WALL_BY_SHELL, CODE_SCHED, E_DEFAULT, PSI_MPA, TABLES_SOURCE } from './tables.js';
-import { designBasis, courseDesigns, fillFromT, annularReq, defaultJoint, shellYE } from './design.js';
-import { SECTIONS, SEC, CHILDREN, viewPlace, childView, findings, allDefs, numberDefs, STATUS_TEXT, NDE_METHODS, NDE_RESULTS, CONDITIONS, PRIORITIES, PRIORITY_LABEL, STATUSES, typicalNDE, typicalObs, newObs, newNDE, newRec, defaultSummary } from './sections.js';
+import { WELDS, ELEV_UNITS, PSI_PER_MPA, newEdge, newDep, epOffsets, xKey, profileEval, profileSVG, stations, autoN, settleCalc, slopeText, edgeEval, depEval, EDGE_NOTE, settlePlanSVG, settleChartSVG } from './settle.js';
+import { MATERIALS, CODES, editionsFor, supplementsFor, jointOptions, jointLabel, JE_42, JE_43, JE_NOTES, EDGE_D, EDGE_BEW, EDGE_BE, K_TABLE, T45, T51B, NOZZLE_PIPE, NOZZLE_WALL_BY_SHELL, CODE_SCHED, PSI_MPA, TABLES_SOURCE } from './tables.js';
+import { designBasis, fillFromT, annularReq, defaultJoint } from './design.js';
+import { SECTIONS, SEC, CHILDREN, viewPlace, childView, findings, allDefs, numberDefs, STATUS_TEXT, NDE_METHODS, NDE_RESULTS, CONDITIONS, PRIORITIES, PRIORITY_LABEL, STATUSES, typicalNDE, typicalObs, newObs, newNDE, newRec } from './sections.js';
 import { EQ_TYPES, EQ_LABEL, EQ_DETAIL_PH, newEquip, suggestEquip, equipName, equipLine, calState, equipUse, useByMethod } from './equipment.js';
 import { SCOPE, SCOPE_HINT, inScope, scopeText, tankFromJob, newTank, jobFromTank, editJobFor, diffFromTank, tankKeyOf, normKey } from './registry.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 import { esc as h } from './util.js';
 import { $, $$, toast, askConfirm, askChoice } from './ui.js';
 import { jobCard, indCount } from './cards.js';
+import { S, APP_VERSION, RESULT_OPTS, VT_COND, COATING, UT_METHOD, REPAIR_METHOD, NZ_TYPES, nzPrefix, nextMark, FT_TYPES } from './app/state.js';
+import { readInput, field } from './app/fields.js';
+import { views, childViews, after, configureNav, go, renderAll, renderNav, renderView } from './app/nav.js';
+import { onAction, onChange } from './app/actions.js';
 
-const APP_VERSION = '3.11.0';
-
-const S = {
-  jobs: [], tanks: [], reg: { q: '', open: new Set() }, job: null, layout: null, calc: null, photos: [], company: {},
-  view: 'jobs', sel: null, selPlate: null, selFeature: null, selNozzle: null, mode: 'select', ftType: 'column',
-  plateLabels: true, indLabels: true, showCZ: true, showPatches: true, showDatums: true, filter: new Set(Object.keys(RESULTS)),
-  search: '', resFilter: 'all', sort: { key: 'no', dir: 1 }, plateSearch: '',
-  reportOpts: { exec: true, defs: true, sections: true, indSize: true, photos: true, plates: false, provenOnly: false, plateLabels: true, datums: true },
-  mapCtl: null, vb: null, roofSel: null, roofPt: null, roofAdd: false, roofVB: { fixed: null, floating: null }, installEvt: null, saving: false,
-  navOpen: new Set(), ndeTab: {}, dash: { dir: null, perm: null, files: new Map(), scanned: false, scanning: false, mode: 'board', q: '', stage: '' }, roofPart: 'fixed', photoSel: null
-};
-
-const VIEWS = [
-  ['dash', 'Dashboard', 'M4 4h7v9H4zM13 4h7v5h-7zM13 11h7v9h-7zM4 15h7v5H4z'],
-  ['reg', 'Tank registry', 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3v12c0 1.7-3.6 3-8 3s-8-1.3-8-3zM4 6c0 1.7 3.6 3 8 3s8-1.3 8-3M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3'],
-  ['jobs', 'Jobs', 'M4 5h16M4 12h16M4 19h10'],
-  ['setup', 'Tank setup', 'M12 3v3m0 12v3M3 12h3m12 0h3M6 6l2 2m8 8 2 2M6 18l2-2m8-8 2-2M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z'],
-  ['equip', 'Equipment', 'M14 6l4 4-8 8H6v-4zM12 8l4 4M4 20h16'],
-  ['summary', 'Executive summary', 'M5 4h14v16H5zM8 8h8M8 12h8M8 16h5']
-];
-const VIEWS_END = [
-  ['defs', 'Deficiencies', 'M12 3 2 20h20zM12 10v4M12 17h.01'],
-  ['ref', 'Code tables', 'M4 4h16v16H4zM4 9h16M4 14h16M9 4v16'],
-  ['report', 'Report', 'M6 3h9l4 4v14H6zM14 3v5h5']
-];
-const CHILD_ICON = { nde: 'M3 12h4l3-8 4 16 3-8h4', obs: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', photos: 'M4 7h4l2-3h4l2 3h4v12H4zM12 10a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', an: 'M4 19V5M4 19h16M8 15l4-5 3 3 5-6', recs: 'M9 11l3 3 8-8M20 12v7H4V5h11' };
-
-const REG_VIEWS = ['setup', 'map', 'shell', 'nozzles', 'roofF', 'roofL', 'seal', 'settle'];
-const RESULT_OPTS = Object.entries(RESULTS);
-const VT_COND = ['', 'None visible', 'Isolated pit', 'Pitting cluster', 'General corrosion', 'Lake / area corrosion', 'Weld corrosion', 'Mechanical damage', 'Lamination / inclusion', 'Other'];
-const COATING = ['', 'None', 'Intact', 'Blistered', 'Disbonded', 'Failed / missing'];
-const UT_METHOD = ['', 'A-scan', 'B-scan', 'C-scan / mapping', 'Thickness gauge', 'Other'];
-const REPAIR_METHOD = ['', 'Patch plate (lap welded)', 'Weld build-up', 'Insert plate', 'Plate replacement', 'Coating / lining', 'Monitor', 'Other'];
-const NZ_TYPES = ['Nozzle', 'Manway', 'Inlet', 'Outlet', 'Water draw / drain', 'Clean-out door', 'Mixer', 'Level / instrument', 'Other'];
-const nzPrefix = (t) => (/manway/i.test(t) ? 'MH' : /clean-out/i.test(t) ? 'CO' : 'N');
-function nextMark(type) {
-  const pre = nzPrefix(type); let max = 0;
-  for (const n of S.job.nozzles || []) { const m = String(n.mark || '').match(new RegExp('^' + pre + '(\\d+)$')); if (m) max = Math.max(max, +m[1]); }
-  return pre + (max + 1);
-}
-const FT_TYPES = [['column', 'Roof column'], ['sump', 'Sump'], ['patch', 'Patch plate / repair'], ['nozzle', 'Nozzle / fitting'], ['manway', 'Manway'], ['other', 'Other']];
 
 /* ---------------------------------------------------------------- state ---- */
 
@@ -290,19 +253,7 @@ async function createJob(job) {
 
 /* ---------------------------------------------------------------- shell ---- */
 
-function go(view) {
-  if (!S.job && !['jobs', 'dash', 'reg'].includes(view)) view = 'jobs';
-  if (S.job?.regEdit && !REG_VIEWS.includes(view)) { if (saver.pending()) flushSave(); S.job = null; recompute(); S.photos = []; }
-  if (view === 'roof') view = 'roofF';
-  S.view = view;
-  const pl = viewPlace(view); if (pl) S.navOpen = new Set([pl.sec]);
-  if (view !== 'map') { S.mode = 'select'; }
-  renderAll();
-  $('#main').scrollTop = 0;
-}
-
 window.tfi = { go: (v) => go(v), zoom: (x, y, r) => { S.mapCtl?.focus(x, y, r); drawMap(); }, job: () => S.job, commit: () => { commit(); renderView(); } }; // used by the automated tests
-function renderAll() { renderHeader(); renderNav(); renderView(); }
 
 /** The job file status in the header: revision, and changes saved on this device but not yet in the file. */
 function showFileState() {
@@ -328,84 +279,6 @@ function renderHeader() {
   $('#saveFileBtn').textContent = S.fileName ? 'Save' : 'Save file…';
   $('#installBtn').hidden = !S.installEvt;
 }
-
-function renderNav() {
-  const job = S.job, place = viewPlace(S.view);
-  const icon = (d, w = 18) => `<svg viewBox="0 0 24 24" width="${w}" height="${w}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
-  if (job?.regEdit) {
-    const items = [['setup', 'Tank data & layout', VIEWS.find((v) => v[0] === 'setup')[2]], ['map', 'Floor map', SEC.get('floor').icon], ['shell', 'Shell courses', SEC.get('shell').icon], ['nozzles', 'Nozzles', SEC.get('nozzles').icon], ['roofF', 'Fixed roof', SEC.get('froof').icon], ['roofL', 'Floating roof', SEC.get('flroof').icon], ['settle', 'Settlement set-up', SEC.get('settle').icon]];
-    $('#nav').innerHTML = `<button class="nav-btn" data-act="reg-done">${icon('M15 18l-6-6 6-6')}<span>Done — back to registry</span></button><div class="nav-group">Editing tank ${h(job.info.tankId || '')}</div>` +
-      items.map(([id, label, d]) => `<button class="nav-btn${S.view === id ? ' active' : ''}" data-go="${id}">${icon(d)}<span>${label}</span></button>`).join('') +
-      `<p class="nav-note">Readings entered here are not kept — the registry stores the tank, not inspection results.</p><div class="nav-foot">v${APP_VERSION}</div>`;
-    return;
-  }
-  const btn = ([id, label, d], count) => `<button class="nav-btn${S.view === id ? ' active' : ''}" data-go="${id}" ${!job && !['jobs', 'dash', 'reg'].includes(id) ? 'disabled' : ''}>${icon(d)}<span>${label}</span>${count ? `<em>${count}</em>` : ''}</button>`;
-  let F = null; try { F = job && S.layout ? findings(job, S.layout, S.calc) : null; } catch { F = null; }
-  const openDefs = job ? allDefs(job).filter((d) => d.status !== 'Closed').length : 0;
-  const secs = SECTIONS.filter((sec) => !job || inScope(job, sec.key)).map((sec) => {
-    const open = S.navOpen.has(sec.key), st = F?.[sec.key]?.status || 'none', d = job?.secs?.[sec.key] || {};
-    const counts = { obs: d.obs?.length, photos: S.photos.filter((p) => p.sec === sec.key).length, recs: d.recs?.length };
-    const kids = !open ? '' : CHILDREN.map(([c, label]) => {
-      const v = c === 'nde' ? (S.ndeTab[sec.key] || 'nde:' + sec.key) : childView(sec.key, c), act = place?.sec === sec.key && place.child === c;
-      const sub = c === 'nde' && act ? `<div class="nav-sub">${[['nde:' + sec.key, 'NDE scope'], ...sec.nde].map(([vv, l]) => `<button class="nav-btn l3${S.view === vv ? ' active' : ''}" data-go="${vv}">${l}</button>`).join('')}</div>` : '';
-      return `<button class="nav-btn l2${act ? ' active' : ''}" data-go="${v}" ${!job ? 'disabled' : ''}>${icon(CHILD_ICON[c], 15)}<span>${label}</span>${counts[c] ? `<em>${counts[c]}</em>` : ''}</button>${sub}`;
-    }).join('');
-    return `<div class="nav-sec${open ? ' open' : ''}"><button class="nav-btn sec${place?.sec === sec.key ? ' cur' : ''}" data-act="nav-sec" data-sec="${sec.key}" ${!job ? 'disabled' : ''}>${icon(sec.icon)}<span>${sec.label}</span><i class="sdot s-${st}" title="${STATUS_TEXT[st]}"></i><b class="chev">${open ? '▾' : '▸'}</b></button>${kids}</div>`;
-  }).join('');
-  $('#nav').innerHTML = VIEWS.map((v) => btn(v)).join('') + `<div class="nav-group">Tank</div>` + secs + `<div class="nav-group"></div>` + VIEWS_END.map((v) => btn(v, v[0] === 'defs' ? openDefs : 0)).join('') +
-    `<div class="nav-foot">v${APP_VERSION}<br><span id="netState">${navigator.onLine ? 'Online' : 'Offline'}</span></div>`;
-}
-
-function renderView() {
-  const main = $('#main');
-  main.className = 'main view-' + S.view;
-  const pl = viewPlace(S.view);
-  if (pl?.child === 'nde') S.ndeTab[pl.sec] = S.view;
-  const fn = { dash: viewDash, reg: viewReg, jobs: viewJobs, equip: viewEquip, setup: viewSetup, summary: viewSummary, defs: viewDefs, defrep: viewDefRep, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, shell: viewShell, roofF: viewRoof, roofL: viewRoof, seal: viewRoof, nozzles: viewNozzles, settle: viewSettle, ref: viewRef, report: viewReport }[S.view]
-    || (pl ? { nde: viewNDE, obs: viewObs, photos: viewPhotos, an: viewAnalysis, recs: viewRecs }[pl.child] : null) || viewJobs;
-  main.innerHTML = (pl ? crumbHTML(pl) : '') + fn();
-  (after[S.view] || (pl ? after['sec:' + pl.child] : null))?.();
-}
-const after = {};
-
-/* ------------------------------------------------------------ form bits ---- */
-
-function valOf(v, kind) {
-  if (kind === 'big' || kind === 'small' || kind === 't') return inVal(v, kind, S.job);
-  return v ?? '';
-}
-function readInput(el) {
-  const k = el.dataset.kind || 'text';
-  if (k === 'bool') return el.checked;
-  const v = el.value.trim();
-  if (k === 'big' || k === 'small' || k === 't') return toMm(v, k, S.job);
-  if (k === 'num') return num(v);
-  return v;
-}
-function unitFor(kind, extra) {
-  if (extra.unit) return extra.unit;
-  if (kind === 'big' || kind === 'small' || kind === 't') return unitLabel(kind === 't' ? 'small' : kind, S.job);
-  return '';
-}
-/** Generic labelled field. attr = 'data-bind' (job path) or other binding attr. */
-function field(label, key, kind = 'text', extra = {}) {
-  const attr = extra.attr || 'data-bind';
-  const v = extra.value !== undefined ? extra.value : getPath(S.job, key);
-  const id = 'f_' + Math.random().toString(36).slice(2, 8);
-  const common = `id="${id}" ${attr}="${h(key)}" data-kind="${kind}" ${extra.attrs || ''}`;
-  let input;
-  if (kind === 'bool') return `<label class="chk${extra.cls ? ' ' + extra.cls : ''}"><input type="checkbox" ${common} ${v ? 'checked' : ''}><span>${label}</span></label>`;
-  if (kind === 'sel') input = `<select ${common}>${extra.options.map((o) => { const [val, lab] = Array.isArray(o) ? o : [o, o || '—']; return `<option value="${h(val)}" ${String(v ?? '') === String(val) ? 'selected' : ''}>${h(lab)}</option>`; }).join('')}</select>`;
-  else if (kind === 'area') input = `<textarea ${common} rows="${extra.rows || 3}" placeholder="${h(extra.ph || '')}">${h(v)}</textarea>`;
-  else {
-    const type = kind === 'date' ? 'date' : 'text';
-    const im = ['big', 'small', 't', 'num'].includes(kind) ? 'inputmode="decimal"' : '';
-    input = `<input type="${type}" ${im} ${common} value="${h(valOf(v, kind))}" placeholder="${h(extra.ph ?? '')}" ${extra.list ? `list="${extra.list}"` : ''} autocomplete="off">`;
-  }
-  const un = unitFor(kind, extra);
-  return `<label class="fld${extra.cls ? ' ' + extra.cls : ''}" for="${id}"><span class="lbl">${label}</span><span class="ctl">${input}${un ? `<i class="unit">${un}</i>` : ''}</span>${extra.hint ? `<small>${extra.hint}</small>` : ''}</label>`;
-}
-
 
 /* ------------------------------------------------------------------ dashboard */
 // All tanks on this device and in a linked folder (e.g. the team's OneDrive jobs folder), by stage.
@@ -488,17 +361,16 @@ async function writeStageToFile(id, stage, at = Date.now()) {
 
 async function setStage(id, stage) {
   const now = Date.now();
-  let status = null;
   if (S.job?.id === id) {
     if (S.job.status.stage === stage) return;
-    S.job.status.stage = stage; (S.job.status.history = S.job.status.history || []).push({ stage, at: now }); status = S.job.status;
+    S.job.status.stage = stage; (S.job.status.history = S.job.status.history || []).push({ stage, at: now });
     commit(); await flushSave(); renderHeader();
   } else {
     const j = await db.getJob(id);
     if (j) {
       j.status = { ...defaultStatus(), ...(j.status || jobCard(j)) };
       if (j.status.stage === stage) return;
-      j.status.stage = stage; j.status.history = [...(j.status.history || []), { stage, at: now }]; j.updated = now; status = j.status;
+      j.status.stage = stage; j.status.history = [...(j.status.history || []), { stage, at: now }]; j.updated = now;
       await db.putJob(j);
     }
   }
@@ -793,7 +665,6 @@ async function checkStorage() {
 
 function viewSetup() {
   const j = S.job, L = j.layout, hasInd = j.indications.length > 0, reg = !!j.regEdit;
-  const yesno = [['true', 'Yes'], ['false', 'No']];
   const regT = j.tankRef ? S.tanks.find((t) => t.id === j.tankRef) : null, diff = regT ? diffFromTank(j, regT) : [];
   const scopeCard = reg ? '' : `<section class="card scope-card"><h2>Scope &amp; registry</h2>
       <div class="scope-chips">${SCOPE.map(([k, l]) => `<label class="chk chip-chk"><input type="checkbox" data-act="scope-tog" data-k="${k}" ${inScope(j, k) ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
@@ -1503,7 +1374,7 @@ function datumSelect(p) {
 /* --------------------------------------------------------------- API view */
 
 function viewApi() {
-  const C = S.job.calc, met = S.job.units === 'metric';
+  const met = S.job.units === 'metric';
   const v = (mm) => (met ? `${mm.toFixed(2)} mm` : `${(mm / 25.4).toFixed(3)} in`);
   const f = (label, key, kind, extra = {}) => field(label, 'calc.' + key, kind, extra);
   return `<div class="page">
@@ -2038,7 +1909,7 @@ function edgeSurveyHTML(c) {
   const sel = (i, f, opts, v) => `<select data-eps="${i}" data-f="${f}" data-kind="text">${opts.map(([k, l]) => `<option value="${h(k)}" ${String(v ?? '') === String(k) ? 'selected' : ''}>${h(l)}</option>`).join('')}</select>`;
   const sin = (i, f, kind, ph = '', cls = '') => `<input data-eps="${i}" data-f="${f}" data-kind="${kind}" inputmode="decimal" value="${h(kind === 'small' ? inVal(so(i)[f], 'small', job) : so(i)[f] ?? '')}" placeholder="${h(ph)}" class="${cls}">`;
   const res = sts.map((t) => {
-    const p = P.get(t.i), o = so(t.i), autoR = o.Rov == null ? p.R : null;
+    const p = P.get(t.i), o = so(t.i);
     const rOpts = [['', p.auto && p.R ? `Auto (${fmtOff(p.R)})` : p.auto ? 'Auto (none)' : 'Auto'], ...offs.filter((x) => x > 0).map((x) => [x, fmtOff(x)])];
     return `<tr class="${p.status === 'Exceeds' ? 'is-bad' : p.status === 'NDE required' ? 'is-warn' : ''}${S.epSel === t.i ? ' sel' : ''}"><td><button class="linkbtn" data-act="ep-sel" data-i="${t.i}">${t.i}</button></td><td class="n">${t.angle.toFixed(1)}°</td>
       <td>${sel(t.i, 'Rov', rOpts, o.Rov ?? '')}</td><td class="n"><b>${p.R > 0 ? fS(p.B) : p.status === 'No edge settlement' ? '0' : '—'}</b></td>
@@ -2278,7 +2149,7 @@ function findingsBox(k) {
     ${F.items.length ? `<h3>Items needing action</h3><ul class="flist bad">${F.items.map((it) => `<li><b>${PRIORITY_LABEL[it.priority] || ''}</b> — ${h(it.finding)}</li>`).join('')}</ul><div class="acts"><button class="btn sm" data-go="recs:${k}">Go to recommendations →</button></div>` : ''}</section>`;
 }
 function viewAnalysis() {
-  const k = viewPlace(S.view).sec, job = S.job;
+  const k = viewPlace(S.view).sec;
   let body = '';
   if (k === 'shell') body = shellEvalHTML() || '<section class="card"><p class="muted">Add the shell courses on the Shell UT page.</p></section>';
   else if (k === 'froof' || k === 'flroof') body = roofAnalysisHTML(k);
@@ -2436,78 +2307,141 @@ after.report = () => { $('#reportRoot').innerHTML = buildReport(S.job, S.layout,
 
 /* --------------------------------------------------------------- events --- */
 
-document.addEventListener('click', async (e) => {
-  const g = e.target.closest('[data-go]');
-  if (g && !g.disabled) { go(g.dataset.go); return; }
-  const el = e.target.closest('[data-act]');
-  if (!el) return;
-  const act = el.dataset.act;
-  const id = el.dataset.id;
-  const menu = el.closest('details.menu'); if (menu) menu.open = false;
-  switch (act) {
-    case 'job-new': { const j = newJob(); return createJob(j); }
-    case 'reg-new': { const t = await addTank(); return openTankEdit(t.id); }
-    case 'reg-edit': return openTankEdit(id);
-    case 'reg-done': { if (!(await leaveJobOk())) return; S.job = null; S.photos = []; recompute(); go('reg'); return; }
-    case 'reg-insp': return newInspectionDlg(id);
-    case 'reg-toggle': { S.reg.open.has(id) ? S.reg.open.delete(id) : S.reg.open.add(id); renderView(); return; }
-    case 'reg-build': return buildRegistry();
-    case 'reg-dup': {
+/* Button actions (data-act), registered with the action registry (js/app/actions.js). */
+const _phanno = async (el, id, e, act) => {
+  openAnno(id); return;
+};
+const _recfrom = async (el, id, e, act) => {
+  {
+    const k = el.dataset.sec, F = findings(S.job, S.layout, S.calc)[k], d = secData(k), used = new Set(d.recs.map((r) => r.auto));
+    const items = F.items.filter((it) => !used.has(it.key) && (act === 'rec-all' || it.key === el.dataset.key));
+    for (const it of items) d.recs.push(newRec({ finding: it.finding.replace(/<[^>]+>/g, ''), loc: it.loc, action: it.action, priority: it.priority, ref: it.ref, auto: it.key, def: it.priority !== 'P5' }));
+    numberDefs(S.job); commit(); renderView(); renderNav(); return;
+  }
+};
+onAction({
+  'job-new': async (el, id, e, act) => {
+    { const j = newJob(); return createJob(j); }
+  },
+  'reg-new': async (el, id, e, act) => {
+    { const t = await addTank(); return openTankEdit(t.id); }
+  },
+  'reg-edit': async (el, id, e, act) => {
+    return openTankEdit(id);
+  },
+  'reg-done': async (el, id, e, act) => {
+    { if (!(await leaveJobOk())) return; S.job = null; S.photos = []; recompute(); go('reg'); return; }
+  },
+  'reg-insp': async (el, id, e, act) => {
+    return newInspectionDlg(id);
+  },
+  'reg-toggle': async (el, id, e, act) => {
+    { S.reg.open.has(id) ? S.reg.open.delete(id) : S.reg.open.add(id); renderView(); return; }
+  },
+  'reg-build': async (el, id, e, act) => {
+    return buildRegistry();
+  },
+  'reg-dup': async (el, id, e, act) => {
+    {
       const t = await db.getTank(id); if (!t) return;
       const c = { ...JSON.parse(JSON.stringify(t)), id: uid(), created: Date.now(), updated: Date.now() };
       c.info.tankId = (c.info.tankId || 'Tank') + ' (copy)'; await db.putTank(c); await loadTanks(); return openTankEdit(c.id);
     }
-    case 'reg-del': {
+  },
+  'reg-del': async (el, id, e, act) => {
+    {
       const t = S.tanks.find((x) => x.id === id), n = tankInspections(id).length;
       if (!(await askConfirm(`Delete ${t?.info?.tankId || 'this tank'} from the registry?${n ? `\n\nIts ${n} inspection${n > 1 ? 's' : ''} are kept; they just won't be linked to a registry tank.` : ''}`, { ok: 'Delete tank', danger: true }))) return;
       await db.deleteTank(id); await loadTanks(); renderView(); return;
     }
-    case 'reg-from-job': {
+  },
+  'reg-from-job': async (el, id, e, act) => {
+    {
       if (!S.job) return;
       const dupe = S.tanks.find((x) => tankKeyOf(x) === normKey(S.job.info.client, S.job.info.site, S.job.info.tankId));
       if (dupe && await askConfirm(`${dupe.info.tankId} at ${dupe.info.site || 'this site'} is already in the registry. Link this job to it?`, { ok: 'Link to it', cancel: 'Add as a new tank' })) { S.job.tankRef = dupe.id; commit(); renderView(); toast('Linked to the registry tank.'); return; }
       const t = await addTank(S.job); S.job.tankRef = t.id; commit(); renderView(); toast('Tank added to the registry.'); return;
     }
-    case 'reg-update': return updateRegistryFromJob();
-    case 'scope-tog': {
+  },
+  'reg-update': async (el, id, e, act) => {
+    return updateRegistryFromJob();
+  },
+  'scope-tog': async (el, id, e, act) => {
+    {
       if (!S.job) return;
       const all = SCOPE.map(([k]) => k), cur = new Set(Array.isArray(S.job.scope) ? S.job.scope : all);
       el.checked ? cur.add(el.dataset.k) : cur.delete(el.dataset.k);
       if (!cur.size) { el.checked = true; toast('Keep at least one item in scope.'); return; }
       S.job.scope = all.filter((k) => cur.has(k)); commit(); renderNav(); return;
     }
-    case 'job-demo': { const j = makeDemo(); return createJob(j); }
-    case 'job-open': return openJob(id);
-    case 'job-dup': {
+  },
+  'job-demo': async (el, id, e, act) => {
+    { const j = makeDemo(); return createJob(j); }
+  },
+  'job-open': async (el, id, e, act) => {
+    return openJob(id);
+  },
+  'job-dup': async (el, id, e, act) => {
+    {
       const j = migrate(await db.getJob(id)); const old = j.id;
       j.id = uid(); j.created = j.updated = Date.now(); j.info.tankId = (j.info.tankId || 'Tank') + ' (copy)';
       await db.replaceJob(j, copyPhotos(j, await db.jobPhotos(old)));
       await loadJobs(); renderView(); toast('Job duplicated'); return;
     }
-    case 'job-del': {
+  },
+  'job-del': async (el, id, e, act) => {
+    {
       const j = S.jobs.find((x) => x.id === id);
       if (!(await askConfirm(`Delete ${j?.info?.tankId || 'this job'} and its photos from this device? This cannot be undone.`, { ok: 'Delete job', danger: true }))) return;
       await db.deleteJob(id); if (S.job?.id === id) { S.job = null; recompute(); }
       await loadJobs(); renderAll(); return;
     }
-    case 'job-save': return saveJobFile(id);
-    case 'job-open-file': return openJobFile();
-    case 'file-save': return saveJobFile();
-    case 'file-save-as': return saveJobFile(S.job?.id, true);
-    case 'logo-clear': S.company.logo = null; await db.setMeta('company', S.company); renderView(); return;
-    case 'app-reload': return appReload();
-    case 'integrity-run': await runIntegrity(true); return;
-    case 'integrity-fix': { const p = S.integrity?.problems?.[+el.dataset.i]; if (p && (await repairProblem(p))) { await loadJobs(); await runIntegrity(true); } return; }
-    case 'integrity-fix-safe': { for (const p of (S.integrity?.problems || []).filter((x) => SAFE_REPAIRS.has(x.repair))) await repairProblem(p); await loadJobs(); await runIntegrity(true); toast('Safe repairs done.'); return; }
-    case 'persist': { const ok = await requestPersistence(); toast(ok ? 'Storage is now persistent.' : 'The browser did not grant persistent storage (installing the app usually helps).'); after.jobs(); return; }
-    case 'mode': setMode(el.dataset.mode); return;
-    case 'datum-set': {
+  },
+  'job-save': async (el, id, e, act) => {
+    return saveJobFile(id);
+  },
+  'job-open-file': async (el, id, e, act) => {
+    return openJobFile();
+  },
+  'file-save': async (el, id, e, act) => {
+    return saveJobFile();
+  },
+  'file-save-as': async (el, id, e, act) => {
+    return saveJobFile(S.job?.id, true);
+  },
+  'logo-clear': async (el, id, e, act) => {
+    S.company.logo = null; await db.setMeta('company', S.company); renderView(); return;
+  },
+  'app-reload': async (el, id, e, act) => {
+    return appReload();
+  },
+  'integrity-run': async (el, id, e, act) => {
+    await runIntegrity(true); return;
+  },
+  'integrity-fix': async (el, id, e, act) => {
+    { const p = S.integrity?.problems?.[+el.dataset.i]; if (p && (await repairProblem(p))) { await loadJobs(); await runIntegrity(true); } return; }
+  },
+  'integrity-fix-safe': async (el, id, e, act) => {
+    { for (const p of (S.integrity?.problems || []).filter((x) => SAFE_REPAIRS.has(x.repair))) await repairProblem(p); await loadJobs(); await runIntegrity(true); toast('Safe repairs done.'); return; }
+  },
+  'persist': async (el, id, e, act) => {
+    { const ok = await requestPersistence(); toast(ok ? 'Storage is now persistent.' : 'The browser did not grant persistent storage (installing the app usually helps).'); after.jobs(); return; }
+  },
+  'mode': async (el, id, e, act) => {
+    setMode(el.dataset.mode); return;
+  },
+  'datum-set': async (el, id, e, act) => {
+    {
       const c = el.dataset.c;
       applyDatum(el.dataset.key, c);
       if (S.view === 'map') { drawMap(); renderSide(); } return;
     }
-    case 'datum-pick': setMode('datum'); return;
-    case 'mp-add': {
+  },
+  'datum-pick': async (el, id, e, act) => {
+    setMode('datum'); return;
+  },
+  'mp-add': async (el, id, e, act) => {
+    {
       let newId = null;
       measuredChange(() => {
         const sec = findSec(el.dataset.sec); if (!sec) return;
@@ -2520,68 +2454,119 @@ document.addEventListener('click', async (e) => {
       setTimeout(() => { const n = document.querySelector(`#builderCard input[data-pl="${newId}"]`); n?.focus(); n?.select?.(); }, 30);
       return;
     }
-    case 'mp-del': return measuredChange(() => { const sec = findSec(el.dataset.sec); if (sec) sec.plates = (sec.plates || []).filter((x) => x.id !== el.dataset.pl); if (S.selPlate && !S.layout.byKey.has(S.selPlate)) S.selPlate = null; });
-    case 'msec-add': return measuredChange((secs) => secs.splice(+el.dataset.at, 0, newMeasuredSection(S.job, el.dataset.type)));
-    case 'msec-del': {
+  },
+  'mp-del': async (el, id, e, act) => {
+    return measuredChange(() => { const sec = findSec(el.dataset.sec); if (sec) sec.plates = (sec.plates || []).filter((x) => x.id !== el.dataset.pl); if (S.selPlate && !S.layout.byKey.has(S.selPlate)) S.selPlate = null; });
+  },
+  'msec-add': async (el, id, e, act) => {
+    return measuredChange((secs) => secs.splice(+el.dataset.at, 0, newMeasuredSection(S.job, el.dataset.type)));
+  },
+  'msec-del': async (el, id, e, act) => {
+    {
       const sec = findSec(el.dataset.sec); if (!sec) return;
       if (!(await askConfirm(`Delete this ${sec.type === 'block' ? 'block' : 'row'} and its ${(sec.plates || []).length} plates?`, { ok: 'Delete', danger: true }))) return;
       return measuredChange((secs) => { const i = secs.indexOf(sec); if (i >= 0) secs.splice(i, 1); });
     }
-    case 'msec-move': return measuredChange((secs) => { const i = secs.findIndex((x) => x.id === el.dataset.sec), j = i + +el.dataset.d; if (i >= 0 && j >= 0 && j < secs.length) [secs[i], secs[j]] = [secs[j], secs[i]]; });
-    case 'mtpl': {
+  },
+  'msec-move': async (el, id, e, act) => {
+    return measuredChange((secs) => { const i = secs.findIndex((x) => x.id === el.dataset.sec), j = i + +el.dataset.d; if (i >= 0 && j >= 0 && j < secs.length) [secs[i], secs[j]] = [secs[j], secs[i]]; });
+  },
+  'mtpl': async (el, id, e, act) => {
+    {
       if ((S.job.layout.mrows || []).length && !(await askConfirm('Replace all plate-by-plate rows with sizes copied from the automatic or row-by-row layout?', { ok: 'Replace' }))) return;
       return measuredChange(() => { S.job.layout.mrows = measuredFromDrawing({ ...S.job, layout: { ...S.job.layout, mode: (S.job.layout.rows || []).length ? 'custom' : 'grid' } }); });
     }
-    case 'row-n': return builderChange((rows) => { const r = rows.find((x) => x.id === el.dataset.row); if (r) r.n = Math.max(0, (+r.n || 0) + +el.dataset.d); });
-    case 'row-sug': return builderChange((rows) => { const r = rows.find((x) => x.id === el.dataset.row); if (r) r.n = +el.dataset.v; });
-    case 'row-add': return builderChange((rows) => rows.splice(+el.dataset.at, 0, newRow(S.job, el.dataset.type)));
-    case 'row-del': {
+  },
+  'row-n': async (el, id, e, act) => {
+    return builderChange((rows) => { const r = rows.find((x) => x.id === el.dataset.row); if (r) r.n = Math.max(0, (+r.n || 0) + +el.dataset.d); });
+  },
+  'row-sug': async (el, id, e, act) => {
+    return builderChange((rows) => { const r = rows.find((x) => x.id === el.dataset.row); if (r) r.n = +el.dataset.v; });
+  },
+  'row-add': async (el, id, e, act) => {
+    return builderChange((rows) => rows.splice(+el.dataset.at, 0, newRow(S.job, el.dataset.type)));
+  },
+  'row-del': async (el, id, e, act) => {
+    {
       const r = S.job.layout.rows.find((x) => x.id === el.dataset.row);
       const n = S.job.indications.filter((i) => S.layout.byKey.get(i.plate)?.rowId === r?.id).length;
       if (n && !(await askConfirm(`${n} indication${n > 1 ? 's are' : ' is'} on this row. They will move to whatever plate covers their spot after the row is deleted.`, { ok: 'Delete row', danger: true }))) return;
       return builderChange((rows) => { const i = rows.findIndex((x) => x.id === el.dataset.row); if (i >= 0) rows.splice(i, 1); });
     }
-    case 'row-move': return builderChange((rows) => { const i = rows.findIndex((x) => x.id === el.dataset.row), j = i + +el.dataset.d; if (i >= 0 && j >= 0 && j < rows.length) [rows[i], rows[j]] = [rows[j], rows[i]]; });
-    case 'rows-template': {
+  },
+  'row-move': async (el, id, e, act) => {
+    return builderChange((rows) => { const i = rows.findIndex((x) => x.id === el.dataset.row), j = i + +el.dataset.d; if (i >= 0 && j >= 0 && j < rows.length) [rows[i], rows[j]] = [rows[j], rows[i]]; });
+  },
+  'rows-template': async (el, id, e, act) => {
+    {
       if ((S.job.layout.rows || []).length && !(await askConfirm('Replace the current rows with this starting layout? Indications stay where they are on the floor and are moved onto the new plates.', { ok: 'Replace rows' }))) return;
       return builderChange(() => { S.job.layout.rows = el.dataset.t === 'block' ? rowsCentreBlock(S.job) : rowsFromGrid(S.job); });
     }
-    case 'plate-size-reset': {
+  },
+  'plate-size-reset': async (el, id, e, act) => {
+    {
       const o = S.job.plates[el.dataset.key]; if (o) { delete o.len; delete o.wid; delete o.orient; }
       commit(); if (S.view === 'map') { drawMap(); renderSide(); } else refreshPlateTable(); return;
     }
-    case 'filter': { const r = el.dataset.r; S.filter.has(r) ? S.filter.delete(r) : S.filter.add(r); el.classList.toggle('on'); drawMap(); return; }
-    case 'zoom-in': S.mapCtl?.zoom(1 / 1.4); return;
-    case 'zoom-out': S.mapCtl?.zoom(1.4); return;
-    case 'zoom-fit': S.mapCtl?.fit(); return;
-    case 'sel-ind':
-      if (S.view === 'map') { S.sel = id; S.selPlate = S.selFeature = null; drawMap(); renderSide(); } else openIndDialog(id);
+  },
+  'filter': async (el, id, e, act) => {
+    { const r = el.dataset.r; S.filter.has(r) ? S.filter.delete(r) : S.filter.add(r); el.classList.toggle('on'); drawMap(); return; }
+  },
+  'zoom-in': async (el, id, e, act) => {
+    S.mapCtl?.zoom(1 / 1.4); return;
+  },
+  'zoom-out': async (el, id, e, act) => {
+    S.mapCtl?.zoom(1.4); return;
+  },
+  'zoom-fit': async (el, id, e, act) => {
+    S.mapCtl?.fit(); return;
+  },
+  'sel-ind': async (el, id, e, act) => {
+    if (S.view === 'map') { S.sel = id; S.selPlate = S.selFeature = null; drawMap(); renderSide(); } else openIndDialog(id);
       return;
-    case 'open-ind': if (S.view === 'map') { S.sel = id; drawMap(); renderSide(); } else openIndDialog(id); return;
-    case 'close-sel': S.sel = S.selPlate = S.selFeature = S.selNozzle = null; drawMap(); renderSide(); return;
-    case 'ind-close': closeEditor(el); return;
-    case 'ind-nav': {
+  },
+  'open-ind': async (el, id, e, act) => {
+    if (S.view === 'map') { S.sel = id; drawMap(); renderSide(); } else openIndDialog(id); return;
+  },
+  'close-sel': async (el, id, e, act) => {
+    S.sel = S.selPlate = S.selFeature = S.selNozzle = null; drawMap(); renderSide(); return;
+  },
+  'ind-close': async (el, id, e, act) => {
+    closeEditor(el); return;
+  },
+  'ind-nav': async (el, id, e, act) => {
+    {
       const inds = S.job.indications.slice().sort(byNo); const i = inds.findIndex((x) => x.id === S.sel);
       const nx = inds[i + +el.dataset.d]; if (!nx) return;
       S.sel = nx.id;
       if (el.closest('dialog')) openIndDialog(nx.id); else { drawMap(); renderSide(); }
       return;
     }
-    case 'ind-pick': {
+  },
+  'ind-pick': async (el, id, e, act) => {
+    {
       const d = $('#dlg'); if (d.open) d.close();
       if (S.view !== 'map') go('map');
       setMode('place'); return;
     }
-    case 'ind-show': { $('#dlg').close(); go('map'); zoomToInd(); return; }
-    case 'ind-zoom': zoomToInd(); return;
-    case 'ind-dup': {
+  },
+  'ind-show': async (el, id, e, act) => {
+    { $('#dlg').close(); go('map'); zoomToInd(); return; }
+  },
+  'ind-zoom': async (el, id, e, act) => {
+    zoomToInd(); return;
+  },
+  'ind-dup': async (el, id, e, act) => {
+    {
       const ind = curInd(); if (!ind) return;
       const c = { ...structuredClone(ind), id: uid(), no: nextNo(S.job), created: Date.now() };
       S.job.indications.push(c); S.sel = c.id; commit(); renderNav();
       if (el.closest('dialog')) { openIndDialog(c.id); refreshIndTable(); } else { drawMap(); renderSide(); }
       toast(`Duplicated as ${c.no}`); return;
     }
-    case 'ind-del': {
+  },
+  'ind-del': async (el, id, e, act) => {
+    {
       const ind = curInd(); if (!ind || !(await askConfirm(`Delete indication ${ind.no}?`, { ok: 'Delete', danger: true }))) return;
       S.job.indications = S.job.indications.filter((i) => i.id !== ind.id);
       for (const p of S.photos.filter((p) => p.indId === ind.id)) await db.deletePhoto(p.id);
@@ -2590,27 +2575,37 @@ document.addEventListener('click', async (e) => {
       if (el.closest('dialog')) { $('#dlg').close(); refreshIndTable(); } else { drawMap(); renderSide(); }
       return;
     }
-    case 'ind-new': {
+  },
+  'ind-new': async (el, id, e, act) => {
+    {
       const ind = { id: uid(), no: nextNo(S.job), plate: '', x: null, y: null, result: 'pending', repair: 'auto', created: Date.now() };
       S.job.indications.push(ind); commit(); renderNav(); refreshIndTable(); openIndDialog(ind.id);
       setTimeout(() => $('#dlg [data-ib="plate"]')?.focus(), 50); return;
     }
-    case 'utx-add': {
+  },
+  'utx-add': async (el, id, e, act) => {
+    {
       const nz = (S.job.nozzles || []).find((x) => x.id === id); if (!nz) return;
       nz.utx = nz.utx || []; const r = { id: uid(), loc: '', t: null }; nz.utx.push(r); commit(); renderSide();
       setTimeout(() => $(`#side [data-nbx="loc"][data-rid="${r.id}"]`)?.focus(), 30); return;
     }
-    case 'utx-del': {
+  },
+  'utx-del': async (el, id, e, act) => {
+    {
       const nz = (S.job.nozzles || []).find((x) => x.id === id); if (!nz) return;
       nz.utx = (nz.utx || []).filter((x) => x.id !== el.dataset.rid); commit(); renderSide(); drawMap(); return;
     }
-    case 'nozzle-add': {
+  },
+  'nozzle-add': async (el, id, e, act) => {
+    {
       const nz = { id: uid(), mark: nextMark('Nozzle'), type: 'Nozzle', angle: null, size: null, elev: null, service: '' };
       S.job.nozzles = S.job.nozzles || []; S.job.nozzles.push(nz); commit();
       const c = $('#nozzleCard'); if (c) c.innerHTML = nozzleTableHTML(c.dataset.design === '1');
       setTimeout(() => $(`#nozzleCard input[data-nb="angle"][data-id="${nz.id}"]`)?.focus(), 30); return;
     }
-    case 'nozzle-del': {
+  },
+  'nozzle-del': async (el, id, e, act) => {
+    {
       const nz = (S.job.nozzles || []).find((x) => x.id === id); if (!nz) return;
       if (!(await askConfirm(`Delete nozzle ${nz.mark || ''}?`, { ok: 'Delete', danger: true }))) return;
       S.job.nozzles = S.job.nozzles.filter((x) => x.id !== id); if (S.selNozzle === id) S.selNozzle = null; commit();
@@ -2618,7 +2613,9 @@ document.addEventListener('click', async (e) => {
       const c = $('#nozzleCard'); if (c) { c.innerHTML = nozzleTableHTML(c.dataset.design === '1'); if (S.view === 'setup') refreshSetupPreview(); }
       return;
     }
-    case 'utl-down': {
+  },
+  'utl-down': async (el, id, e, act) => {
+    {
       const areas = loaderAreas(S.job);
       if (!areas.length) { toast('Nothing to load yet — set up the shell courses, nozzles, roof or floor indications first.'); return; }
       if (!(await flushSave())) { toast('The UT loader was not made: the latest changes could not be saved to this device first.'); return; }
@@ -2626,47 +2623,89 @@ document.addEventListener('click', async (e) => {
       catch (err) { toast('Could not build the loader sheet: ' + err.message); }
       return;
     }
-    case 'utl-up': $('#utlInput').click(); return;
-    case 'exp-roof': return download(fileBase(S.job) + '_roof-ut.csv', roofCSV(S.job), 'text/csv');
-    case 'exp-settle': return download(fileBase(S.job) + '_settlement.csv', settleCSV(S.job), 'text/csv');
-    case 'ep-sel': S.epSel = +el.dataset.i; refreshSettle(); return;
-    case 'epz-add': { const zs = S.job.settle.ep.zones; const last = zs[zs.length - 1]; const st = +(last?.step) || (S.job.units === 'metric' ? 300 : 304.8); const a = last?.end != null ? +last.end + st : 0; zs.push({ id: uid(), start: a, end: a + st * 4, step: st }); commit(); refreshSettle(); return; }
-    case 'epz-del': { const ep = S.job.settle.ep; ep.zones = ep.zones.filter((z) => z.id !== el.dataset.zid); commit(); refreshSettle(); return; }
-    case 'cv-add': { const cv = (S.job.settle.curve = S.job.settle.curve || []); const r = { id: uid(), R: null, Bew: null, Be: null }; cv.push(r); commit(); refreshSettle(); setTimeout(() => $(`#settleBody input[data-cv="${r.id}"][data-f="R"]`)?.focus(), 40); return; }
-    case 'cv-del': { S.job.settle.curve = S.job.settle.curve.filter((r) => r.id !== el.dataset.cid); commit(); refreshSettle(); return; }
-    case 'se-add': { const L = el.dataset.k === 'edge' ? S.job.settle.edge : S.job.settle.dep; const x = el.dataset.k === 'edge' ? newEdge() : newDep(); L.push(x); commit(); refreshSettle(); setTimeout(() => $(`#settleBody input[data-eid="${x.id}"][data-f="angle"]`)?.focus(), 40); return; }
-    case 'se-del': { const k = el.dataset.k; S.job.settle[k] = S.job.settle[k].filter((x) => x.id !== el.dataset.eid); commit(); refreshSettle(); return; }
-    case 'st-clear': { if (!(await askConfirm('Clear all settlement station readings?', { ok: 'Clear', danger: true }))) return; S.job.settle.el = {}; commit(); refreshSettle(); return; }
-    case 'rsel': S.roofSel = el.dataset.key; refreshRoof(); setTimeout(() => $(`.roof-panel input[data-pt="tl"], .roof-panel select[data-rpc]`)?.focus(), 40); return;
-    case 'sg-add': {
+  },
+  'utl-up': async (el, id, e, act) => {
+    $('#utlInput').click(); return;
+  },
+  'exp-roof': async (el, id, e, act) => {
+    return download(fileBase(S.job) + '_roof-ut.csv', roofCSV(S.job), 'text/csv');
+  },
+  'exp-settle': async (el, id, e, act) => {
+    return download(fileBase(S.job) + '_settlement.csv', settleCSV(S.job), 'text/csv');
+  },
+  'ep-sel': async (el, id, e, act) => {
+    S.epSel = +el.dataset.i; refreshSettle(); return;
+  },
+  'epz-add': async (el, id, e, act) => {
+    { const zs = S.job.settle.ep.zones; const last = zs[zs.length - 1]; const st = +(last?.step) || (S.job.units === 'metric' ? 300 : 304.8); const a = last?.end != null ? +last.end + st : 0; zs.push({ id: uid(), start: a, end: a + st * 4, step: st }); commit(); refreshSettle(); return; }
+  },
+  'epz-del': async (el, id, e, act) => {
+    { const ep = S.job.settle.ep; ep.zones = ep.zones.filter((z) => z.id !== el.dataset.zid); commit(); refreshSettle(); return; }
+  },
+  'cv-add': async (el, id, e, act) => {
+    { const cv = (S.job.settle.curve = S.job.settle.curve || []); const r = { id: uid(), R: null, Bew: null, Be: null }; cv.push(r); commit(); refreshSettle(); setTimeout(() => $(`#settleBody input[data-cv="${r.id}"][data-f="R"]`)?.focus(), 40); return; }
+  },
+  'cv-del': async (el, id, e, act) => {
+    { S.job.settle.curve = S.job.settle.curve.filter((r) => r.id !== el.dataset.cid); commit(); refreshSettle(); return; }
+  },
+  'se-add': async (el, id, e, act) => {
+    { const L = el.dataset.k === 'edge' ? S.job.settle.edge : S.job.settle.dep; const x = el.dataset.k === 'edge' ? newEdge() : newDep(); L.push(x); commit(); refreshSettle(); setTimeout(() => $(`#settleBody input[data-eid="${x.id}"][data-f="angle"]`)?.focus(), 40); return; }
+  },
+  'se-del': async (el, id, e, act) => {
+    { const k = el.dataset.k; S.job.settle[k] = S.job.settle[k].filter((x) => x.id !== el.dataset.eid); commit(); refreshSettle(); return; }
+  },
+  'st-clear': async (el, id, e, act) => {
+    { if (!(await askConfirm('Clear all settlement station readings?', { ok: 'Clear', danger: true }))) return; S.job.settle.el = {}; commit(); refreshSettle(); return; }
+  },
+  'rsel': async (el, id, e, act) => {
+    S.roofSel = el.dataset.key; refreshRoof(); setTimeout(() => $(`.roof-panel input[data-pt="tl"], .roof-panel select[data-rpc]`)?.focus(), 40); return;
+  },
+  'sg-add': async (el, id, e, act) => {
+    {
       const sd = el.dataset.sg === 'p' ? S.job.roof.seal.primary : S.job.roof.seal.secondary;
       const g = newGap(); sd.gaps.push(g); sd.noGaps = false; commit(); refreshRoof();
       setTimeout(() => $(`#roofBody input[data-gid="${g.id}"][data-f="angle"]`)?.focus(), 40); return;
     }
-    case 'sg-del': {
+  },
+  'sg-del': async (el, id, e, act) => {
+    {
       const sd = el.dataset.sg === 'p' ? S.job.roof.seal.primary : S.job.roof.seal.secondary;
       sd.gaps = sd.gaps.filter((x) => x.id !== el.dataset.gid); commit(); refreshRoof(); return;
     }
-    case 'rsel-close': S.roofSel = null; refreshRoof(); return;
-    case 'rsel-nav': {
+  },
+  'rsel-close': async (el, id, e, act) => {
+    S.roofSel = null; refreshRoof(); return;
+  },
+  'rsel-nav': async (el, id, e, act) => {
+    {
       const all = floatingLayout(S.job).plates, cur = all.find((p) => p.key === S.roofSel);
       const list = all.filter((p) => (p.kind === 'annular') === (cur?.kind === 'annular')), i = list.indexOf(cur), nx = list[i + +el.dataset.d];
       if (nx) { S.roofSel = nx.key; refreshRoof(); setTimeout(() => $(`.roof-panel input[data-pt="tl"], .roof-panel select[data-rpc]`)?.focus(), 40); } return;
     }
-    case 'roof-fit': S.roofVB[el.dataset.k] = null; refreshRoof(); return;
-    case 'rpt-mode': S.roofAdd = !S.roofAdd; refreshRoof(); return;
-    case 'rpt-add': {
+  },
+  'roof-fit': async (el, id, e, act) => {
+    S.roofVB[el.dataset.k] = null; refreshRoof(); return;
+  },
+  'rpt-mode': async (el, id, e, act) => {
+    S.roofAdd = !S.roofAdd; refreshRoof(); return;
+  },
+  'rpt-add': async (el, id, e, act) => {
+    {
       const pts = (S.job.roof.fixed.pts = S.job.roof.fixed.pts || []);
       let n = 0; for (const p of pts) { const m = String(p.label || '').match(/^R(\d+)$/); if (m) n = Math.max(n, +m[1]); }
       const pt = { id: uid(), label: 'R' + (n + 1), angle: null, r: null, t: null }; pts.push(pt); S.roofPt = pt.id;
       commit(); refreshRoof(); setTimeout(() => $(`#roofBody input[data-rpt="${pt.id}"][data-f="angle"]`)?.focus(), 40); return;
     }
-    case 'rpt-del': {
+  },
+  'rpt-del': async (el, id, e, act) => {
+    {
       const Fx = S.job.roof.fixed, pt = (Fx.pts || []).find((x) => x.id === id); if (!pt) return;
       if (pt.t != null && !(await askConfirm(`Delete point ${pt.label || ''} and its reading?`, { ok: 'Delete', danger: true }))) return;
       Fx.pts = Fx.pts.filter((x) => x.id !== id); if (S.roofPt === id) S.roofPt = null; commit(); refreshRoof(); return;
     }
-    case 'rpt-std': {
+  },
+  'rpt-std': async (el, id, e, act) => {
+    {
       const D = +S.job.tank.diameter || 0; if (!(D > 0)) { toast('Enter the tank diameter first.'); return; }
       const Fx = S.job.roof.fixed;
       if ((Fx.pts || []).length && !(await askConfirm('Replace the current fixed roof UT points with the standard set? Readings on the current points will be removed.', { ok: 'Replace', danger: true }))) return;
@@ -2675,64 +2714,89 @@ document.addEventListener('click', async (e) => {
       for (const l of utLocations(S.job)) { Fx.pts.push({ id: uid(), label: `${l.label}-E`, angle: l.angle, r: Math.round(edge), t: null }); Fx.pts.push({ id: uid(), label: `${l.label}-M`, angle: l.angle, r: Math.round(R / 2), t: null }); }
       commit(); refreshRoof(); return;
     }
-    case 'exp-shell': return download(fileBase(S.job) + '_shell-ut.csv', shellCSV(S.job), 'text/csv');
-    case 'exp-shell-svg': return download(fileBase(S.job) + '_shell-rollout.svg', rolloutSVG(S.job, { print: true }).replace(/(<svg[^>]*>)/, '$1' + SHELL_SVG_STYLE), 'image/svg+xml');
-    case 'course-add': {
+  },
+  'exp-shell': async (el, id, e, act) => {
+    return download(fileBase(S.job) + '_shell-ut.csv', shellCSV(S.job), 'text/csv');
+  },
+  'exp-shell-svg': async (el, id, e, act) => {
+    return download(fileBase(S.job) + '_shell-rollout.svg', rolloutSVG(S.job, { print: true }).replace(/(<svg[^>]*>)/, '$1' + SHELL_SVG_STYLE), 'image/svg+xml');
+  },
+  'course-add': async (el, id, e, act) => {
+    {
       const sh = (S.job.shell = S.job.shell || defaultShell()); sh.courses = sh.courses || [];
       const last = sh.courses[sh.courses.length - 1];
       const c = { id: uid(), h: last?.h ?? (S.job.units === 'metric' ? 2400 : 2438.4), tNom: last?.tNom ?? null, tMin: last?.tMin ?? null };
       sh.courses.push(c); commit(); refreshShell(); return;
     }
-    case 'course-del': {
+  },
+  'course-del': async (el, id, e, act) => {
+    {
       const sh = S.job.shell; const c = sh?.courses?.find((x) => x.id === el.dataset.course); if (!c) return;
       if (!(await askConfirm('Delete this course? The courses above it move down, and readings stay at their elevations.', { ok: 'Delete', danger: true }))) return;
       sh.courses = sh.courses.filter((x) => x.id !== c.id); commit(); refreshShell(); return;
     }
-    case 'zone-add': {
+  },
+  'zone-add': async (el, id, e, act) => {
+    {
       const sh = S.job.shell; sh.zones = sh.zones || [];
       const last = sh.zones[sh.zones.length - 1];
       const ft = S.job.units === 'metric' ? 300 : 304.8;
       sh.zones.push({ id: uid(), start: last && last.end != null ? +last.end + (+last.step || ft) : 0, end: null, step: last?.step ?? ft });
       commit(); refreshShell(); return;
     }
-    case 'zone-del': { const sh = S.job.shell; sh.zones = (sh.zones || []).filter((z) => z.id !== el.dataset.zone); commit(); refreshShell(); return; }
-    case 'zones-std': {
+  },
+  'zone-del': async (el, id, e, act) => {
+    { const sh = S.job.shell; sh.zones = (sh.zones || []).filter((z) => z.id !== el.dataset.zone); commit(); refreshShell(); return; }
+  },
+  'zones-std': async (el, id, e, act) => {
+    {
       if ((S.job.shell.zones || []).length && !(await askConfirm('Replace the reading zones with the standard pattern (every 1 in up to 2 ft, then every 1 ft to the top)? Readings already entered are kept.', { ok: 'Use standard' }))) return;
       S.job.shell.zones = defaultZones(S.job.units); commit(); refreshShell(); return;
     }
-    case 'z-add': {
+  },
+  'z-add': async (el, id, e, act) => {
+    {
       const inp = $('#extraZ'); const v = toMm(inp?.value, 'small', S.job);
       if (v === null || v < 0) { toast('Enter an elevation above the bottom.'); return; }
       const H = shellHeight(S.job); if (H > 0 && v > H) { toast('That is above the top of the shell.'); return; }
       const sh = S.job.shell; sh.extraZ = sh.extraZ || []; if (!sh.extraZ.some((e) => zKey(e) === zKey(v))) sh.extraZ.push(+zKey(v));
       commit(); refreshShell(); return;
     }
-    case 'z-del': {
+  },
+  'z-del': async (el, id, e, act) => {
+    {
       const sh = S.job.shell, zk = el.dataset.z;
       const has = Object.values(sh.rd || {}).some((m) => m?.[zk] != null);
       if (has && !(await askConfirm(`Remove the elevation ${fmtElev(+zk, S.job)} and its readings?`, { ok: 'Remove', danger: true }))) return;
       sh.extraZ = (sh.extraZ || []).filter((e) => zKey(e) !== zk); for (const m of Object.values(sh.rd || {})) if (m) delete m[zk];
       commit(); refreshShell(); return;
     }
-    case 'courses-std': {
+  },
+  'courses-std': async (el, id, e, act) => {
+    {
       const sh = (S.job.shell = S.job.shell || defaultShell());
-      const hTot = shellHeight(S.job);
       const n = Math.max(1, Math.round(+el.dataset.n || 5)), ch = S.job.units === 'metric' ? 2400 : 2438.4;
       if ((sh.courses || []).length && !(await askConfirm('Replace the current courses?', { ok: 'Replace' }))) return;
       sh.courses = Array.from({ length: n }, () => ({ id: uid(), h: ch, tNom: null, tMin: null })); commit(); refreshShell(); return;
     }
-    case 'eq-add': {
+  },
+  'eq-add': async (el, id, e, act) => {
+    {
       const e = newEquip(el.dataset.type || 'other'); (S.job.equipment = S.job.equipment || []).push(e);
       // pick it for existing methods that use this type and have nothing of that type yet
       for (const sx of SECTIONS) for (const n of secData(sx.key).nde) if (suggestEquip([e], n.method).length && !(n.equip || []).some((id) => S.job.equipment.find((x) => x.id === id)?.type === e.type)) n.equip = [...(n.equip || []), e.id];
       commit(); renderView(); setTimeout(() => $(`[data-eq="make"][data-id="${e.id}"]`)?.focus(), 30); return;
     }
-    case 'eq-dup': {
+  },
+  'eq-dup': async (el, id, e, act) => {
+    {
       const src = (S.job.equipment || []).find((x) => x.id === id); if (!src) return;
       const e = newEquip(src.type, { ...src, id: undefined, serial: '' }); e.id = newEquip().id;
       S.job.equipment.splice(S.job.equipment.indexOf(src) + 1, 0, e); commit(); renderView(); setTimeout(() => $(`[data-eq="serial"][data-id="${e.id}"]`)?.focus(), 30); return;
     }
-    case 'eq-del': {
+  },
+  'eq-del': async (el, id, e, act) => {
+    {
       const e = (S.job.equipment || []).find((x) => x.id === id); if (!e) return;
       const used = equipUse(S.job, SECTIONS).get(id) || [];
       if (!(await askConfirm(`Remove ${equipName(e)}${e.serial ? ' (S/N ' + e.serial + ')' : ''} from the equipment list?${used.length ? `\n\nIt is picked for: ${used.join('; ')}.` : ''}`, { ok: 'Remove', danger: true }))) return;
@@ -2740,99 +2804,162 @@ document.addEventListener('click', async (e) => {
       for (const sx of SECTIONS) for (const n of secData(sx.key).nde) if (n.equip) n.equip = n.equip.filter((x) => x !== id);
       commit(); renderView(); return;
     }
-    case 'courses-fill': {
+  },
+  'courses-fill': async (el, id, e, act) => {
+    {
       const cs = S.job.shell?.courses || [], c1 = cs[0]; if (!c1) return;
       for (const c of cs.slice(1)) { for (const k of ['pn', 'plen']) if ((c[k] === null || c[k] === undefined || c[k] === '') && c1[k] != null) c[k] = c1[k]; }
       commit(); refreshShell(); toast('Course 1 plates copied to the courses above (where empty).'); return;
     }
-    case 'nozzle-place': {
+  },
+  'nozzle-place': async (el, id, e, act) => {
+    {
       if (!(S.job.tank?.diameter > 0)) { toast('Enter the tank diameter first.'); return; }
       go('map'); setMode('nozzle'); toast('Click around the shell to place each nozzle (Shift-click to keep placing). Set its details in the panel.'); return;
     }
-    case 'exp-noz': return download(fileBase(S.job) + '_nozzles.csv', nozzlesCSV(S.job), 'text/csv');
-    case 'feature-del': {
+  },
+  'exp-noz': async (el, id, e, act) => {
+    return download(fileBase(S.job) + '_nozzles.csv', nozzlesCSV(S.job), 'text/csv');
+  },
+  'feature-del': async (el, id, e, act) => {
+    {
       S.job.features = S.job.features.filter((f) => f.id !== S.selFeature); S.selFeature = null; commit(); drawMap(); renderSide(); return;
     }
-    case 'photo-del': {
+  },
+  'photo-del': async (el, id, e, act) => {
+    {
       if (!(await askConfirm('Delete this photo?', { ok: 'Delete', danger: true }))) return;
       await db.deletePhoto(id); S.photos = S.photos.filter((p) => p.id !== id); rerenderEditor(el); return;
     }
-    case 'photo-view': { const p = S.photos.find((x) => x.id === id); if (p) { const w = window.open(); w?.document.write(`<title>${h(p.caption || 'Photo')}</title><img src="${p.dataUrl}" style="max-width:100%">`); } return; }
-    case 'sort': { const k = el.dataset.k; S.sort = { key: k, dir: S.sort.key === k ? -S.sort.dir : 1 }; renderView(); return; }
-    case 'scan-all': { if (!(await askConfirm('Mark every plate as scanned?', { ok: 'Mark all scanned' }))) return; for (const p of S.layout.plates) { S.job.plates[p.key] = { ...(S.job.plates[p.key] || {}), scan: 'scanned' }; } commit(); refreshPlateTable(); return; }
-    case 'sx-add': {
+  },
+  'photo-view': async (el, id, e, act) => {
+    { const p = S.photos.find((x) => x.id === id); if (p) { const w = window.open(); w?.document.write(`<title>${h(p.caption || 'Photo')}</title><img src="${p.dataUrl}" style="max-width:100%">`); } return; }
+  },
+  'sort': async (el, id, e, act) => {
+    { const k = el.dataset.k; S.sort = { key: k, dir: S.sort.key === k ? -S.sort.dir : 1 }; renderView(); return; }
+  },
+  'scan-all': async (el, id, e, act) => {
+    { if (!(await askConfirm('Mark every plate as scanned?', { ok: 'Mark all scanned' }))) return; for (const p of S.layout.plates) { S.job.plates[p.key] = { ...(S.job.plates[p.key] || {}), scan: 'scanned' }; } commit(); refreshPlateTable(); return; }
+  },
+  'sx-add': async (el, id, e, act) => {
+    {
       const k = el.dataset.sec, kind = el.dataset.kind, it = kind === 'nde' ? newNDE() : kind === 'obs' ? newObs() : newRec();
       secData(k)[kind].push(it); if (kind === 'recs') numberDefs(S.job); commit(); renderView(); renderNav();
       setTimeout(() => $(`[data-iid="${it.id}"][data-f="${kind === 'nde' ? 'extent' : kind === 'obs' ? 'item' : 'finding'}"]`)?.focus(), 40); return;
     }
-    case 'sx-del': {
+  },
+  'sx-del': async (el, id, e, act) => {
+    {
       const k = el.dataset.sec, kind = el.dataset.kind, d = secData(k);
       if (kind === 'recs' && !(await askConfirm('Remove this recommendation?', { ok: 'Remove', danger: true }))) return;
       d[kind] = d[kind].filter((x) => x.id !== el.dataset.iid);
       if (kind === 'obs') for (const p of S.photos.filter((p) => p.obs === el.dataset.iid)) { delete p.obs; await db.putPhoto(p); }
       commit(); renderView(); renderNav(); return;
     }
-    case 'sx-typ': {
+  },
+  'sx-typ': async (el, id, e, act) => {
+    {
       const k = el.dataset.sec, kind = el.dataset.kind, d = secData(k);
       const have = new Set(d[kind].map((x) => (kind === 'nde' ? x.method : x.item)));
       const add = (kind === 'nde' ? typicalNDE(k) : typicalObs(k)).filter((x) => !have.has(kind === 'nde' ? x.method : x.item));
       if (kind === 'nde') for (const x of add) x.equip = suggestEquip(S.job.equipment, x.method);
       d[kind].push(...add); commit(); renderView(); renderNav(); toast(add.length ? `Added ${add.length} item${add.length > 1 ? 's' : ''}.` : 'The typical items are already there.'); return;
     }
-    case 'rec-from': case 'rec-all': {
-      const k = el.dataset.sec, F = findings(S.job, S.layout, S.calc)[k], d = secData(k), used = new Set(d.recs.map((r) => r.auto));
-      const items = F.items.filter((it) => !used.has(it.key) && (act === 'rec-all' || it.key === el.dataset.key));
-      for (const it of items) d.recs.push(newRec({ finding: it.finding.replace(/<[^>]+>/g, ''), loc: it.loc, action: it.action, priority: it.priority, ref: it.ref, auto: it.key, def: it.priority !== 'P5' }));
-      numberDefs(S.job); commit(); renderView(); renderNav(); return;
-    }
-    case 'obs-rec': {
+  },
+  'rec-from': _recfrom,
+  'rec-all': _recfrom,
+  'obs-rec': async (el, id, e, act) => {
+    {
       const k = el.dataset.sec, o = secData(k).obs.find((x) => x.id === el.dataset.iid); if (!o) return;
       const ph = S.photos.find((p) => p.obs === o.id);
       secData(k).recs.push(newRec({ finding: [o.item, o.text].filter(Boolean).join(': '), loc: o.loc, priority: o.cond === 'poor' ? 'P3' : 'P4', photo: ph?.id || '', obs: o.id }));
       numberDefs(S.job); commit(); go('recs:' + k); return;
     }
-    case 'ph-anno': case 'ph-open': openAnno(id); return;
-    case 'ph-del': {
+  },
+  'ph-anno': _phanno,
+  'ph-open': _phanno,
+  'ph-del': async (el, id, e, act) => {
+    {
       if (!(await askConfirm('Delete this photo and its annotations?', { ok: 'Delete', danger: true }))) return;
       await db.deletePhoto(id); S.photos = S.photos.filter((p) => p.id !== id); S.job.updated = Date.now(); scheduleSave(); renderView(); renderNav(); return;
     }
-    case 'sum-draft': {
+  },
+  'sum-draft': async (el, id, e, act) => {
+    {
       const f = el.dataset.f;
       if ((S.job.summary[f] || '').trim() && !(await askConfirm('Replace the current text with a new draft?', { ok: 'Replace' }))) return;
       S.job.summary[f] = draftSummary(f); commit(); renderView(); return;
     }
-    case 'def-filter': S.defFilter = el.dataset.k; renderView(); return;
-    case 'def-issue': {
+  },
+  'def-filter': async (el, id, e, act) => {
+    S.defFilter = el.dataset.k; renderView(); return;
+  },
+  'def-issue': async (el, id, e, act) => {
+    {
       const S2 = S.job.summary; S2.defRev = (S2.defRev || 0) + 1; S2.issued = new Date().toISOString().slice(0, 10); commit(); toast(`Deficiency report update ${S2.defRev} issued ${S2.issued}.`); go('defrep'); return;
     }
-    case 'exp-defs': {
+  },
+  'exp-defs': async (el, id, e, act) => {
+    {
       numberDefs(S.job);
       const rows = [['No.', 'Component', 'Location', 'Deficiency', 'Recommended action', 'Priority', 'Due', 'Status', 'Closed', 'Client comment', 'Code reference', 'History']];
       for (const d of allDefs(S.job)) rows.push([d.no || '', d.secLabel, d.loc || '', d.finding || '', d.action || '', d.priority, d.due || '', d.status, d.closedOn || '', d.client || '', d.ref || '', (d.history || []).map((x) => x.date + ' ' + x.status).join('; ')]);
       return download(fileBase(S.job) + '_deficiencies.csv', '\ufeff' + rows.map((r) => r.map((v) => /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : v).join(',')).join('\r\n'), 'text/csv');
     }
-    case 'dash-link': return linkFolder();
-    case 'dash-reconnect': { try { S.dash.perm = await S.dash.dir.requestPermission({ mode: 'readwrite' }); } catch { S.dash.perm = 'denied'; } if (S.dash.perm === 'granted') { S.dash.scanned = false; await scanFolder(); } else renderView(); return; }
-    case 'dash-rescan': S.dash.scanned = false; return scanFolder();
-    case 'dash-open': return openFromDash(id);
-    case 'dash-mode': S.dash.mode = el.dataset.k; renderView(); return;
-    case 'dash-stage': S.dash.stage = S.dash.stage === el.dataset.k ? '' : el.dataset.k; renderView(); return;
-    case 'nav-sec': {
+  },
+  'dash-link': async (el, id, e, act) => {
+    return linkFolder();
+  },
+  'dash-reconnect': async (el, id, e, act) => {
+    { try { S.dash.perm = await S.dash.dir.requestPermission({ mode: 'readwrite' }); } catch { S.dash.perm = 'denied'; } if (S.dash.perm === 'granted') { S.dash.scanned = false; await scanFolder(); } else renderView(); return; }
+  },
+  'dash-rescan': async (el, id, e, act) => {
+    S.dash.scanned = false; return scanFolder();
+  },
+  'dash-open': async (el, id, e, act) => {
+    return openFromDash(id);
+  },
+  'dash-mode': async (el, id, e, act) => {
+    S.dash.mode = el.dataset.k; renderView(); return;
+  },
+  'dash-stage': async (el, id, e, act) => {
+    S.dash.stage = S.dash.stage === el.dataset.k ? '' : el.dataset.k; renderView(); return;
+  },
+  'nav-sec': async (el, id, e, act) => {
+    {
       const k = el.dataset.sec, pl = viewPlace(S.view);
       if (S.navOpen.has(k)) { S.navOpen.delete(k); renderNav(); return; }
       S.navOpen.add(k);
       if (pl?.sec === k) { renderNav(); return; }
       go(S.ndeTab[k] || 'nde:' + k); return;
     }
-    case 'ann-apply': S.job.calc.mrtAnnular = +el.dataset.v; commit(); renderView(); return;
-    case 'mrt-preset': S.job.calc.mrtBottom = +el.dataset.v; commit(); renderView(); return;
-    case 'print': window.print(); return;
-    case 'exp-ind': return download(fileBase(S.job) + '_indications.csv', indicationsCSV(S.job, S.layout, S.calc), 'text/csv');
-    case 'exp-plates': return download(fileBase(S.job) + '_plates.csv', platesCSV(S.job, S.layout, S.calc), 'text/csv');
-    case 'exp-svg': return download(fileBase(S.job) + '_floor-map.svg', svgForExport(printMap()), 'image/svg+xml');
-    case 'exp-png': { const b = await svgToPng(svgForExport(printMap())); return download(fileBase(S.job) + '_floor-map.png', b); }
-    case 'exp-json': return saveJobFile(S.job.id, true);
-    case 'install': { if (S.installEvt) { S.installEvt.prompt(); await S.installEvt.userChoice; S.installEvt = null; renderHeader(); } return; }
+  },
+  'ann-apply': async (el, id, e, act) => {
+    S.job.calc.mrtAnnular = +el.dataset.v; commit(); renderView(); return;
+  },
+  'mrt-preset': async (el, id, e, act) => {
+    S.job.calc.mrtBottom = +el.dataset.v; commit(); renderView(); return;
+  },
+  'print': async (el, id, e, act) => {
+    window.print(); return;
+  },
+  'exp-ind': async (el, id, e, act) => {
+    return download(fileBase(S.job) + '_indications.csv', indicationsCSV(S.job, S.layout, S.calc), 'text/csv');
+  },
+  'exp-plates': async (el, id, e, act) => {
+    return download(fileBase(S.job) + '_plates.csv', platesCSV(S.job, S.layout, S.calc), 'text/csv');
+  },
+  'exp-svg': async (el, id, e, act) => {
+    return download(fileBase(S.job) + '_floor-map.svg', svgForExport(printMap()), 'image/svg+xml');
+  },
+  'exp-png': async (el, id, e, act) => {
+    { const b = await svgToPng(svgForExport(printMap())); return download(fileBase(S.job) + '_floor-map.png', b); }
+  },
+  'exp-json': async (el, id, e, act) => {
+    return saveJobFile(S.job.id, true);
+  },
+  'install': async (el, id, e, act) => {
+    { if (S.installEvt) { S.installEvt.prompt(); await S.installEvt.userChoice; S.installEvt = null; renderHeader(); } return; }
   }
 });
 
@@ -2857,9 +2984,10 @@ function zoomToInd() {
   S.mapCtl.focus(a.floor.x, a.floor.y, S.layout.R * 0.5); drawMap(); renderSide();
 }
 
-document.addEventListener('change', async (e) => {
-  const el = e.target;
-  if (el.matches('[data-bind]')) {
+/* Change handlers (input bindings), registered in their original order (js/app/actions.js). */
+onChange([
+  { order: 10, when: (el, act) => el.matches('[data-bind]'), run: async (el, e, act) => {
+    {
     const path = el.dataset.bind;
     let v = readInput(el);
     if (el.dataset.num) v = +v;
@@ -2884,13 +3012,17 @@ document.addEventListener('change', async (e) => {
     if (path === 'units') renderAll();
     return;
   }
-  if (el.matches('[data-ep]')) {
+  } },
+  { order: 20, when: (el, act) => el.matches('[data-ep]'), run: async (el, e, act) => {
+    {
     const ep = S.job.settle.ep; ep.rd = ep.rd || {};
     const v = num(el.value), fct = (ELEV_UNITS[S.job.settle.eu] || ELEV_UNITS.in)[0], m = (ep.rd[el.dataset.ep] = ep.rd[el.dataset.ep] || {});
     if (v === null) delete m[el.dataset.x]; else m[el.dataset.x] = v * fct;
     S.epSel = +el.dataset.ep; commit(); refreshSettle(); return;
   }
-  if (el.matches('[data-eps]')) {
+  } },
+  { order: 30, when: (el, act) => el.matches('[data-eps]'), run: async (el, e, act) => {
+    {
     const ep = S.job.settle.ep; ep.st = ep.st || {};
     const o = (ep.st[el.dataset.eps] = ep.st[el.dataset.eps] || {}), k = el.dataset.f;
     let v = k === 'Rov' ? (el.value === '' ? null : +el.value) : readInput(el);
@@ -2899,29 +3031,39 @@ document.addEventListener('change', async (e) => {
     if (v === null || v === '') delete o[k]; else o[k] = v;
     S.epSel = +el.dataset.eps; commit(); refreshSettle(); return;
   }
-  if (el.matches('[data-epz]')) {
+  } },
+  { order: 40, when: (el, act) => el.matches('[data-epz]'), run: async (el, e, act) => {
+    {
     const z = (S.job.settle.ep.zones || []).find((q) => q.id === el.dataset.zid); if (!z) return;
     const v = readInput(el); if (v !== null && v < 0) { toast('Values can’t be negative.'); return; }
     if (el.dataset.f === 'step' && v !== null && v <= 0) { toast('Spacing must be more than 0.'); return; }
     z[el.dataset.f] = v; commit(); refreshSettle(); return;
   }
-  if (el.matches('[data-cv]')) {
+  } },
+  { order: 50, when: (el, act) => el.matches('[data-cv]'), run: async (el, e, act) => {
+    {
     const r = (S.job.settle.curve || []).find((q) => q.id === el.dataset.cv); if (!r) return;
     const v = readInput(el); if (v !== null && v < 0) { toast('Values can’t be negative.'); return; }
     r[el.dataset.f] = v; commit(); refreshSettle(); return;
   }
-  if (el.matches('[data-st]')) {
+  } },
+  { order: 60, when: (el, act) => el.matches('[data-st]'), run: async (el, e, act) => {
+    {
     const st = S.job.settle; st.el = st.el || {};
     const v = num(el.value), fct = (ELEV_UNITS[st.eu] || ELEV_UNITS.in)[0];
     if (v === null) delete st.el[el.dataset.st]; else st.el[el.dataset.st] = v * fct;
     commit(); refreshSettle(); return;
   }
-  if (el.matches('[data-sts]')) {
+  } },
+  { order: 70, when: (el, act) => el.matches('[data-sts]'), run: async (el, e, act) => {
+    {
     const v = num(el.value); const k = el.dataset.sts;
     S.job.settle[k] = v === null ? null : S.job.units === 'metric' ? v : v / PSI_PER_MPA;
     commit(); refreshSettle(); return;
   }
-  if (el.matches('[data-se]')) {
+  } },
+  { order: 80, when: (el, act) => el.matches('[data-se]'), run: async (el, e, act) => {
+    {
     const L = el.dataset.se === 'edge' ? S.job.settle.edge : S.job.settle.dep;
     const x = L.find((q) => q.id === el.dataset.eid); if (!x) return;
     const k = el.dataset.f; let v = readInput(el);
@@ -2930,7 +3072,9 @@ document.addEventListener('change', async (e) => {
     if (k === 'alpha' && v !== null && v > 90) { toast('Weld angle α is 0–90°.'); return; }
     x[k] = v; commit(); refreshSettle(); return;
   }
-  if (el.matches('[data-sg]')) {
+  } },
+  { order: 90, when: (el, act) => el.matches('[data-sg]'), run: async (el, e, act) => {
+    {
     const sd = el.dataset.sg === 'p' ? S.job.roof.seal.primary : S.job.roof.seal.secondary;
     const g = sd.gaps.find((x) => x.id === el.dataset.gid); if (!g) return;
     const k = el.dataset.f; let v = readInput(el);
@@ -2938,27 +3082,35 @@ document.addEventListener('change', async (e) => {
     if (k === 'angle' && v !== null) v = ((v % 360) + 360) % 360;
     g[k] = v; commit(); refreshRoof(); return;
   }
-  if (el.matches('[data-sck]') || el.matches('[data-sckn]')) {
+  } },
+  { order: 100, when: (el, act) => el.matches('[data-sck]') || el.matches('[data-sckn]'), run: async (el, e, act) => {
+    {
     const seal = S.job.roof.seal; seal.checks = seal.checks || {};
     const k = el.dataset.sck || el.dataset.sckn, c = (seal.checks[k] = seal.checks[k] || {});
     if (el.dataset.sck) { if (el.value) c.r = el.value; else delete c.r; } else c.note = el.value;
     if (!c.r && !c.note) delete seal.checks[k];
     commit(); refreshRoof(); return;
   }
-  if (el.matches('[data-rut]')) {
+  } },
+  { order: 110, when: (el, act) => el.matches('[data-rut]'), run: async (el, e, act) => {
+    {
     const F = S.job.roof.floating; F.ut = F.ut || {};
     const m = (F.ut[el.dataset.rut] = F.ut[el.dataset.rut] || {}), v = readInput(el);
     if (v !== null && v < 0) { toast('Readings can’t be negative.'); return; }
     if (v === null) delete m[el.dataset.pt]; else m[el.dataset.pt] = v;
     commit(); refreshRoof(); return;
   }
-  if (el.matches('[data-rpc]')) {
+  } },
+  { order: 120, when: (el, act) => el.matches('[data-rpc]'), run: async (el, e, act) => {
+    {
     const F = S.job.roof.floating; F.pont = F.pont || {};
     const m = (F.pont[el.dataset.rpc] = F.pont[el.dataset.rpc] || {}), v = readInput(el);
     if (v === null || v === '') delete m[el.dataset.f]; else m[el.dataset.f] = v;
     commit(); refreshRoof(); return;
   }
-  if (el.matches('[data-rpt]')) {
+  } },
+  { order: 130, when: (el, act) => el.matches('[data-rpt]'), run: async (el, e, act) => {
+    {
     const pt = (S.job.roof.fixed.pts || []).find((x) => x.id === el.dataset.rpt); if (!pt) return;
     const k = el.dataset.f; let v = readInput(el);
     if (k !== 'label' && v !== null && v < 0) { toast('Values can’t be negative.'); return; }
@@ -2966,19 +3118,25 @@ document.addEventListener('change', async (e) => {
     if (k === 'r' && v !== null && v > (+S.job.tank.diameter || 0) / 2) { toast('That is further from the centre than the shell.'); return; }
     pt[k] = v; commit(); refreshRoof(); return;
   }
-  if (el.matches('[data-shs]')) {
+  } },
+  { order: 140, when: (el, act) => el.matches('[data-shs]'), run: async (el, e, act) => {
+    {
     const c = S.job.shell?.courses?.find((x) => x.id === el.dataset.course); if (!c) return;
     const v = num(el.value), k = el.dataset.shs;
     if (v !== null && v <= 0) { toast('Enter a positive stress.'); return; }
     if (v === null) delete c[k]; else c[k] = S.job.units === 'metric' ? v * PSI_MPA : v;
     commit(); refreshShell(); return;
   }
-  if (el.matches('[data-shc="matl"]') || el.matches('[data-shc="joint"]')) {
+  } },
+  { order: 150, when: (el, act) => el.matches('[data-shc="matl"]') || el.matches('[data-shc="joint"]'), run: async (el, e, act) => {
+    {
     const c = S.job.shell?.courses?.find((x) => x.id === el.dataset.course); if (!c) return;
     if (el.value) c[el.dataset.shc] = el.value; else delete c[el.dataset.shc];
     commit(); refreshShell(); return;
   }
-  if (el.matches('[data-shc]')) {
+  } },
+  { order: 160, when: (el, act) => el.matches('[data-shc]'), run: async (el, e, act) => {
+    {
     const c = S.job.shell?.courses?.find((x) => x.id === el.dataset.course); if (!c) return;
     let v = readInput(el); const k = el.dataset.shc;
     if (v !== null && v < 0 && k !== 'seam0') { toast('Values can’t be negative.'); return; }
@@ -2992,7 +3150,9 @@ document.addEventListener('change', async (e) => {
     if (v === null) { if (k === 'h') return; delete c[k]; } else c[k] = v;
     commit(); refreshShell(); return;
   }
-  if (el.matches('[data-shut]')) {
+  } },
+  { order: 170, when: (el, act) => el.matches('[data-shut]'), run: async (el, e, act) => {
+    {
     const sh = S.job.shell; sh.rd = sh.rd || {};
     const m = (sh.rd[el.dataset.shut] = sh.rd[el.dataset.shut] || {});
     const v = readInput(el);
@@ -3000,7 +3160,9 @@ document.addEventListener('change', async (e) => {
     if (v === null) delete m[el.dataset.z]; else m[el.dataset.z] = v;
     commit(); refreshShell(); return;
   }
-  if (el.matches('[data-zf]')) {
+  } },
+  { order: 180, when: (el, act) => el.matches('[data-zf]'), run: async (el, e, act) => {
+    {
     const zn = S.job.shell?.zones?.find((x) => x.id === el.dataset.zone); if (!zn) return;
     const v = readInput(el), k = el.dataset.zf;
     if (v !== null && v < 0) { toast('Values can’t be negative.'); return; }
@@ -3010,7 +3172,9 @@ document.addEventListener('change', async (e) => {
     if (n > 1500) toast(`That gives ${n} elevations per station — check the step.`);
     commit(); refreshShell(); return;
   }
-  if (el.matches('[data-nb]')) {
+  } },
+  { order: 190, when: (el, act) => el.matches('[data-nb]'), run: async (el, e, act) => {
+    {
     const nz = (S.job.nozzles || []).find((x) => x.id === el.dataset.id); if (!nz) return;
     let k = el.dataset.nb; let v = readInput(el);
     if (k === 'arc') {
@@ -3026,30 +3190,42 @@ document.addEventListener('change', async (e) => {
     if (S.view === 'setup' || S.view === 'nozzles') { const c = $('#nozzleCard'); if (c && (k === 'angle' || k === 'type' || k === 'mark' || el.dataset.nb === 'arc')) setTimeout(() => { c.innerHTML = nozzleTableHTML(c.dataset.design === '1'); }, 0); if (S.view === 'setup') refreshSetupPreview(); }
     return;
   }
-  if (el.matches('[data-nbx]')) {
+  } },
+  { order: 200, when: (el, act) => el.matches('[data-nbx]'), run: async (el, e, act) => {
+    {
     const nz = (S.job.nozzles || []).find((x) => x.id === el.dataset.id); const r = nz?.utx?.find((x) => x.id === el.dataset.rid); if (!r) return;
     const v = readInput(el); if (v === null || v === '') delete r[el.dataset.nbx]; else r[el.dataset.nbx] = v;
     commit(); refreshNozzleUT(nz); if (S.view === 'map') drawMap(); return;
   }
-  if (el.matches('[data-secf]')) {
+  } },
+  { order: 210, when: (el, act) => el.matches('[data-secf]'), run: async (el, e, act) => {
+    {
     const k = el.dataset.secf; let v = readInput(el);
     if (k === 'sideN') v = v === null ? 1 : Math.max(1, Math.round(v));
     measuredChange(() => { const sec = findSec(el.dataset.sec); if (!sec) return; if (v === null || v === '') { if (k === 'h') return; delete sec[k]; } else sec[k] = v; });
     return;
   }
-  if (el.matches('[data-mpf]')) {
+  } },
+  { order: 220, when: (el, act) => el.matches('[data-mpf]'), run: async (el, e, act) => {
+    {
     const k = el.dataset.mpf, v = readInput(el);
     measuredChange(() => { const pl = findSec(el.dataset.sec)?.plates?.find((x) => x.id === el.dataset.pl); if (!pl) return; pl[k] = v > 0 ? v : null; });
     return;
   }
-  if (el.matches('[data-rowf]')) {
+  } },
+  { order: 230, when: (el, act) => el.matches('[data-rowf]'), run: async (el, e, act) => {
+    {
     const k = el.dataset.rowf; let v = readInput(el);
     if (k === 'n' || k === 'sideN') v = v === null ? null : Math.max(k === 'n' ? 0 : 1, Math.round(v));
     builderChange((rows) => { const r = rows.find((x) => x.id === el.dataset.row); if (!r) return; if (v === null || v === '') { if (k === 'h' || k === 'n') return; delete r[k]; } else r[k] = v; });
     return;
   }
-  if (el.matches('[data-ib]')) return onIndField(el);
-  if (el.matches('[data-pb]')) {
+  } },
+  { order: 240, when: (el, act) => el.matches('[data-ib]'), run: async (el, e, act) => {
+    return onIndField(el);
+  } },
+  { order: 250, when: (el, act) => el.matches('[data-pb]'), run: async (el, e, act) => {
+    {
     const key = el.dataset.key, k = el.dataset.pb;
     const o = (S.job.plates[key] = { ...(S.job.plates[key] || {}) });
     const v = readInput(el);
@@ -3060,34 +3236,48 @@ document.addEventListener('change', async (e) => {
     if (big && S.view === 'plates') refreshPlateTable();
     return;
   }
-  if (el.matches('[data-fb]')) {
+  } },
+  { order: 260, when: (el, act) => el.matches('[data-fb]'), run: async (el, e, act) => {
+    {
     const ft = S.job.features.find((f) => f.id === el.closest('[data-ed]').dataset.id); if (!ft) return;
     const k = el.dataset.fb;
     if (k === 'plate') { const p = findPlate(el.value); el.closest('.fld').classList.toggle('invalid', !p); if (!p) return; ft.plate = p.key; }
     else { const v = readInput(el); if ((k === 'x' || k === 'y') && v !== null && v < 0) { toast(`${k.toUpperCase()} can't be negative.`); return; } ft[k] = v; }
     commit(); drawMap(); if (k === 'type') renderSide(); return;
   }
-  if (el.matches('[data-cb]')) { S.company[el.dataset.cb] = el.value; await db.setMeta('company', S.company); return; }
-  if (el.matches('[data-stage-of]')) { setStage(el.dataset.stageOf, el.value); return; }
-  if (el.matches('[data-ph]')) {
+  } },
+  { order: 270, when: (el, act) => el.matches('[data-cb]'), run: async (el, e, act) => {
+    { S.company[el.dataset.cb] = el.value; await db.setMeta('company', S.company); return; }
+  } },
+  { order: 280, when: (el, act) => el.matches('[data-stage-of]'), run: async (el, e, act) => {
+    { setStage(el.dataset.stageOf, el.value); return; }
+  } },
+  { order: 290, when: (el, act) => el.matches('[data-ph]'), run: async (el, e, act) => {
+    {
     const p = S.photos.find((x) => x.id === el.dataset.ph); if (!p) return;
     const f = el.dataset.f; p[f] = el.type === 'checkbox' ? el.checked : el.value;
     await db.putPhoto(p); S.job.updated = Date.now(); scheduleSave(); if (f === 'obs') renderView(); return;
   }
-  if (el.matches('[data-eq]')) {
+  } },
+  { order: 300, when: (el, act) => el.matches('[data-eq]'), run: async (el, e, act) => {
+    {
     const e = (S.job.equipment || []).find((x) => x.id === el.dataset.id); if (!e) return;
     e[el.dataset.eq] = el.value.trim(); commit();
     if (el.tagName === 'SELECT' || el.type === 'date') renderView();
     return;
   }
-  if (el.matches('[data-eqpick]')) {
+  } },
+  { order: 310, when: (el, act) => el.matches('[data-eqpick]'), run: async (el, e, act) => {
+    {
     const it = secData(el.dataset.sec).nde.find((x) => x.id === el.dataset.iid); if (!it) return;
     const set = new Set(it.equip || []); el.checked ? set.add(el.dataset.eqpick) : set.delete(el.dataset.eqpick);
     it.equip = (S.job.equipment || []).map((e) => e.id).filter((x) => set.has(x)); commit();
     const sm = el.closest('details')?.querySelector('summary'); if (sm) sm.innerHTML = eqChips(it);
     return;
   }
-  if (el.id === 'eqCopyFrom' && el.value) {
+  } },
+  { order: 320, when: (el, act) => el.id === 'eqCopyFrom' && el.value, run: async (el, e, act) => {
+    {
     const src = await db.getJob(el.value); el.value = '';
     if (!src?.equipment?.length) return;
     const have = new Set((S.job.equipment || []).map((e) => [e.type, e.serial, e.model].join('|')));
@@ -3096,7 +3286,9 @@ document.addEventListener('change', async (e) => {
     for (const sx of SECTIONS) for (const n of secData(sx.key).nde) if (!(n.equip || []).length) n.equip = suggestEquip(S.job.equipment, n.method);
     commit(); renderView(); toast(add.length ? `${add.length} item${add.length === 1 ? '' : 's'} copied — check the calibration dates.` : 'Those items are already on the list.'); return;
   }
-  if (el.matches('[data-sx]')) {
+  } },
+  { order: 330, when: (el, act) => el.matches('[data-sx]'), run: async (el, e, act) => {
+    {
     const list = secData(el.dataset.sec)[el.dataset.sx] || [], it = list.find((x) => x.id === el.dataset.iid); if (!it) return;
     const f = el.dataset.f, v = el.type === 'checkbox' ? el.checked : el.value;
     if (el.dataset.sx === 'nde' && f === 'method' && !(it.equip || []).length) it.equip = suggestEquip(S.job.equipment, v);
@@ -3107,17 +3299,36 @@ document.addEventListener('change', async (e) => {
     if (el.tagName === 'SELECT' || el.type === 'checkbox') { renderView(); renderNav(); }
     return;
   }
-  if (el.matches('[data-photo-cap]')) { const p = S.photos.find((x) => x.id === el.dataset.photoCap); if (p) { p.caption = el.value; await db.putPhoto(p); } return; }
-  const act = el.dataset.act;
-  if (act === 'toggle') { S[el.dataset.k] = el.checked; drawMap(); return; }
-  if (act === 'ropt') { S.reportOpts[el.dataset.k] = el.checked; after.report(); return; }
-  if (act === 'datum-sel') { applyDatum(el.dataset.key, el.value); return; }
-  if (act === 'resfilter') { S.resFilter = el.value; refreshIndTable(); return; }
-  if (el.id === 'ftType') { S.ftType = el.value; setMode('feature'); return; }
-  if (act === 'utl-file') { const f = el.files[0]; el.value = ''; if (f) uploadLoader(f); return; }
-  if (act === 'job-import') return importJobFile(el.files[0]).finally(() => (el.value = ''));
-  if (act === 'logo') { const f = el.files[0]; if (!f) return; S.company.logo = await resizeImage(f, 600, 'image/png'); await db.setMeta('company', S.company); renderView(); return; }
-  if (act === 'ph-add') {
+  } },
+  { order: 340, when: (el, act) => el.matches('[data-photo-cap]'), run: async (el, e, act) => {
+    { const p = S.photos.find((x) => x.id === el.dataset.photoCap); if (p) { p.caption = el.value; await db.putPhoto(p); } return; }
+  } },
+  { order: 350, when: (el, act) => act === 'toggle', run: async (el, e, act) => {
+    { S[el.dataset.k] = el.checked; drawMap(); return; }
+  } },
+  { order: 360, when: (el, act) => act === 'ropt', run: async (el, e, act) => {
+    { S.reportOpts[el.dataset.k] = el.checked; after.report(); return; }
+  } },
+  { order: 370, when: (el, act) => act === 'datum-sel', run: async (el, e, act) => {
+    { applyDatum(el.dataset.key, el.value); return; }
+  } },
+  { order: 380, when: (el, act) => act === 'resfilter', run: async (el, e, act) => {
+    { S.resFilter = el.value; refreshIndTable(); return; }
+  } },
+  { order: 390, when: (el, act) => el.id === 'ftType', run: async (el, e, act) => {
+    { S.ftType = el.value; setMode('feature'); return; }
+  } },
+  { order: 400, when: (el, act) => act === 'utl-file', run: async (el, e, act) => {
+    { const f = el.files[0]; el.value = ''; if (f) uploadLoader(f); return; }
+  } },
+  { order: 410, when: (el, act) => act === 'job-import', run: async (el, e, act) => {
+    return importJobFile(el.files[0]).finally(() => (el.value = ''));
+  } },
+  { order: 420, when: (el, act) => act === 'logo', run: async (el, e, act) => {
+    { const f = el.files[0]; if (!f) return; S.company.logo = await resizeImage(f, 600, 'image/png'); await db.setMeta('company', S.company); renderView(); return; }
+  } },
+  { order: 430, when: (el, act) => act === 'ph-add', run: async (el, e, act) => {
+    {
     const k = el.dataset.sec; let n = Math.max(0, ...S.photos.filter((p) => p.sec === k).map((p) => p.n || 0));
     for (const f of el.files) {
       try { const dataUrl = await resizeImage(f, 1800); const [w, hh] = await imgDims(dataUrl); const p = { id: uid(), jobId: S.job.id, sec: k, n: ++n, dataUrl, w, h: hh, caption: '', comment: '', anno: [], created: Date.now() }; await db.putPhoto(p); S.photos.push(p); }
@@ -3125,7 +3336,9 @@ document.addEventListener('change', async (e) => {
     }
     el.value = ''; S.job.updated = Date.now(); scheduleSave(); renderView(); renderNav(); checkStorage(); return;
   }
-  if (act === 'photo-add') {
+  } },
+  { order: 440, when: (el, act) => act === 'photo-add', run: async (el, e, act) => {
+    {
     const ind = S.job.indications.find((i) => i.id === el.closest('[data-ed]').dataset.id); if (!ind) return;
     for (const f of el.files) {
       try { const dataUrl = await resizeImage(f, 1600); const p = { id: uid(), jobId: S.job.id, indId: ind.id, dataUrl, caption: '', created: Date.now() }; await db.putPhoto(p); S.photos.push(p); }
@@ -3133,7 +3346,8 @@ document.addEventListener('change', async (e) => {
     }
     rerenderEditor(el); checkStorage(); return;
   }
-});
+  } }
+]);
 
 // a value typed while the page was refreshing is put back into the new field; commit it when the field is left
 document.addEventListener('focusout', (e) => {
@@ -3476,6 +3690,15 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     });
   }).catch(() => { /* offline support unavailable */ });
 }
+
+/* Screens (navigation registry, js/app/nav.js) */
+Object.assign(views, { dash: viewDash, reg: viewReg, jobs: viewJobs, equip: viewEquip, setup: viewSetup, summary: viewSummary, defs: viewDefs, defrep: viewDefRep, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, shell: viewShell, roofF: viewRoof, roofL: viewRoof, seal: viewRoof, nozzles: viewNozzles, settle: viewSettle, ref: viewRef, report: viewReport });
+Object.assign(childViews, { nde: viewNDE, obs: viewObs, photos: viewPhotos, an: viewAnalysis, recs: viewRecs });
+configureNav({
+  header: () => renderHeader(),
+  leaveRegistry: () => { if (saver.pending()) flushSave(); S.job = null; recompute(); S.photos = []; },
+  crumb: (pl) => crumbHTML(pl)
+});
 
 (async function init() {
   dbConfig.appVersion = APP_VERSION;

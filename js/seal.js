@@ -1,7 +1,6 @@
 // Floating roof rim seal inspection: seal gap survey, visual checks and evaluation against
 // US EPA 40 CFR 60 Subpart Kb / 63 Subpart WW and Canada SOR/2025-88 (plus a custom / provincial set).
 // Gap lengths and widths are stored in mm, shoe heights in mm. Limits are in cm²/m and cm.
-import { escText as esc } from './util.js';
 
 const uidS = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 

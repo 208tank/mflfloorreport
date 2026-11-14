@@ -1,5 +1,4 @@
 // Shell UT: courses, shell plates / vertical seams, UT stations, reading elevations and the roll-out.
-import { fmt, fromMm, u } from './units.js';
 import { nozzleUT } from './calc.js';
 import { courseDesigns, designBasis } from './design.js';
 import { PSI_MPA } from './tables.js';

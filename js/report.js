@@ -1,14 +1,14 @@
 // Printable report (browser print → Save as PDF).
-import { EQ_LABEL, EQ_TYPES, equipName, equipLine, calState, equipUse, useByMethod } from './equipment.js';
+import { EQ_LABEL, EQ_TYPES, equipLine, calState, equipUse, useByMethod } from './equipment.js';
 import { fmt, fmtRate, u } from './units.js';
 import { RESULTS, RESULT_SHORT, nozzleUT, nozzleWall, NZ_CONN_SHORT, UT_CLOCK, CORRECTIONS, statusText } from './calc.js';
 import { renderMapSVG, COLORS } from './map.js';
 import { settleCalc, edgeEval, depEval, hasSettle, hasEP, epOffsets, xKey, profileEval, profileSVG, stations as setStations, slopeText, settleChartSVG, settlePlanSVG, ELEV_UNITS, PSI_PER_MPA } from './settle.js';
-import { sealEval, activeStds, nextDue, gapSummary, cm2mToIn2ft, SEAL_CHECKS } from './seal.js';
-import { ROOF_TYPES, hasFixed, hasFloating, floatingLayout, floatingSVG, fixedSVG, plateUT, pointStatus, PT5, PT5_SHORT, roofDiameter, roofBad, ROOF_NOTE } from './roof.js';
+import { sealEval, activeStds, nextDue, cm2mToIn2ft, SEAL_CHECKS } from './seal.js';
+import { ROOF_TYPES, hasFixed, hasFloating, floatingLayout, floatingSVG, fixedSVG, plateUT, pointStatus, PT5, PT5_SHORT, roofDiameter, roofBad } from './roof.js';
 import { rolloutSVG, utLocations, courseSummary, coursesWithElev, courseAt, readingElevations, getReading, fmtElev, coursePlates } from './shell.js';
 import { designBasis, fillFromT } from './design.js';
-import { jointLabel, TABLES_SOURCE, MAT_NOTES } from './tables.js';
+import { jointLabel, MAT_NOTES } from './tables.js';
 import { SECTIONS, findings, allDefs, STATUS_TEXT, PRIORITY_LABEL, CONDITIONS } from './sections.js';
 import { patchList, patchOf } from './patches.js';
 import { itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
@@ -34,7 +34,7 @@ export function legendHTML() {
 }
 
 export function buildReport(job, layout, calc, company, photos, opts) {
-  const U = u(job), I = job.info || {}, T = job.tank || {}, E = job.equip || {}, C = calc.C;
+  const U = u(job), I = job.info || {}, T = job.tank || {}, C = calc.C;
   const t = (mm) => fmt(mm, 't', job);
   const inds = (job.indications || []).slice().sort((a, b) => String(a.no).localeCompare(String(b.no), undefined, { numeric: true }));
   const per = calc.per;
@@ -322,7 +322,7 @@ const fig = (p, cap = true) => `<figure class="phr"><span class="phfig"><img src
 const condText = (c) => (CONDITIONS.find(([k]) => k === c) || [])[1] || '';
 
 export function execSummaryHTML(job, layout, calc) {
-  const F = findings(job, layout, calc), S2 = job.summary || {}, I = job.info || {};
+  const F = findings(job, layout, calc), S2 = job.summary || {};
   const defs = allDefs(job), open = defs.filter((d) => d.status !== 'Closed');
   const pri = open.filter((d) => ['P1', 'P2'].includes(d.priority));
   return `<section class="pb exec"><h2>Executive summary</h2>

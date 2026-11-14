@@ -12,7 +12,7 @@ test('sw.js ASSETS lists exactly the files the app needs offline', () => {
   const list = JSON.parse('[' + sw.match(/const ASSETS = \[([\s\S]*?)\];/)[1].replace(/'/g, '"').replace(/,\s*$/, '') + ']');
   const files = ['./', './index.html', './manifest.webmanifest',
     ...readdirSync(new URL('css/', root)).map((f) => './css/' + f),
-    ...readdirSync(new URL('js/', root)).filter((f) => f.endsWith('.js')).map((f) => './js/' + f),
+    ...readdirSync(new URL('js/', root), { recursive: true }).filter((f) => f.endsWith('.js')).map((f) => './js/' + f),
     ...readdirSync(new URL('icons/', root)).map((f) => './icons/' + f)];
   const unused = ['./icons/icon-maskable.svg']; // source artwork, not referenced by the app
   const missing = files.filter((f) => !list.includes(f) && !unused.includes(f)), extra = list.filter((f) => !files.includes(f));
@@ -28,7 +28,7 @@ test('esc escapes every HTML special character; escText all but the apostrophe',
 });
 
 test('no module interpolates into a single-quoted HTML attribute (escText would not protect it)', () => {
-  for (const f of readdirSync(new URL('js/', root)).filter((x) => x.endsWith('.js'))) {
+  for (const f of readdirSync(new URL('js/', root), { recursive: true }).filter((x) => x.endsWith('.js'))) {
     assert.doesNotMatch(read('js/' + f), /=\s*'\$\{/, `js/${f}: use double-quoted attributes`);
   }
 });

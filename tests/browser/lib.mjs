@@ -16,12 +16,12 @@ try { pw = await import('playwright'); } catch {
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
 
 /** Static server. `overrides` lets a test swap a file's content (to simulate a new release). */
-export function serve(overrides = new Map(), headers = {}) {
+export function serve(overrides = new Map(), headers = {}, root = ROOT) {
   const srv = http.createServer(async (req, res) => {
     let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
     if (p.endsWith('/')) p += 'index.html';
-    const file = normalize(join(ROOT, p));
-    if (!file.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
+    const file = normalize(join(root, p));
+    if (!file.startsWith(root)) { res.writeHead(403); return res.end(); }
     try {
       const body = overrides.has(p) ? overrides.get(p) : await readFile(file);
       res.writeHead(200, { 'Content-Type': TYPES[extname(file)] || 'application/octet-stream', ...headers });

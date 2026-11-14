@@ -5,5 +5,5 @@ const browser = Object.fromEntries(JSON.parse(readFileSync(new URL('./browser-gl
 export default [{
   files: ['js/**/*.js', 'sw.js'],
   languageOptions: { ecmaVersion: 2023, sourceType: 'module', globals: { ...browser, structuredClone: 'readonly', caches: 'readonly', self: 'readonly', clients: 'readonly' } },
-  rules: { 'no-undef': 'error', 'no-unused-vars': ['warn', { vars: 'all', args: 'none', varsIgnorePattern: '^_', caughtErrors: 'none' }], 'no-redeclare': 'error', 'no-dupe-keys': 'error', 'no-duplicate-case': 'error', 'no-fallthrough': 'off' }
+  rules: { 'no-undef': 'error', 'no-unused-vars': ['warn', { vars: 'all', args: 'none', varsIgnorePattern: '^_', caughtErrors: 'none', ignoreRestSiblings: true }], 'no-redeclare': 'error', 'no-dupe-keys': 'error', 'no-duplicate-case': 'error', 'no-fallthrough': 'off' }
 }];

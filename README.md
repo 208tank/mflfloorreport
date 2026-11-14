@@ -7,6 +7,19 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Modular refactoring — step 1: core modules (v3.12.0)
+
+Nothing changes for the user: every screen renders the same HTML, and the calculations, job files and
+report are unchanged. The shared core of `js/app.js` now lives in `js/app/`:
+
+- `state.js` — the in-memory app state (`S`), the version number and the shared option lists.
+- `fields.js` — form field drawing and reading (`field`, `readInput`).
+- `nav.js` — the screen registry (`views`, `childViews`, `defineView`) and navigation (`go`, `renderAll`).
+- `actions.js` — the button and input registry (`onAction`, `onChange`). Each `data-act` name is
+  registered once; a duplicate name stops the app at start-up instead of silently replacing a handler.
+
+Later steps move each screen into its own module under `js/views/`, one functional area at a time.
+
 ## Data integrity upgrade — stage 4: database integrity check (v3.11.0)
 
 `js/integrity.js` checks the device database and lists what it finds; it never changes anything itself.
@@ -219,6 +232,12 @@ Nothing in `tests/` or `package.json` is used by the app, which still has no dep
 - `node tests/browser/run.mjs` — browser checks with Playwright (`npm i --no-save playwright` and
   `npx playwright install chromium` first): every page renders, user text can't run as script,
   storage is all-or-nothing, save conflicts, the service-worker update, pinch zoom, and more.
+- `tests/modules.test.mjs` (part of the Node run) — every module parses, every import matches an
+  export, no undefined names (ESLint, `npm i --no-save eslint@10` first), and the offline cache lists
+  every module.
+- `node tests/tools/screens-diff.mjs <old copy> <new copy>` — renders every screen with the demo tank in
+  two copies of the app and reports any difference in the HTML. Used to confirm a refactoring step
+  changes nothing on screen.
 - After a deliberate, reviewed change to a calculation or the report, re-record the golden outputs
   with `UPDATE_GOLDEN=1 node --test tests/*.test.mjs` and review the diff before committing.
 
