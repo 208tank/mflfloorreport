@@ -8,7 +8,7 @@ import { ROOF_TYPES, FIXED_TYPES, FIXED_SUPPORT, FLOAT_TYPES, PT5, PT5_SHORT, PO
 import { download, indicationsCSV, platesCSV, nozzlesCSV, shellCSV, roofCSV, settleCSV, svgForExport, svgToPng, fileBase } from './export.js';
 import { buildReport, legendHTML, buildDefReport } from './report.js';
 import { patchList, patchOf } from './patches.js';
-import { newJob, migrate, nextNo, uid, getPath, setPath, STAGES, STAGE_LABEL, defaultStatus, copyPhotos } from './model.js';
+import { newJob, migrate, nextNo, uid, getPath, setPath, STAGES, STAGE_LABEL, defaultStatus, copyPhotos, SCHEMA, FILE_VERSION } from './model.js';
 import { makeDemo } from './demo.js';
 import { defaultShell, defaultZones, autoLocCount, autoPlateCount, utLocations, coursesWithElev, courseAt, coursePlates, shellHeight, courseSummary, readingElevations, zoneCount, getReading, fmtElev, zKey, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
 import { buildLoader, readLoader, loaderAreas } from './loader.js';
@@ -122,6 +122,7 @@ async function openJob(id, view = 'map') {
 
 async function createJob(job) {
   await db.putJob(job);
+  checkStorage();
   await loadJobs();
   await openJob(job.id, job.tank.diameter ? 'map' : 'setup');
 }
@@ -298,7 +299,7 @@ async function linkFolder() {
 }
 
 /** Write a job's stage back into its folder file without changing its revision. */
-async function writeStageToFile(id, status) {
+async function writeStageToFile(id, stage, at = Date.now()) {
   const D = S.dash; let fh = D.files.get(id)?.fh || null;
   if (!fh) { fh = await db.getMeta('fh:' + id).catch(() => null); }
   if (!fh) return false;
@@ -308,7 +309,10 @@ async function writeStageToFile(id, status) {
     if (perm !== 'granted') return false;
     const data = JSON.parse(await (await fh.getFile()).text());
     if (data.format !== 'tank-floor-inspector' || data.job?.id !== id) return false;
-    data.job.status = { ...(data.job.status || {}), ...status };
+    // Change only the stage, and add to the file's own history rather than replacing it.
+    const old = data.job.status || {};
+    if (old.stage === stage) return true;
+    data.job.status = { ...old, stage, history: [...(old.history || []), { stage, at }].slice(-50) };
     const w = await fh.createWritable(); await w.write(JSON.stringify(data)); await w.close();
     const e = D.files.get(id); if (e) e.card = jobCard(data.job);
     return true;
@@ -332,9 +336,8 @@ async function setStage(id, stage) {
     }
   }
   const f = S.dash.files.get(id);
-  if (!status && f) status = { ...defaultStatus(), ...f.card, history: [] , stage };
   if (f || (await db.getMeta('fh:' + id).catch(() => null))) {
-    const ok = await writeStageToFile(id, { stage, history: [...((status?.history) || []).slice(-50)] });
+    const ok = await writeStageToFile(id, stage, now);
     if (!ok && f) toast('Stage changed on this device; the folder file could not be updated.');
   }
   await loadJobs(); if (S.view === 'dash') renderView();
@@ -345,10 +348,10 @@ async function openFromDash(id) {
   const local = S.jobs.find((j) => j.id === id), f = S.dash.files.get(id);
   if (f && (!local || f.card.updated > (local.updated || 0) + 1000)) {
     const nid = await importJobFile(await f.fh.getFile());
-    if (nid) { await db.setMeta('fh:' + nid, f.fh); if (S.job?.id === nid) { S.fileName = f.name; renderHeader(); } }
+    if (nid) { await rememberFile(nid, f.fh, true); if (S.job?.id === nid) { S.fileName = f.name; renderHeader(); } }
     return;
   }
-  if (local) { await openJob(id, 'setup'); if (f) { await db.setMeta('fh:' + id, f.fh); S.fileName = f.name; renderHeader(); } }
+  if (local) { await openJob(id, 'setup'); if (f) { await rememberFile(id, f.fh, false); S.fileName = f.name; renderHeader(); } }
 }
 
 function dashRows() {
@@ -586,9 +589,29 @@ after.jobs = async () => {
   try {
     const est = await navigator.storage?.estimate?.();
     const pers = await navigator.storage?.persisted?.();
-    if (el && est) el.textContent = `Using ${(est.usage / 1048576).toFixed(1)} MB of ${(est.quota / 1048576 / 1024).toFixed(1)} GB available. Storage is ${pers ? 'persistent' : 'best-effort (browser may clear it if disk is low)'}.`;
+    const full = est?.quota ? est.usage / est.quota : 0;
+    if (el && est) {
+      el.textContent = `Using ${(est.usage / 1048576).toFixed(1)} MB of ${(est.quota / 1048576 / 1024).toFixed(1)} GB available (${Math.round(full * 100)} %). Storage is ${pers ? 'persistent' : 'best-effort (browser may clear it if disk is low)'}.`
+        + (full > STORAGE_WARN ? ' Nearly full: save jobs to files and delete finished ones from this device.' : '');
+      el.classList.toggle('warn-txt', full > STORAGE_WARN);
+    }
   } catch { if (el) el.textContent = ''; }
 };
+
+/* Storage: ask the browser to keep the data (no prompt in Chrome / Edge for an installed app) and warn
+   before the device runs out of room, since a failed write can't save new readings or photos. */
+const STORAGE_WARN = 0.8;
+let storageWarned = false;
+async function checkStorage() {
+  try {
+    if (navigator.storage?.persisted && !(await navigator.storage.persisted())) await requestPersistence();
+    const est = await navigator.storage?.estimate?.();
+    if (est?.quota && est.usage / est.quota > STORAGE_WARN && !storageWarned) {
+      storageWarned = true;
+      toast(`Storage on this device is ${Math.round((est.usage / est.quota) * 100)} % full. Save jobs to files and delete finished ones (Jobs page).`, { label: 'Jobs', fn: () => go('jobs') });
+    }
+  } catch { /* storage API unavailable */ }
+}
 
 /* ------------------------------------------------------------ setup view --- */
 
@@ -2283,6 +2306,7 @@ document.addEventListener('click', async (e) => {
     case 'file-save': return saveJobFile();
     case 'file-save-as': return saveJobFile(S.job?.id, true);
     case 'logo-clear': S.company.logo = null; await db.setMeta('company', S.company); renderView(); return;
+    case 'app-reload': return appReload();
     case 'persist': { const ok = await requestPersistence(); toast(ok ? 'Storage is now persistent.' : 'The browser did not grant persistent storage (installing the app usually helps).'); after.jobs(); return; }
     case 'mode': setMode(el.dataset.mode); return;
     case 'datum-set': {
@@ -2652,7 +2676,7 @@ document.addEventListener('change', async (e) => {
     if (path === 'layout.mode' && v === 'measured' && !(S.job.layout.mrows || []).length) S.job.layout.mrows = measuredFromDrawing(S.job);
     if (path === 'status.stage' && S.job.status?.stage !== v) (S.job.status.history = S.job.status.history || []).push({ stage: v, at: Date.now() });
     setPath(S.job, path, v);
-    if (path === 'status.stage') { commit(); renderHeader(); writeStageToFile(S.job.id, S.job.status); }
+    if (path === 'status.stage') { commit(); renderHeader(); writeStageToFile(S.job.id, v); }
     if (path === 'layout.mode' && v === 'custom' && !(S.job.layout.rows || []).length) { recompute(); S.job.layout.rows = rowsFromGrid(S.job); }
     commit();
     if (path.startsWith('layout.') || path === 'tank.diameter') relocateOrphans(before);
@@ -2907,7 +2931,7 @@ document.addEventListener('change', async (e) => {
       try { const dataUrl = await resizeImage(f, 1800); const [w, hh] = await imgDims(dataUrl); const p = { id: uid(), jobId: S.job.id, sec: k, n: ++n, dataUrl, w, h: hh, caption: '', comment: '', anno: [], created: Date.now() }; await db.putPhoto(p); S.photos.push(p); }
       catch { toast('Could not read ' + f.name); }
     }
-    el.value = ''; S.job.updated = Date.now(); scheduleSave(); renderView(); renderNav(); return;
+    el.value = ''; S.job.updated = Date.now(); scheduleSave(); renderView(); renderNav(); checkStorage(); return;
   }
   if (act === 'photo-add') {
     const ind = S.job.indications.find((i) => i.id === el.closest('[data-ed]').dataset.id); if (!ind) return;
@@ -2915,7 +2939,7 @@ document.addEventListener('change', async (e) => {
       try { const dataUrl = await resizeImage(f, 1600); const p = { id: uid(), jobId: S.job.id, indId: ind.id, dataUrl, caption: '', created: Date.now() }; await db.putPhoto(p); S.photos.push(p); }
       catch (err) { toast('Could not read ' + f.name); }
     }
-    rerenderEditor(el); return;
+    rerenderEditor(el); checkStorage(); return;
   }
 });
 
@@ -3025,7 +3049,7 @@ async function jobFileText(id) {
   const stamp = { rev: (stored.rev || 0) + 1, savedAt: at };
   const job = { ...stored, ...stamp, updated: at, revisions: [...(stored.revisions || []), { rev: stamp.rev, at }].slice(-100) };
   const tank = stored.tankRef ? await db.getTank(stored.tankRef).catch(() => null) : null;
-  return { job, stamp, text: JSON.stringify({ format: 'tank-floor-inspector', version: 1, saved: new Date(at).toISOString(), rev: stamp.rev, job, photos, ...(tank ? { tank } : {}) }) };
+  return { job, stamp, text: JSON.stringify({ format: 'tank-floor-inspector', version: FILE_VERSION, saved: new Date(at).toISOString(), rev: stamp.rev, job, photos, ...(tank ? { tank } : {}), appVersion: APP_VERSION }) };
 }
 
 /** After a successful save, record the new revision on the stored job (and the open one). */
@@ -3059,16 +3083,63 @@ async function fileHandle(id, write) {
   return null;
 }
 
+/** Remember the file a job lives in. synced = the job on this device now matches that file's content
+ *  (just saved or just opened), so a later save can skip re-reading it if nobody has changed it since. */
+async function rememberFile(id, hnd, synced) {
+  await db.setMeta('fh:' + id, hnd);
+  if (synced) { try { const f = await hnd.getFile(); await db.setMeta('fstamp:' + id, { m: f.lastModified, s: f.size }); } catch { /* ignore */ } }
+  else await db.setMeta('fstamp:' + id, null);
+}
+
+/** Before overwriting a job file, make sure nobody else saved it since this device last did.
+ *  Returns 'ok', 'copy', 'open' or 'cancel'. A stage change written from someone's Dashboard
+ *  (same revision) is merged into this job instead of being overwritten. */
+async function checkFileBeforeSave(id, hnd) {
+  let f; try { f = await hnd.getFile(); } catch { return 'ok'; } // file gone or unreadable: writing recreates it
+  const st = await db.getMeta('fstamp:' + id).catch(() => null);
+  if (!f.size || (st && st.m === f.lastModified && st.s === f.size)) return 'ok';
+  let data = null; try { data = JSON.parse(await f.text()); } catch { /* not JSON */ }
+  const stored = await db.getJob(id);
+  const when = (t) => (t ? new Date(t).toLocaleString() : 'unknown time');
+  if (!data || data.format !== 'tank-floor-inspector' || !data.job) {
+    return (await askChoice(`${hnd.name} is no longer a Tank Floor Inspector job file. Overwrite it, or save this job to a new file?`, [['cancel', 'Cancel'], ['copy', 'Save to a new file…', 'primary'], ['ok', 'Overwrite', 'danger-solid']])) || 'cancel';
+  }
+  if (data.job.id !== id) {
+    return (await askChoice(`${hnd.name} now holds a different job ("${data.job.info?.tankId || 'untitled'}"). Save this job to a new file instead?`, [['cancel', 'Cancel'], ['copy', 'Save to a new file…', 'primary'], ['ok', 'Overwrite', 'danger-solid']])) || 'cancel';
+  }
+  const fr = data.job.rev || 0, lr = stored.rev || 0;
+  if (fr > lr || (fr === lr && (data.job.savedAt || 0) !== (stored.savedAt || 0))) {
+    const msg = `Someone else has saved ${hnd.name} since this device last opened or saved it.\n\n`
+      + `File: Rev ${fr}, saved ${when(data.job.savedAt)}\nThis device: based on Rev ${lr}${stored.savedAt ? ', saved ' + when(stored.savedAt) : ''}, last changed ${when(stored.updated)}\n\n`
+      + 'Overwriting would replace their changes with yours. Saving a copy keeps both.';
+    return (await askChoice(msg, [['cancel', 'Cancel'], ['open', 'Open their version'], ['ok', 'Overwrite their changes', 'danger-solid'], ['copy', 'Save mine as a copy…', 'primary']])) || 'cancel';
+  }
+  // Same revision: only a Dashboard stage change can differ. Keep whichever stage was set last.
+  const fh = data.job.status?.history || [], lh = stored.status?.history || [];
+  if (data.job.status?.stage && (fh.at(-1)?.at || 0) > (lh.at(-1)?.at || 0)) {
+    const status = { ...(stored.status || {}), stage: data.job.status.stage, history: fh };
+    if (S.job?.id === id) { S.job.status = status; await flushSave(); renderHeader(); }
+    else await db.putJob({ ...stored, status });
+  }
+  return 'ok';
+}
+
 async function saveJobFile(id = S.job?.id, saveAs = false) {
   if (!id) return;
-  const { job, stamp, text } = await jobFileText(id);
-  const name = fileBase(job) + '.json';
+  await flushSave();
   if (canPick()) {
     try {
       let hnd = saveAs ? null : await fileHandle(id, true);
-      if (!hnd) hnd = await window.showSaveFilePicker({ suggestedName: name, id: 'tank-floor-jobs', startIn: 'documents', types: FILE_TYPES });
+      if (hnd) {
+        const v = await checkFileBeforeSave(id, hnd);
+        if (v === 'cancel') return;
+        if (v === 'open') { const nid = await importJobFile(await hnd.getFile()); if (nid) await rememberFile(nid, hnd, true); return; }
+        if (v === 'copy') hnd = null;
+      }
+      const { job, stamp, text } = await jobFileText(id);
+      if (!hnd) hnd = await window.showSaveFilePicker({ suggestedName: fileBase(job) + '.json', id: 'tank-floor-jobs', startIn: 'documents', types: FILE_TYPES });
       const w = await hnd.createWritable(); await w.write(text); await w.close();
-      await db.setMeta('fh:' + id, hnd);
+      await rememberFile(id, hnd, true);
       if (S.job?.id === id) S.fileName = hnd.name;
       await applyStamp(id, job);
       toast(`Saved ${hnd.name} — Rev ${stamp.rev}`);
@@ -3078,6 +3149,8 @@ async function saveJobFile(id = S.job?.id, saveAs = false) {
       console.warn('Save file failed, downloading instead', e);
     }
   }
+  const { job, stamp, text } = await jobFileText(id);
+  const name = fileBase(job) + '.json';
   download(name, text, 'application/json');
   await applyStamp(id, job);
   toast(`Downloaded ${name} (Rev ${stamp.rev}). Move it into your OneDrive folder to share it.`);
@@ -3088,7 +3161,7 @@ async function openJobFile() {
     try {
       const [hnd] = await window.showOpenFilePicker({ id: 'tank-floor-jobs', types: FILE_TYPES, multiple: false });
       const id = await importJobFile(await hnd.getFile());
-      if (id) { await db.setMeta('fh:' + id, hnd); if (S.job?.id === id) { S.fileName = hnd.name; renderHeader(); } }
+      if (id) { await rememberFile(id, hnd, true); if (S.job?.id === id) { S.fileName = hnd.name; renderHeader(); } }
       return;
     } catch (e) { if (e.name === 'AbortError') return; console.warn(e); }
   }
@@ -3100,6 +3173,7 @@ async function importJobFile(file) {
   try {
     const data = JSON.parse(await file.text());
     if (data.format !== 'tank-floor-inspector' || !data.job) throw new Error('This is not a Tank Floor Inspector job file.');
+    if ((data.version || 1) > FILE_VERSION || (data.job.schema || 1) > SCHEMA) throw new Error(`it was saved by a newer version of the app${data.appVersion ? ' (v' + data.appVersion + ')' : ''}. Reload the app to update it (this is v${APP_VERSION}), then open the file again.`);
     const job = migrate(data.job);
     if (data.tank?.id && data.tank.id === job.tankRef && !(await db.getTank(data.tank.id))) { await db.putTank(data.tank); await loadTanks(); }
     const exists = await db.getJob(job.id);
@@ -3114,7 +3188,7 @@ async function importJobFile(file) {
     // One transaction: the device copy is only replaced once the whole file has been written.
     const photos = job.id === oldId ? data.photos || [] : copyPhotos(job, data.photos || []);
     await db.replaceJob(job, photos, exists && job.id === oldId ? oldId : null);
-    await loadJobs(); toast(`Opened ${file.name}`); await openJob(job.id);
+    await loadJobs(); toast(`Opened ${file.name}`); await openJob(job.id); checkStorage();
     return job.id;
   } catch (err) { toast('Could not open the file: ' + err.message); return null; }
 }
@@ -3163,6 +3237,19 @@ function askConfirm(msg, { ok = 'OK', cancel = 'Cancel', danger = false } = {}) 
   });
 }
 
+/** In-app dialog with several buttons: choices = [[key, label, cls?], …]. Resolves the key, or null on Esc. */
+function askChoice(msg, choices) {
+  return new Promise((resolve) => {
+    const d = $('#confirmDlg');
+    d.innerHTML = `<div class="cf"><p>${h(msg).replace(/\n/g, '<br>')}</p><div class="acts">${choices.map(([k, label, cls]) => `<button type="button" class="btn ${cls || ''}" data-cf="${h(k)}">${h(label)}</button>`).join('')}</div></div>`;
+    d.returnValue = '';
+    d.onclick = (e) => { const b = e.target.closest('[data-cf]'); if (b) d.close(b.dataset.cf); };
+    d.onclose = () => resolve(d.returnValue || null);
+    d.showModal();
+    $('.primary[data-cf]', d)?.focus();
+  });
+}
+
 let toastTimer;
 function toast(msg, action) {
   const t = $('#toast');
@@ -3187,12 +3274,15 @@ window.addEventListener('pagehide', flushNow);
 window.addEventListener('beforeprint', () => { if (S.view !== 'report' && S.job) { S._prevView = S.view; go('report'); } });
 window.addEventListener('afterprint', () => { if (S._prevView) { const v = S._prevView; S._prevView = null; go(v); } });
 
+/** Reload into the new version, saving first so nothing typed is lost. */
+async function appReload() { flushNow(); if (saveTimer) await flushSave(); location.reload(); }
+
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('./sw.js').then((reg) => {
     reg.addEventListener('updatefound', () => {
       const nw = reg.installing;
       nw?.addEventListener('statechange', () => {
-        if (nw.state === 'installed' && navigator.serviceWorker.controller) toast('A new version is available.', { label: 'Reload', fn: () => location.reload() });
+        if (nw.state === 'installed' && navigator.serviceWorker.controller) { $('#updateBtn').hidden = false; toast('A new version is available.', { label: 'Reload', fn: appReload }); }
       });
     });
   }).catch(() => { /* offline support unavailable */ });

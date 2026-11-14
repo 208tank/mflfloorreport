@@ -209,5 +209,85 @@ export default {
     });
     assert.equal(ok, true, 'the new cache holds the previous release of app.js');
     await ctx.close(); srv.close();
+  },
+
+  async 'job files: saving over a file someone else saved asks first; Dashboard stage changes merge'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    // a real file handle (Origin Private File System), remembered as this job's file
+    await page.evaluate(async () => {
+      const { db } = await import('./js/db.js');
+      const dir = await navigator.storage.getDirectory();
+      const hnd = await dir.getFileHandle('job.json', { create: true });
+      // Keep file handles in memory: reading a handle back from IndexedDB crashes headless Chrome.
+      const handles = new Map(), get = db.getMeta.bind(db), set = db.setMeta.bind(db);
+      db.getMeta = async (k) => (k.startsWith('fh:') ? handles.get(k) : get(k));
+      db.setMeta = async (k, v) => (k.startsWith('fh:') ? handles.set(k, v) : set(k, v));
+      await db.setMeta('fh:' + window.tfi.job().id, hnd);
+      window.__file = async (fn) => { const d = JSON.parse(await (await hnd.getFile()).text()); if (!fn) return d; fn(d); const w = await hnd.createWritable(); await w.write(JSON.stringify(d)); await w.close(); return d; };
+    });
+    const save = async () => { await page.evaluate(() => window.tfi.go('setup')); await page.keyboard.press('Control+s'); await page.waitForTimeout(500); };
+    await save();
+    assert.equal((await page.evaluate(() => window.__file())).rev, 1);
+
+    // someone else saves Rev 2
+    await page.evaluate(() => window.__file((d) => { d.rev = 2; d.job.rev = 2; d.job.savedAt = Date.now() + 1000; d.job.info.client = 'Theirs'; }));
+    await page.fill('[data-bind="info.client"]', 'Mine'); await page.keyboard.press('Tab');
+    await save();
+    assert.ok(await page.isVisible('#confirmDlg [data-cf="copy"]'), 'conflict prompt should appear');
+    await page.click('#confirmDlg [data-cf="cancel"]');
+    await page.waitForTimeout(200);
+    let f = await page.evaluate(() => window.__file());
+    assert.equal(f.job.info.client, 'Theirs', 'cancel must leave their file alone');
+    await save();
+    await page.click('#confirmDlg [data-cf="ok"]');
+    await page.waitForTimeout(500);
+    f = await page.evaluate(() => window.__file());
+    assert.equal(f.job.info.client, 'Mine');
+
+    // no conflict prompt when nothing changed since our own save
+    await save();
+    assert.equal(await page.isVisible('#confirmDlg[open]'), false);
+
+    // a teammate moves the card on their Dashboard (same rev): our next save keeps their stage
+    await page.evaluate(() => window.__file((d) => { d.job.status.stage = 'review'; d.job.status.history.push({ stage: 'review', at: Date.now() + 5000 }); }));
+    await save();
+    assert.equal(await page.isVisible('#confirmDlg[open]'), false);
+    f = await page.evaluate(() => window.__file());
+    assert.equal(f.job.status.stage, 'review');
+    assert.equal(await page.evaluate(() => window.tfi.job().status.stage), 'review');
+
+    // changing the stage here adds to the file's history instead of replacing it
+    const n = f.job.status.history.length;
+    await page.selectOption('[data-bind="status.stage"]', 'complete');
+    await page.waitForTimeout(400);
+    f = await page.evaluate(() => window.__file());
+    assert.equal(f.job.status.stage, 'complete');
+    assert.equal(f.job.status.history.length, n + 1);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'job files: a file from a newer app version is refused, not re-saved'({ browser, url, appPage }) {
+    const page = await appPage(browser, url, { demo: false });
+    const job = await page.evaluate(async () => { const { newJob } = await import('./js/model.js'); const j = newJob(); j.schema = 99; j.info.tankId = 'FUTURE'; return j; });
+    await page.evaluate(() => window.tfi.go('jobs'));
+    await page.setInputFiles('#openFileInput', { name: 'future.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ format: 'tank-floor-inspector', version: 1, job, photos: [], appVersion: '9.0.0' })) });
+    await page.waitForTimeout(300);
+    assert.match(await page.textContent('#toast'), /newer version of the app \(v9\.0\.0\)/);
+    assert.equal(await page.evaluate(async () => (await (await import('./js/db.js')).db.allJobs()).length), 0);
+    await page.context().close();
+  },
+
+  async 'storage: warns when the device is nearly full'({ browser, url, appPage }) {
+    const page = await appPage(browser, url, { demo: false });
+    await page.evaluate(() => { navigator.storage.estimate = async () => ({ usage: 850, quota: 1000 }); });
+    await page.evaluate(() => window.tfi.go('jobs'));
+    await page.click('[data-act="job-new"]');
+    await page.waitForTimeout(300);
+    assert.match(await page.textContent('#toast'), /85 % full/);
+    await page.evaluate(() => window.tfi.go('jobs'));
+    await page.waitForTimeout(200);
+    assert.match(await page.textContent('#storageInfo'), /Nearly full/);
+    await page.context().close();
   }
 };

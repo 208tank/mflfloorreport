@@ -13,10 +13,16 @@ export const defaultStatus = () => ({ stage: 'upcoming', planned: '', due: '', i
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
+/** Job data version this copy of the app understands. Bump it whenever a release changes the job
+ *  structure, so older installed copies refuse those files instead of re-saving them without the new data. */
+export const SCHEMA = 2;
+/** Job file (container) format version. */
+export const FILE_VERSION = 1;
+
 export function newJob(units = 'imperial') {
   const today = new Date().toISOString().slice(0, 10);
   return {
-    id: uid(), app: 'tank-floor-inspector', schema: 2, created: Date.now(), updated: Date.now(), units,
+    id: uid(), app: 'tank-floor-inspector', schema: SCHEMA, created: Date.now(), updated: Date.now(), units,
     info: { client: '', site: '', tankId: '', product: '', reportNo: '', workOrder: '', inspDate: today, zeroRef: 'N', mflTech: '', utTech: '', inspector: '', notes: '' },
     tank: { diameter: null, tBottom: units === 'metric' ? 6 : 6.35, tAnnular: null, bottomType: 'Lap welded', coating: 'None', cp: false, rpb: false, yearBuilt: '', lastInternal: '', code: 'API 650', edition: '', supp: '', sg: null, fillH: null, opTemp: null },
     layout: units === 'metric' ? { ...defaultLayout(), plateW: 2400, plateL: 9000, annW: 600 } : defaultLayout(),
