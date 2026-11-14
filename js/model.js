@@ -15,7 +15,7 @@ export const uid = () => Date.now().toString(36) + Math.random().toString(36).sl
 
 /** Job data version this copy of the app understands. Bump it whenever a release changes the job
  *  structure, so older installed copies refuse those files instead of re-saving them without the new data. */
-export const SCHEMA = 2;
+export const SCHEMA = 3;
 /** Job file (container) format version. */
 export const FILE_VERSION = 1;
 
@@ -27,7 +27,7 @@ export function newJob(units = 'imperial') {
     tank: { diameter: null, tBottom: units === 'metric' ? 6 : 6.35, tAnnular: null, bottomType: 'Lap welded', coating: 'None', cp: false, rpb: false, yearBuilt: '', lastInternal: '', code: 'API 650', edition: '', supp: '', sg: null, fillH: null, opTemp: null },
     layout: units === 'metric' ? { ...defaultLayout(), plateW: 2400, plateL: 9000, annW: 600 } : defaultLayout(),
     equip: {}, equipment: [],
-    calc: units === 'metric' ? { ...defaultCalc(), czDist: 75 } : defaultCalc(),
+    calc: units === 'metric' ? { ...defaultCalc(), czDist: 75, mrtBottom: 2.5, patchMargin: 50 } : defaultCalc(),
     plates: {}, indications: [], features: [], nozzles: [], shell: defaultShell(units), roof: defaultRoof(units), settle: defaultSettle(units),
     secs: defaultSecs(), summary: defaultSummary(), defSeq: 0, status: { ...defaultStatus(), history: [{ stage: 'upcoming', at: Date.now() }] }
   };
@@ -37,9 +37,16 @@ export function newJob(units = 'imperial') {
  *  older job is updated rather than finding a setting changed. Empty for current jobs. */
 export function migrationNotes(job) {
   const out = [];
-  if (job.calc?.patchMargin === 25.4) out.push('Patch plates now extend at least 2 in past the corrosion (was 1 in; API 653 9.10.1.1 b).');
+  if (job.calc?.patchMargin === 25.4) out.push('Patch plates now extend at least 2 in past the corrosion (was 1 in; API 653 §9.11.1.1 c).');
   if ((job.schema || 1) < 2 && (job.indications || []).length) out.push('Indication X / Y on plates cut by the shell are now measured from the plate edges; positions on the floor are unchanged.');
   if (!Array.isArray(job.equipment) && job.equip && Object.values(job.equip).some(Boolean)) out.push('MFL / UT equipment moved to the Equipment list.');
+  if ((job.schema || 1) < 3) {
+    const c = job.calc || {};
+    if (c.mrtAnnular === 2.54) out.push('Annular plate limit: the old 0.10 in default is replaced by the API 653 Table 4.5 / API 650 Table 5.1 value where it can be calculated (§4.4.6). Enter a limit to override.');
+    if (c.mflThresholdPct === undefined && (job.indications || []).length) out.push('UPr now includes the MFL threshold (default 20 % of nominal, API 653 §4.4.5.1 Note 1). Change it on the API 653 page.');
+    if ((job.indications || []).some((i) => i.repair === 'yes' || i.repairMethod)) out.push('Repaired soil-side locations now keep their corrosion rate in UPr unless "cause of corrosion removed" is ticked, and only welded repairs remove a location from RT (API 653 §4.4.5.1 Note 1, §4.4.5.5–6).');
+    out.push('Calculations follow the approved corrections (critical-zone limit per §4.4.5.4, rate basis, coating / CP checks). Results may differ from the last report.');
+  }
   return out;
 }
 
@@ -65,7 +72,9 @@ export function migrate(job) {
     out.equipment = equipFromLegacy(job.equip);
     for (const sec of Object.values(out.secs || {})) for (const n of sec.nde || []) if (!Array.isArray(n.equip)) n.equip = suggestEquip(out.equipment, n.method);
   } else out.equipment = job.equipment;
-  if (out.calc.patchMargin === 25.4) out.calc.patchMargin = 50.8; // v3.1 default was 1 in; API 653 9.10.1.1 b asks for 2 in
+  if (out.calc.patchMargin === 25.4) out.calc.patchMargin = 50.8; // v3.1 default was 1 in; API 653 §9.11.1.1 c asks for 2 in
+  // schema 3 (calculation review): the old 0.10 in annular default becomes "auto" (Table 4.5 / 5.1 value, §4.4.6)
+  if ((job.schema || 1) < 3) { if (job.calc?.mrtAnnular === 2.54) out.calc.mrtAnnular = null; }
   // schema 2: X/Y on shell-cut plates are measured from the plate edges, not the seam/shell point.
   // Convert older jobs so their indications stay where they were on the floor.
   if ((job.schema || 1) < 2) {
@@ -78,8 +87,8 @@ export function migrate(job) {
         it.x = Math.round(Math.max(0, l.X) * 10) / 10; it.y = Math.round(Math.max(0, l.Y) * 10) / 10;
       }
     } catch { /* leave as is */ }
-    out.schema = 2;
   }
+  out.schema = Math.max(job.schema || 1, SCHEMA);
   return out;
 }
 

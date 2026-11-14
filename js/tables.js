@@ -41,12 +41,22 @@ export const MATERIALS = [
   ["CSA G40.21 Gr. 44W", 44000, 65000, 27900, 30700, 30700, 33700, 29400000, 303, 448, 192, 212, 212, 232, 202706],
   ["CSA G40.21 Gr. 50W", 50000, 65000, 27900, 30700, 30700, 33700, 29400000, 345, 448, 192, 212, 212, 232, 202706],
   ["CSA G40.21 Gr. 50WT", 50000, 70000, 30000, 33000, 33000, 36300, 29400000, 345, 483, 207, 228, 228, 250, 202706],
+  ["CSA G40.21-13 Gr. 44W", 44000, 64000, 27400, 30200, 30200, 33200, 29400000, 300, 450, 193, 212, 212, 234, 202706],
+  ["CSA G40.21-13 Gr. 50WT", 50000, 65000, 27900, 30700, 30700, 33700, 29400000, 345, 448, 192, 212, 212, 232, 202706],
   ["Unknown", 30000, 55000, 23600, 26000, 26000, 27000, 29400000, 207, 379, 163, 179, 179, 186, 202706],
   ["ASTM A7", 33000, 60000, 25700, 28300, 28300, 29700, 29400000, null, null, null, null, null, null, 202706],
   ["ASTM A9", 30000, 55000, 21000, 21000, 21000, 21000, 29400000, null, null, null, null, null, null, 202706],
   ["ASTM A10", 30000, 55000, 23600, 26000, 26000, 27000, 29400000, null, null, null, null, null, null, 202706]
 ];
 export const MAT = new Map(MATERIALS.map((r) => [r[0], { name: r[0], Y: r[1], T: r[2], SdL: r[3], SdU: r[4], StL: r[5], StU: r[6], E: r[7], m: { Y: r[8], T: r[9], SdL: r[10], SdU: r[11], StL: r[12], StU: r[13], E: r[14] } }]));
+/** Notes on Table 4.1 values (C-28). The app follows the §4.3.3.1 / §4.3.3.2 rules where the printed table disagrees. */
+export const MAT_NOTES = {
+  'ASTM A516 Gr. 60': 'API 653 (2025) Table 4.1b prints 28,000 psi for upper-course St; 28,800 psi from the §4.3.3.2 rule (0.9Y) is used.',
+  'CSA G40.21 Gr. 44W': 'CSA G40.21-04 and earlier values (Table 4.1 note g).',
+  'CSA G40.21 Gr. 50WT': 'CSA G40.21-04 and earlier values (Table 4.1 note g).',
+  'CSA G40.21-13 Gr. 44W': 'CSA G40.21-13 values (Table 4.1 note h). Table 4.1b prints 30,700 psi for lower-course St; 30,200 psi from the §4.3.3.2 rule (0.472T) is used.',
+  'CSA G40.21-13 Gr. 50WT': 'CSA G40.21-13 values (Table 4.1 note h).'
+};
 export const RIVETED_S = 21000;          // riveted tanks: product and hydrostatic allowable (API 653 4.3.4)
 export const E_DEFAULT = 29400000;       // Young's modulus used throughout the workbook (psi) = 202,706 MPa
 export const PSI_MPA = 145.0377;
@@ -55,7 +65,7 @@ export const PSI_MPA = 145.0377;
 export function allowables(mat, Y, T, lower, riveted) {
   if (riveted) return { Sd: RIVETED_S, St: RIVETED_S, src: 'riveted (21,000 psi)' };
   const m = MAT.get(mat);
-  if (m && (Y == null || Y === m.Y) && (T == null || T === m.T)) return { Sd: lower ? m.SdL : m.SdU, St: lower ? m.StL : m.StU, src: 'Table 4.1' };
+  if (m && (Y == null || Y === m.Y) && (T == null || T === m.T)) return { Sd: lower ? m.SdL : m.SdU, St: lower ? m.StL : m.StU, SdMPa: lower ? m.m.SdL : m.m.SdU, StMPa: lower ? m.m.StL : m.m.StU, src: 'Table 4.1' + (MAT_NOTES[mat] ? ' — ' + MAT_NOTES[mat] : '') };
   const y = Y ?? m?.Y ?? 30000, t = Math.min(T ?? m?.T ?? 55000, 80000);
   return lower
     ? { Sd: Math.min(0.8 * y, 0.429 * t), St: Math.min(0.88 * y, 0.472 * t), src: '0.80Y / 0.429T; 0.88Y / 0.472T' }
@@ -186,7 +196,7 @@ function interpCurve(tbl, R, ci) {
   }
   return tbl[tbl.length - 1][ci];
 }
-/** Bew and Be (inches) for a tank diameter D (ft) and settled width R (ft); linear in R and in D (D < 20 ft uses 20, D > 160 ft uses 160). */
+/** Bew and Be (inches) for a tank diameter D (ft) and settled width R (ft); linear in R and in D (D < 20 ft uses 20 with `small` set for review, D > 160 ft uses 160). */
 export function edgeAllow(Dft, Rft) {
   if (!(Dft > 0) || !(Rft >= 0)) return { Bew: null, Be: null };
   const at = (tbl) => {
@@ -199,7 +209,8 @@ export function edgeAllow(Dft, Rft) {
     }
     return null;
   };
-  return { Bew: at(EDGE_BEW), Be: at(EDGE_BE) };
+  // Figures B.11 / B.12 have no curve below 20 ft: the 20 ft curve is used and flagged for engineering review (C-12)
+  return { Bew: at(EDGE_BEW), Be: at(EDGE_BE), small: Dft < EDGE_D[0] - 1e-9 };
 }
 
 /* ----------------------------------------------------- B.3.2.2 differential settlement K table --- */
@@ -222,6 +233,12 @@ export const T51B = { stress: [27000, 30000, 32000, 36000], rows: [[0.75, 0.236,
 export function annularMin(Dft, Hft, Gsg, t1in) {
   if (!(Dft > 0) || !(Hft > 1) || !(t1in > 0)) return null;
   const big = (Gsg ?? 1) >= 1, tbl = big ? T51B : T45;
+  // API 650 §5.5.3: Table 5.1 applies only for H × G ≤ 75 ft (23 m) and its rows stop at a 1.75 in first course;
+  // beyond either an elastic analysis is required.
+  if (big && (Hft * Math.max(Gsg ?? 1, 1) > 75 + 1e-9 || t1in > 1.75 + 1e-9)) {
+    const Sb = (2.6 * Dft * (Hft - 1) * Math.max(Gsg ?? 1, 1)) / t1in;
+    return { Sb, t: null, table: 'API 650 Table 5.1b', over: true, why: Hft * Math.max(Gsg ?? 1, 1) > 75 + 1e-9 ? 'H × G is more than 75 ft (API 650 §5.5.3)' : 'course 1 is thicker than 1.75 in' };
+  }
   const Sb = big ? (2.6 * Dft * (Hft - 1) * Math.max(Gsg ?? 1, 1)) / t1in : (2.34 * Dft * (Hft - 1)) / t1in;
   const row = tbl.rows.find((r) => t1in <= r[0] + 1e-9);
   const xs = tbl.stress, ys = row.slice(1);

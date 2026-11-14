@@ -1,7 +1,9 @@
 // Shell UT: courses, shell plates / vertical seams, UT stations, reading elevations and the roll-out.
 import { fmt, fromMm, u } from './units.js';
 import { nozzleUT } from './calc.js';
-import { courseDesigns } from './design.js';
+import { courseDesigns, designBasis } from './design.js';
+import { PSI_MPA } from './tables.js';
+const IN_MM = 25.4, FT_MM = 304.8;
 import { escText as esc } from './util.js';
 
 export const SPACING_MM = 32 * 304.8; // one UT station per 32 ft of circumference
@@ -155,15 +157,37 @@ export function fmtElev(z, job) {
 }
 
 /** Per-course summary across all stations and elevations in the course. */
+// C-18 / C-01: a single reading is compared with the t-min for its own location — the entered course t-min,
+// else §4.3.3.1 b) with H measured from the reading (no −1 ft). A reading below it is evaluated as a corroded
+// area per §4.3.2 (average t1 ≥ t-min over the averaging length; t2 ≥ 60 % of t-min); a reading below 60 % of
+// t-min fails §4.3.2.1 outright.
 export function courseSummary(job) {
   const locs = utLocations(job), courses = coursesWithElev(job), zs = readingElevations(job);
   return courses.map((c) => {
-    const vals = [];
-    for (const z of zs) { if (courseAt(courses, z)?.id !== c.id) continue; for (const l of locs) { const v = getReading(job, l.key, z); if (v !== null) vals.push(v); } }
-    const min = vals.length ? Math.min(...vals) : null;
+    const vals = []; let below = 0, fail = 0, worst = null;
     const tNom = +c.tNom > 0 ? +c.tNom : null, tMin = +c.tMin > 0 ? +c.tMin : null;
-    return { ...c, count: vals.length, min, lossPct: min !== null && tNom ? Math.max(0, ((tNom - min) / tNom) * 100) : null, status: min === null || !tMin ? '' : min < tMin - 1e-9 ? 'Below t-min' : 'OK' };
+    for (const z of zs) {
+      if (courseAt(courses, z)?.id !== c.id) continue;
+      const tLoc = c.tMinSet ?? localTmin(job, c, z) ?? tMin;
+      for (const l of locs) {
+        const v = getReading(job, l.key, z); if (v === null) continue;
+        vals.push(v);
+        if (tLoc && v < tLoc - 1e-9) { below++; if (v < 0.6 * tLoc - 1e-9) fail++; if (!worst || v / tLoc < worst.v / worst.t) worst = { v, t: tLoc, z, loc: l.label }; }
+      }
+    }
+    const min = vals.length ? Math.min(...vals) : null;
+    const status = min === null || !tMin ? '' : fail ? 'Below t-min' : below ? 'Evaluate per §4.3.2' : 'OK';
+    return { ...c, count: vals.length, min, below, fail, worst, lossPct: min !== null && tNom ? Math.max(0, ((tNom - min) / tNom) * 100) : null, status };
   });
+}
+
+/** §4.3.3.1 b): t-min for a location at elevation z (mm) — t = 2.6 H D G / (S E) with H from z to the fill height; SI form for metric jobs. */
+export function localTmin(job, c, z) {
+  const d = c.d, B = designBasis(job);
+  if (!d || !(B.D > 0) || !(B.G > 0) || !(d.Sd > 0) || !(d.Ej > 0)) return null;
+  const Hz = Math.max(0, B.fill - z);
+  if (job.units === 'metric') { const S = d.SdMPa ?? d.Sd / PSI_MPA; return Math.max((4.9 * (Hz / 1000) * (B.D / 1000) * B.G) / (S * d.Ej), 2.5); }
+  return Math.max((2.6 * (Hz / FT_MM) * (B.D / FT_MM) * B.G) / (d.Sd * d.Ej), 0.1) * IN_MM;
 }
 
 /* --------------------------------------------------------------------------- roll-out --- */

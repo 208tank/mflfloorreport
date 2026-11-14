@@ -7,7 +7,8 @@ const uidS = () => Date.now().toString(36) + Math.random().toString(36).slice(2,
 
 export const SEAL_STDS = {
   kb: {
-    key: 'kb', short: 'US EPA', name: 'US EPA 40 CFR 60 Subpart Kb / 40 CFR 63 Subpart WW',
+    key: 'kb', short: 'US EPA', name: 'US EPA 40 CFR 60 Subpart Kb (tanks built or modified 24 Jul 1984 – 4 Oct 2023) / 40 CFR 63 Subpart WW',
+    note: 'Tanks built, reconstructed or modified after 4 October 2023 fall under 40 CFR 60 Subpart Kc, which this check does not cover (Kc also does not allow a vapor-mounted primary seal).',
     pArea: 212, pWidth: 3.81, sArea: 21.2, sWidth: 1.27, strict: false, probe: '0.32 cm (1/8 in)',
     shoeAbove: 61, shoeBelow: 0.01, shoeHeight: null, ifrGaps: false,
     repairEFR: 'Repair the seal or empty the tank and remove it from service within 45 days of the inspection (§60.113b(b)(4)); a 30-day extension may be requested (Subpart WW allows up to two).',
@@ -19,7 +20,8 @@ export const SEAL_STDS = {
   ca: {
     key: 'ca', short: 'Canada', name: 'Canada SOR/2025-88 — Reduction in the Release of VOCs (Storage and Loading of Volatile Petroleum Liquids) Regulations',
     pArea: 200, pWidth: 4.0, sArea: 20, sWidth: 1.3, strict: true, probe: '0.3 cm',
-    shoeAbove: 10, shoeBelow: 10, shoeHeight: 30, ifrGaps: true,
+    shoeAbove: 10, shoeBelow: 10, shoeHeight: 30, ifrGaps: true,  // internal floating roof, s. 64(2)(b)(ii)
+    shoeEFR: { shoeAbove: 60, shoeBelow: 10, shoeHeight: null },     // external floating roof, s. 73(2)(b)
     repairEFR: 'Repair and confirm the repair, or remove the tank from service, within 60 days (s. 100(1)(a)); 90 days if the total seal gap area is under 1000 cm²/m and an API 653 inspector confirms within 30 days (s. 100(3)); remove from service within 45 days if the rim seal cannot be repaired in service (s. 100(4)).',
     repairIFR: 'Install a temporary vapour control system within 15 days and complete the repair within 180 days (s. 100(1)(b)).',
     freqEFR: [['Visual inspection of the roof surface', 1 / 12], ['Roof inspection and secondary seal gaps', 1], ['Roof, shell and primary seal gaps — API 653 inspector', 5]],
@@ -82,7 +84,7 @@ export function gapSummary(gaps, diameterMm) {
   return { n, areaCm2: area, perM: Dm > 0 ? area / Dm : null, wMaxCm: n ? wMax : 0, lenMm: len };
 }
 
-export const cm2mToIn2ft = (v) => v / 21.1678; // 1 in²/ft of diameter = 6.4516 cm² / 0.3048 m
+export const cm2mToIn2ft = (v) => v / (6.4516 / 0.3048); // 1 in²/ft of diameter = 6.4516 cm² / 0.3048 m = 21.1667 cm²/m
 
 export function stdLimits(seal, key) {
   const S = SEAL_STDS[key];
@@ -93,8 +95,10 @@ export function stdLimits(seal, key) {
 
 /** Evaluate the inspection against one standard. Returns rows of { item, value, limit, ok (true/false/null) } and an overall result. */
 export function sealEval(job, key) {
-  const seal = job.roof.seal, L = stdLimits(seal, key), D = +job.tank?.diameter || 0;
+  const seal = job.roof.seal, D = +job.tank?.diameter || 0;
   const ifr = job.roof.type === 'fixed-ifr';
+  let L = stdLimits(seal, key);
+  if (!ifr && L.shoeEFR) L = { ...L, ...L.shoeEFR }; // SOR/2025-88 s. 73(2)(b): external roofs have their own shoe rule
   const cmp = (v, lim) => (lim === null || lim === undefined || v === null ? null : L.strict ? v < lim : v <= lim + 1e-9);
   const p = gapSummary(seal.primary.gaps, D), s = gapSummary(seal.secondary.gaps, D);
   // an empty gap table only counts as "no gaps" when the inspector has ticked No gaps found
@@ -124,6 +128,7 @@ export function sealEval(job, key) {
   const overall = fails ? 'Not compliant' : unknown ? 'Incomplete' : 'Compliant';
   const warn = [];
   if (seal.checks?.floating?.r === 'defect') warn.push('Gap measurements must be taken with the roof floating freely — re-measure.');
+  if (key === 'kb' && L.note) warn.push(L.note);
   if (gapsApply && !p.n && !seal.primary.noGaps) warn.push('No primary seal gaps entered — add the gaps, or tick “No gaps found”.');
   if (gapsApply && seal.secondary.type !== 'None' && !s.n && !seal.secondary.noGaps) warn.push('No secondary seal gaps entered — add the gaps, or tick “No gaps found”.');
   return { key, L, rows, fails, overall, p, s, ifr, gapsApply, repair: ifr ? L.repairIFR : L.repairEFR, freq: ifr ? L.freqIFR : L.freqEFR, warn };

@@ -29,7 +29,8 @@ export const WELDS = [
   ['none', 'No weld / butt welds → Be'],
   ['angle', 'Lap weld at angle α → interpolate']
 ];
-export const DEP_K = (0.37 * IN) / FT; // BB = 0.37 R (in, ft) → mm per mm (≈ 0.031)
+export const DEP_K = (0.37 * IN) / FT; // BB = 0.37 R (in, ft) → mm per mm (≈ 0.0308)
+export const DEP_K_SI = 0.031;          // SI form of B.3.3: BB = 0.031 R
 
 export function defaultSettle(units = 'imperial') {
   return {
@@ -109,8 +110,13 @@ export function settleCalc(job) {
   const have = pts.filter((p) => p.z !== null);
   const L = D > 0 ? (Math.PI * D) / N : null;
   const ye = settleYE(job), Y = ye.Y, E = ye.E;
-  const Smax = L && H > 0 && Y && E ? (11 * L * L * Y) / (2 * E * H) : null;
-  const out = { N, pts, n: have.length, D, H, L, Y, E, Ysrc: ye.src, Smax, fit: null, warnings: [] };
+  // B.2.2.4 NOTE (C-23): with more points than required, fit with all of them but compute Si and Smax on a
+  // subset spaced ≤ 32 ft (≥ 8 points), chosen to include the point furthest from the fitted curve.
+  const req = autoN(job), kAuto = (() => { for (let k = Math.floor(N / Math.max(req, 8)); k > 1; k--) if (N % k === 0 && N / k >= 8 && (L || 0) * k <= 32 * FT + 1e-6) return k; return 1; })();
+  const kUser = num(s.subStep), k = kUser !== null && kUser >= 1 && N % kUser === 0 && N / kUser >= 8 ? Math.round(kUser) : kAuto;
+  const Lsub = L ? L * k : null;
+  const Smax = Lsub && H > 0 && Y && E ? (11 * Lsub * Lsub * Y) / (2 * E * H) : null;
+  const out = { N, pts, n: have.length, D, H, L, Lsub, k, Y, E, Ysrc: ye.src, Esrc: ye.Esrc, Smax, fit: null, warnings: [] };
   if (N < 8) out.warnings.push(`Only ${N} stations: API 653 asks for at least 8.`);
   if (L && L > 32 * FT + 1) out.warnings.push(`Station spacing ${(L / FT).toFixed(1)} ft is more than the 32 ft (9.8 m) maximum.`);
   if (have.length < 4) { out.status = have.length ? 'Incomplete' : 'No survey'; return out; }
@@ -133,11 +139,14 @@ export function settleCalc(job) {
     Syy += (p.z - mean) ** 2; SSE += p.U ** 2;
   }
   const R2 = Syy > 1e-9 ? (Syy - SSE) / Syy : 1;
-  // out-of-plane Si = Ui − ½(Ui−1 + Ui+1), neighbours around the circle
+  // out-of-plane Si = Ui − ½(Ui−k + Ui+k), neighbours in the subset around the circle
+  let off = 0;
+  if (k > 1) { let big = -1; pts.forEach((p, i) => { if (p.U !== undefined && Math.abs(p.U) > big) { big = Math.abs(p.U); off = i % k; } }); }
   let maxS = null, maxAt = null;
   pts.forEach((p, i) => {
-    const pr = pts[(i - 1 + N) % N], nx = pts[(i + 1) % N];
-    if (p.U === undefined || pr.U === undefined || nx.U === undefined) { p.S = null; return; }
+    p.inSub = i % k === off;
+    const pr = pts[(i - k + N) % N], nx = pts[(i + k) % N];
+    if (!p.inSub || p.U === undefined || pr.U === undefined || nx.U === undefined) { p.S = null; return; }
     p.S = p.U - 0.5 * (pr.U + nx.U);
     if (maxS === null || Math.abs(p.S) > Math.abs(maxS)) { maxS = p.S; maxAt = p.i; }
     p.ok = Smax !== null ? Math.abs(p.S) <= Smax + 1e-9 : null;
@@ -149,23 +158,27 @@ export function settleCalc(job) {
   out.fit = { a, b, c, fitAt, R2, amp, hiDeg, loDeg, tilt, slope, plumb, plumbLim, plumb650, maxS, maxAt, diff, mean };
   out.valid = R2 >= 0.9 - 1e-9;
   if (!out.valid) out.warnings.push(`R² = ${R2.toFixed(3)} is below 0.90: the cosine fit is not valid for the out-of-plane check (B.2.2.4). Take more readings, use a rigorous fit, or evaluate by B.3.2.2 / an engineer.`);
+  if (k > 1) out.warnings.push(`Si and Smax use every ${k === 2 ? 'second' : k + 'th'} station (${N / k} points, spacing ${(Lsub / FT).toFixed(1)} ft) as B.2.2.4 NOTE requires when extra points are taken; the fit uses all ${N}.`);
   out.oopOk = Smax === null || maxS === null ? null : out.valid ? Math.abs(maxS) <= Smax + 1e-9 : null;
   out.tiltOk = plumb === null ? null : plumb <= plumbLim + 1e-9;
+  // C-13: the B.3.2.2 arc results are shown for information only until the engineer confirms the cap
   out.arcs = arcEval(job, pts, out);
-  if (!out.valid && out.arcs.ok !== null) out.oopOk = out.arcs.ok;
   out.status = out.oopOk === false || out.tiltOk === false ? 'Not acceptable'
-    : !out.valid && out.arcs.ok === null ? 'Engineering evaluation required'
+    : !out.valid ? 'Engineering evaluation required'
       : out.oopOk === null || out.tiltOk === null || have.length < N ? 'Incomplete' : 'Acceptable';
-  if (!out.valid && out.arcs.ok !== null) out.warnings.push(`Out-of-plane settlement evaluated by the B.3.2.2 arc method instead: ${out.arcs.ok ? 'all arcs within the allowable' : 'one or more arcs exceed the allowable'}.`);
+  if ((!out.valid || out.oopOk === false) && out.arcs.ok !== null) out.warnings.push(`B.3.2.2 arc method (for information only, not used for acceptance): ${out.arcs.ok ? 'all arcs within the allowable' : 'one or more arcs exceed the allowable'}.`);
+  out.warnings.push('B.3.2 scope: the permissible values do not consider ridges, low nozzles or other discontinuities near the bottom, fold lines through roof columns, or combined shell and edge settlement; B.3.2.2 applies to API 650 carbon and stainless steel tanks in its diameter range. Otherwise a rigorous engineering assessment is required (B.3.2.4).');
   return out;
 }
 
 /** Y and E (MPa) for the settlement formulas: shell course 1 material (Table 4.1) unless entered. */
+// C-15: one documented Y (course 1 material) and the modulus for that material are used for both B.3.2.1 and
+// B.3.2.2, and both are shown in the report.
 export function settleYE(job) {
   const s = job.settle || {}, ye = shellYE(job);
-  if (s.yeAuto !== false) return { Y: toMPa(ye.Y1), E: toMPa(ye.E1), Ymin: toMPa(ye.Ymin), src: ye.src, auto: true };
+  if (s.yeAuto !== false) return { Y: toMPa(ye.Y1), E: toMPa(ye.E1), Ymin: toMPa(ye.Y1), src: ye.src, Esrc: `${ye.src} (carbon steel, ${(ye.E1 / 1e6).toFixed(1)} × 10⁶ psi)`, auto: true };
   const Y = num(s.Y) ?? toMPa(ye.Y1), E = num(s.E) ?? toMPa(ye.E1);
-  return { Y, E, Ymin: Y, src: 'entered', auto: false };
+  return { Y, E, Ymin: Y, src: 'entered', Esrc: 'entered', auto: false };
 }
 
 /** Roof type for the B.3.2.2 K value: fixed roof or open top (external floating roof / no roof). */
@@ -182,15 +195,21 @@ export function kRoofFixed(job) {
  */
 export function arcEval(job, pts, c) {
   const N = pts.length, D = c.D, H = c.H;
-  const out = { arcs: [], K: null, ok: null, fixed: kRoofFixed(job) };
+  const out = { arcs: [], K: null, ok: null, fixed: kRoofFixed(job), info: true };
   if (N < 4 || pts.some((p) => p.z === null) || !(D > 0) || !(H > 0)) return out;
   const K = kFor(D / FT, out.fixed); out.K = K;
-  const ye = settleYE(job), Y = ye.Ymin, E = ye.E;
+  const ye = settleYE(job), Y = ye.Y, E = ye.E;
+  // B.2.2.5.2 / Figure B.5: with a valid cosine fit the deflection is measured from the tilt plane
+  const zOf = (p) => (c.valid && p.U !== undefined ? p.U : p.z);
+  out.fromTilt = !!c.valid;
   let ends = (job.settle?.arcs || []).filter((a) => a && a.from >= 1 && a.to >= 1 && a.from !== a.to).map((a) => [a.from - 1, a.to - 1]);
   out.manual = ends.length > 0;
+  // B.2.2.5.3: a fold pattern about a diameter uses a settlement arc of 50 % of the circumference
+  out.fold = !!job.settle?.fold && N % 2 === 0;
+  if (out.fold && !out.manual) ends = Array.from({ length: N / 2 }, (_, i) => [i, i + N / 2]);
   if (!ends.length) {
     const hi = [];
-    for (let i = 0; i < N; i++) { const z = pts[i].z, zp = pts[(i - 1 + N) % N].z, zn = pts[(i + 1) % N].z; if (z >= zp - 1e-9 && z > zn + 1e-9 || (z > zp + 1e-9 && z >= zn - 1e-9)) hi.push(i); }
+    for (let i = 0; i < N; i++) { const z = zOf(pts[i]), zp = zOf(pts[(i - 1 + N) % N]), zn = zOf(pts[(i + 1) % N]); if (z >= zp - 1e-9 && z > zn + 1e-9 || (z > zp + 1e-9 && z >= zn - 1e-9)) hi.push(i); }
     if (!hi.length) return out;
     ends = hi.length === 1 ? [[hi[0], hi[0]]] : hi.map((h, k) => [h, hi[(k + 1) % hi.length]]);
   }
@@ -198,7 +217,7 @@ export function arcEval(job, pts, c) {
     const n = ((b - a + N) % N) || N; if (n < 2) continue;
     let maxDef = 0, at = null;
     for (let k = 1; k < n; k++) {
-      const i = (a + k) % N, chord = pts[a].z + ((pts[b].z - pts[a].z) * k) / n, d = chord - pts[i].z;
+      const i = (a + k) % N, chord = zOf(pts[a]) + ((zOf(pts[b]) - zOf(pts[a])) * k) / n, d = chord - zOf(pts[i]);
       if (Math.abs(d) > Math.abs(maxDef)) { maxDef = d; at = pts[i].i; }
     }
     const Sarc = n * c.L, allow = K === null || !Y || !E ? null : Math.min(K * (Sarc / FT) * (D / H) * (Y / E), 4) * IN;
@@ -222,13 +241,13 @@ export function edgeCurve(job, R) {
   if (!(R > 0)) return { Bew: null, Be: null, src: null };
   if ((job.settle?.curveMode || 'api') === 'manual') return { Bew: curveAt(job, R, 'Bew'), Be: curveAt(job, R, 'Be'), src: 'curve' };
   const a = edgeAllow((+job.tank?.diameter || 0) / FT, R / FT);
-  return { Bew: a.Bew === null ? null : a.Bew * IN, Be: a.Be === null ? null : a.Be * IN, src: 'table', beyond: a.Bew === null && R > 6 * FT };
+  return { Bew: a.Bew === null ? null : a.Bew * IN, Be: a.Be === null ? null : a.Be * IN, src: 'table', beyond: a.Bew === null && R > 6 * FT, small: !!a.small };
 }
 
 export function edgeEval(e, job) {
   const B = num(e.B), w = e.weld || 'par';
-  let Be = num(e.Be), Bew = num(e.Bew);
-  if (job && (Be === null || Bew === null)) { const cv = edgeCurve(job, num(e.R)); Bew = Bew ?? cv.Bew; Be = Be ?? cv.Be; }
+  let Be = num(e.Be), Bew = num(e.Bew), review = false;
+  if (job && (Be === null || Bew === null)) { const cv = edgeCurve(job, num(e.R)); review = !!cv.small && cv.src === 'table'; Bew = Bew ?? cv.Bew; Be = Be ?? cv.Be; }
   let allow = null, basis = '';
   if (w === 'par') { allow = Bew; basis = 'Bew (Fig. B.11)'; }
   else if (w === 'angle') {
@@ -239,10 +258,11 @@ export function edgeEval(e, job) {
   } else { allow = Be; basis = 'Be (Fig. B.12)'; }
   // screening: every area may first be checked against Bew (the lower curve)
   if (allow === null && Bew !== null && B !== null && B <= Bew + 1e-9) { allow = Bew; basis = 'Bew screening (B.3.4)'; }
-  if (B === null || allow === null || !(allow > 0)) return { B, allow, basis, pct: null, status: 'Incomplete', Bew, Be };
+  if (review && basis) basis += ' — 20 ft curve used for a tank under 20 ft: review by an engineer';
+  if (B === null || allow === null || !(allow > 0)) return { B, allow, basis, pct: null, status: 'Incomplete', Bew, Be, review };
   const pct = (B / allow) * 100;
   const status = B > allow + 1e-9 ? 'Exceeds' : pct >= 75 - 1e-9 ? 'NDE required' : 'Acceptable';
-  return { B, allow, basis, pct, status, Bew, Be };
+  return { B, allow, basis, pct, status, Bew, Be, review };
 }
 export const EDGE_NOTE = {
   'Acceptable': 'Within allowable.',
@@ -251,10 +271,10 @@ export const EDGE_NOTE = {
   'Incomplete': 'Enter B and R (and the weld angle α for angled lap welds). R over 6 ft is beyond the tabulated Fig. B.11 / B.12 curves — enter Bew / Be.'
 };
 
-export function depEval(d) {
+export function depEval(d, job) {
   const B = num(d.B), R = num(d.R);
   if (B === null || R === null || !(R > 0)) return { B, allow: null, pct: null, status: 'Incomplete' };
-  const allow = DEP_K * R, pct = (B / allow) * 100;
+  const allow = (job?.units === 'metric' ? DEP_K_SI : DEP_K) * R, pct = (B / allow) * 100; // C-27: SI form for metric jobs
   return { B, allow, pct, status: B > allow + 1e-9 ? 'Exceeds' : 'Acceptable' };
 }
 
@@ -448,7 +468,7 @@ export function settlePlanSVG(job, c, opts = {}) {
   // depressions
   for (const [i, d] of (job.settle?.dep || []).entries()) {
     const a = num(d.angle), r = num(d.r), rr = num(d.R); if (a === null || r === null || !(rr > 0)) continue;
-    const [x, y] = polar(r, a), ev = depEval(d);
+    const [x, y] = polar(r, a), ev = depEval(d, job);
     o.push(`<g class="sp-dep${ev.status === 'Exceeds' ? ' bad' : ''}"><circle cx="${f(x)}" cy="${f(-y)}" r="${f(rr)}" stroke-width="${f(s * 0.5)}" stroke-dasharray="${f(s * 1.5)} ${f(s)}"/><text x="${f(x)}" y="${f(-y)}" font-size="${f(s * 5)}" text-anchor="middle" dominant-baseline="central">D${i + 1}</text></g>`);
   }
   // edge settlement areas

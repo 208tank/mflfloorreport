@@ -1,11 +1,11 @@
-// Repair patch plates for floor indications that need repair (API 653 9.10.1).
+// Repair patch plates for floor indications that need repair (API 653 (2025) §9.11.1).
 //  - Each repair indication gets a lap-welded patch centred on it: the default size (12 × 12 in), larger
-//    where needed to extend at least the overlap allowance (API 653 9.10.1.1 b: 2 in) past the corrosion,
+//    where needed to extend at least 2 in past the corrosion (API 653 §9.11.1.1 c),
 //    or the size typed on the indication. Overlapping patches, and indications with the same Repair ID,
 //    are combined.
-//  - Patches that would come within 6 in of the shell become tombstone patches (API 653 9.10.1.2): turned so
+//  - Patches that would come within 6 in of the shell become tombstone patches (API 653 §9.11.1.2 b): turned so
 //    their sides run radially and meet the shell-to-bottom joint at 90°, extending to the shell.
-//  - Patches in the critical zone are checked against the 9.10.1.2 requirements.
+//  - Patches in the critical zone are checked against the §9.11.1.2 requirements.
 // All lengths in mm, floor coordinates (x right, y up, angle clockwise from the top).
 import { itemFloor, angleOf } from './geometry.js';
 import { coursePlates } from './shell.js';
@@ -17,7 +17,8 @@ export function patchDefaults(job) {
   const met = job.units === 'metric';
   return { autoPatch: true, patchL: met ? 300 : 12 * IN, patchW: met ? 300 : 12 * IN, patchMargin: met ? 50 : 2 * IN, patchT: met ? 6 : 0.25 * IN, patchGap: 0, opTempOK: null };
 }
-export const TOMB_DIST = 6 * IN;      // within 6 in of the shell → tombstone (9.10.1.2)
+export const TOMB_DIST = 6 * IN;      // within 6 in of the shell → tombstone (§9.11.1.2 b)
+export const CZ_LMAX = 24 * IN;       // max dimension along the shell in the critical zone (§9.11.1.2 i)
 export const CZ_TMAX = 0.25 * IN;     // max patch thickness in the critical zone
 export const CZ_SEAM = 3 * IN;        // fillet welds at least 3 in (or 5t) from shell vertical seams
 
@@ -110,44 +111,83 @@ export function patchList(job, layout, calc) {
   shapes.sort((a, b) => byNo(a) - byNo(b));
   const used = new Set(shapes.map((r) => r.group).filter(Boolean)); let n = 0;
   const cz = num(C.czDist) ?? 3 * IN;
-  return shapes.map((r) => {
+  const list = shapes.map((r) => {
     let id = r.group; if (!id) { do { id = `P-${++n}`; } while (used.has(id)); }
     const farR = Math.max(...r.poly.map(([x, y]) => Math.hypot(x, y)));
     const inCZ = R > 0 && farR > R - cz - 1;
     const c = (r.x0 + r.x1) / 2, d = (r.y0 + r.y1) / 2;
     const out = { ...r, id, inds: r.inds.map((q) => q.ind), cx: r.kind === 'tomb' ? unit(r.th)[0] * (R + r.rIn) / 2 : c, cy: r.kind === 'tomb' ? unit(r.th)[1] * (R + r.rIn) / 2 : d, auto: !r.manual, cz: inCZ, tAssumed: r.t == null, t: r.t ?? num(C.patchT) ?? 0.25 * IN };
-    out.checks = czChecks(job, layout, out, C, R);
-    out.status = !out.checks.length ? 'OK' : out.checks.some((k) => k.ok === false) ? 'Fails' : out.checks.some((k) => k.ok === null) ? 'Verify' : 'OK';
+    out.alongShell = alongShell(out, R);
+    out.checks = czChecks(job, layout, out, C, R, calc);
     return out;
   });
+  // §9.11.1.2 h): spacing between critical-zone patches ≥ ½ the along-shell dimension of the smaller patch
+  const czp = list.filter((p) => p.checks.length);
+  for (const p of czp) {
+    const others = czp.filter((q) => q !== p);
+    if (!others.length) continue;
+    let worst = null;
+    for (const q of others) {
+      const need = Math.min(p.alongShell, q.alongShell) / 2, gap = polyGap(p.poly, q.poly);
+      if (!worst || gap - need < worst.gap - worst.need) worst = { q, gap, need };
+    }
+    const inch = (mm) => (job.units === 'metric' ? `${Math.round(mm)} mm` : `${(mm / IN).toFixed(1)} in`);
+    p.checks.push({ item: 'Spacing to other critical-zone patches at least ½ the along-shell dimension of the smaller patch (§9.11.1.2 h)', ok: worst.gap >= worst.need - 0.5, note: `${inch(worst.gap)} to ${worst.q.id}; needs ${inch(worst.need)}` });
+  }
+  for (const p of list) p.status = !p.checks.length ? 'OK' : p.checks.some((k) => k.ok === false) ? 'Fails' : p.checks.some((k) => k.ok === null) ? 'Verify' : 'OK';
+  return list;
 }
 
-/** API 653 9.10.1.2 checks for a patch in the critical zone (empty list outside it). */
-function czChecks(job, layout, p, C, R) {
+/** Patch dimension roughly parallel to the shell: tombstone width, or the extent of a rectangle along the tangent at its centre. */
+function alongShell(p, R) {
+  if (p.kind === 'tomb') return p.W;
+  const th = angleOf(p.cx, p.cy), t = tang(th), proj = p.poly.map(([x, y]) => x * t[0] + y * t[1]);
+  return R > 0 ? Math.max(...proj) - Math.min(...proj) : Math.max(p.L, p.W);
+}
+/** Smallest distance between two polygons (0 if they touch or overlap their bounding boxes). */
+function polyGap(a, b) {
+  const seg = (p, q, r) => { const dx = r[0] - q[0], dy = r[1] - q[1], L = dx * dx + dy * dy; const t = L ? Math.max(0, Math.min(1, ((p[0] - q[0]) * dx + (p[1] - q[1]) * dy) / L)) : 0; return Math.hypot(p[0] - q[0] - t * dx, p[1] - q[1] - t * dy); };
+  if (overlapBB(bbox(a), bbox(b))) { const A = bbox(a), B = bbox(b); if (A.x0 < B.x1 && B.x0 < A.x1 && A.y0 < B.y1 && B.y0 < A.y1) return 0; }
+  let m = Infinity;
+  for (const [P, Q] of [[a, b], [b, a]]) for (const p of P) for (let i = 0; i < Q.length; i++) m = Math.min(m, seg(p, Q[i], Q[(i + 1) % Q.length]));
+  return m;
+}
+
+/** API 653 (2025) §9.11.1.2 checks for a patch in the critical zone (empty list outside it). */
+function czChecks(job, layout, p, C, R, calc) {
   if (!p.cz && p.kind !== 'tomb') return [];
   const ck = [], t1 = num(job.shell?.courses?.[0]?.tNom);
   const inch = (mm) => (job.units === 'metric' ? `${Math.round(mm)} mm` : `${(mm / IN).toFixed(2)} in`);
-  ck.push({ item: 'Patch thickness not more than 1/4 in (and API 650 4.2.10 toughness)', ok: p.t <= CZ_TMAX + 0.01, note: `${inch(p.t)}${p.tAssumed ? ' (default patch thickness)' : ''}` });
+  ck.push({ item: 'Patch thickness not more than 1/4 in (and API 650 4.2.10 toughness) (§9.11.1.2 a)', ok: p.t <= CZ_TMAX + 0.01, note: `${inch(p.t)}${p.tAssumed ? ' (default patch thickness)' : ''}` });
   const near = Math.max(...p.poly.map(([x, y]) => Math.hypot(x, y))) > R - TOMB_DIST;
-  ck.push({ item: 'Within 6 in of the shell: tombstone shape, sides meet the shell-to-bottom joint at about 90°', ok: !near || p.kind === 'tomb', note: p.kind === 'tomb' ? `Tombstone, sides radial at ${p.th.toFixed(1)}°` : near ? 'Rectangular patch near the shell' : 'More than 6 in from the shell' });
-  ck.push({ item: 'Extends at least 2 in past the corroded area (9.10.1.1)', ok: p.auto ? (num(C.patchMargin) ?? 0) >= 2 * IN - 0.5 : null, note: p.auto ? `Auto size, ${inch(num(C.patchMargin) ?? 0)} past the corrosion` : 'Size entered — check' });
-  // spacing from shell vertical seams (course 1)
-  if (p.kind === 'tomb' && job.shell?.courses?.length && +job.tank?.diameter > 0) {
+  ck.push({ item: 'Within 6 in of the shell: tombstone shape, sides meet the shell-to-bottom joint at about 90° (§9.11.1.2 b)', ok: !near || p.kind === 'tomb', note: p.kind === 'tomb' ? `Tombstone, sides radial at ${p.th.toFixed(1)}°` : near ? 'Rectangular patch near the shell' : 'More than 6 in from the shell' });
+  // C-10: the coverage check can only pass when the corrosion size is known
+  const sized = p.inds.every((i) => (num(i.len) || 0) > 0 || (num(i.wid) || 0) > 0);
+  ck.push({ item: 'Extends at least 2 in past the corroded area (§9.11.1.1 c)', ok: p.auto ? (sized ? (num(C.patchMargin) ?? 0) >= 2 * IN - 0.5 : null) : null, note: p.auto ? (sized ? `Auto size, ${inch(num(C.patchMargin) ?? 0)} past the recorded corrosion` : 'Corrosion size not recorded — verify the coverage') : 'Size entered — check' });
+  ck.push({ item: `Dimension along the shell not more than ${job.units === 'metric' ? '600 mm' : '24 in'} (§9.11.1.2 i)`, ok: p.alongShell <= CZ_LMAX + 0.5, note: `${inch(p.alongShell)} along the shell` });
+  // §9.11.1.2.2: the covered plate at the toe of the shell-to-bottom weld must meet §4.4.5 / §4.4.6 at the next inspection
+  const toe = p.inds.map((i) => calc?.per?.get(i.id)).filter((a) => a && a.distShell != null && a.distShell <= 1 * IN + 1e-6);
+  const toeBad = toe.filter((a) => a.projected != null && a.projected < a.limit - 1e-9);
+  ck.push({ item: 'Covered bottom plate at the toe of the shell-to-bottom weld meets §4.4.5 / §4.4.6 at the next inspection (§9.11.1.2.2)', ok: toeBad.length ? false : null, note: toeBad.length ? 'Corrosion at the weld toe will be below the minimum: replace the bottom plate welded to the shell (§9.11.1.2.4)' : 'Verify the plate thickness at the weld toe' });
+  // §9.11.1.2 g) / j): spacing from shell vertical seams applies to shells of unknown toughness
+  const tough = job.tank?.shellTough === 'known';
+  if (tough) { /* not required (§9.11.1.2 j) */ }
+  else if (p.kind === 'tomb' && job.shell?.courses?.length && +job.tank?.diameter > 0) {
     const cp = coursePlates(job, job.shell.courses[0], 0);
     const half = Math.asin(Math.min(1, p.W / 2 / R)) / DEG, sides = [p.th - half, p.th + half];
     const dist = Math.min(...cp.seams.flatMap((s) => sides.map((a) => { let d = Math.abs(((a - s + 540) % 360) - 180); return (d * DEG) * R; })));
     const inside = cp.seams.some((s) => { const d = ((s - p.th + 540) % 360) - 180; return Math.abs(d) < half; });
     const need = Math.max(CZ_SEAM, t1 ? 5 * t1 : 0);
-    ck.push({ item: `Fillet welds at least the greater of 3 in or 5t from shell vertical seams${t1 ? ` (5t = ${inch(5 * t1)})` : ''}`, ok: !inside && dist >= need - 0.5, note: inside ? 'A shell vertical seam falls within the patch width' : `Nearest course 1 seam ${inch(dist)} from a patch side` });
-  } else if (p.kind === 'tomb') ck.push({ item: 'Fillet welds at least 3 in (or 5t) from shell vertical seams', ok: null, note: 'Enter the shell courses to check' });
+    ck.push({ item: `Fillet welds at least the greater of 3 in or 5t from shell vertical seams${t1 ? ` (5t = ${inch(5 * t1)})` : ''} — shell of unknown toughness (§9.11.1.2 g)`, ok: !inside && dist >= need - 0.5, note: inside ? 'A shell vertical seam falls within the patch width' : `Nearest course 1 seam ${inch(dist)} from a patch side` });
+  } else if (p.kind === 'tomb') ck.push({ item: 'Fillet welds at least 3 in (or 5t) from shell vertical seams — shell of unknown toughness (§9.11.1.2 g)', ok: null, note: 'Enter the shell courses to check' });
   // over / butt-welded to an existing patch
   const feats = (job.features || []).filter((f) => f.type === 'patch' || f.type === 'repair');
   const hit = feats.find((f) => { const pos = layout ? itemFloor(layout, f) : null; if (!pos) return false; const A = +f.sizeA || 0, B = +f.sizeB || A; return overlapBB(p, { x0: pos.x - A / 2, x1: pos.x + A / 2, y0: pos.y - B / 2, y1: pos.y + B / 2 }, 3 * IN); });
-  ck.push({ item: 'Not over, or butt-welded to, an existing patch plate', ok: !hit, note: hit ? `Close to existing ${hit.label || 'patch'}` : 'No existing patch recorded here' });
-  ck.push({ item: 'Bottom plate under the perimeter weld at least 0.10 in (API 653 4.4)', ok: null, note: 'Verify by UT along the weld line' });
+  ck.push({ item: 'Not over, or butt-welded to, an existing patch plate (§9.11.1.2 d, e)', ok: !hit, note: hit ? `Close to existing ${hit.label || 'patch'}` : 'No existing patch recorded here' });
+  ck.push({ item: 'Bottom plate under the perimeter weld meets §4.4 (at least 0.10 in / 2.5 mm before welding) (§9.11.1.2 f)', ok: null, note: 'Verify by UT along the weld line' });
   const temp = num(job.tank?.opTemp), met = job.units === 'metric';
-  ck.push({ item: 'Operating temperature not over 200 °F / 93 °C (carbon steel)', ok: temp === null ? null : temp <= (met ? 93 : 200), note: temp === null ? 'Enter the maximum operating temperature in Tank setup' : `${temp} ${met ? '°C' : '°F'}` });
-  ck.push({ item: 'Perimeter weld two passes minimum, examined per API 653 (MT / PT)', ok: null, note: 'Welding requirement' });
+  ck.push({ item: 'Operating temperature not over 200 °F / 93 °C for carbon steel (100 °F / 38 °C for stainless steel) (§9.11.1.2.3)', ok: temp === null ? null : temp <= (met ? 93 : 200), note: temp === null ? 'Enter the maximum operating temperature in Tank setup' : `${temp} ${met ? '°C' : '°F'}` });
+  ck.push({ item: 'Perimeter weld two passes minimum, examined per §12.1.1.3 and §12.1.7.2 (§9.11.1.2 c)', ok: null, note: 'Welding requirement' });
   return ck;
 }
 

@@ -100,15 +100,25 @@ export function plateUT(job, p) {
   if (p.kind === 'annular') return { count: 0, min: null, tNom, tMin, lossPct: null, status: '' }; // pontoons: condition only, no UT
   const vals = PT5.map(([k]) => num(r[k])).filter((v) => v !== null);
   const min = vals.length ? Math.min(...vals) : null;
-  return { count: vals.length, min, tNom, tMin, lossPct: min !== null && tNom ? Math.max(0, ((tNom - min) / tNom) * 100) : null, status: min === null || !tMin ? '' : min < tMin - 1e-9 ? 'Below t-min' : 'OK' };
+  return { count: vals.length, min, tNom, tMin, lossPct: min !== null && tNom ? Math.max(0, ((tNom - min) / tNom) * 100) : null, status: roofStatus(min, tMin) };
 }
 
 /* --------------------------------------------------------------------------- fixed roof --- */
 
 export function pointStatus(job, pt) {
   const t = num(pt.t), tMin = num(job.roof.fixed.tMin), tNom = num(job.roof.fixed.tNom);
-  return { t, lossPct: t !== null && tNom ? Math.max(0, ((tNom - t) / tNom) * 100) : null, status: t === null || !tMin ? '' : t < tMin - 1e-9 ? 'Below t-min' : 'OK' };
+  return { t, lossPct: t !== null && tNom ? Math.max(0, ((tNom - t) / tNom) * 100) : null, status: roofStatus(t, tMin) };
 }
+/** API 653 (2025) §4.2.1.2 (C-20): plates with any hole through them, or averaging less than 0.09 in over 100 in²,
+ *  are repaired or replaced. A reading of 0 records a hole. A single reading below t-min is compared with the
+ *  limit; the 100 in² average decides (C-01). */
+export function roofStatus(t, tMin) {
+  if (t === null) return '';
+  if (t <= 0) return 'Hole through plate';
+  return !tMin ? '' : t < tMin - 1e-9 ? 'Below t-min' : 'OK';
+}
+export const roofBad = (st) => st === 'Below t-min' || st === 'Hole through plate';
+export const ROOF_NOTE = 'Single readings are compared with t-min; API 653 §4.2.1.2 applies to the average over any 100 in² (645 cm²), and any hole through a roof plate requires repair or replacement. Enter 0 for a hole.';
 
 /* ----------------------------------------------------------------------------- drawings --- */
 

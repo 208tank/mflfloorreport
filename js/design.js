@@ -33,9 +33,14 @@ export function courseDesigns(job) {
     const al = allowables(matl, num(c.Y), num(c.T), i < 2, riv);
     const Ej = num(c.E) ?? jointE(jKey) ?? 1;
     const Hc = Math.max(0, B.fill - z0) / FT; // ft of liquid above the course bottom
+    const SdMPa = al.SdMPa ?? al.Sd / PSI_MPA, StMPa = al.StMPa ?? al.St / PSI_MPA;
     let tmin = null;
-    if (B.D > 0 && B.G > 0 && al.Sd > 0 && Ej > 0) tmin = Math.max((2.6 * Math.max(0, Hc - 1) * (B.D / FT) * B.G) / (al.Sd * Ej), 0.1) * IN;
-    return { id: c.id, no: i + 1, z0, z1: z, matl, known: !!m, Y, T, Emod, Sd: al.Sd, St: al.St, sSrc: al.src, jKey, Ej, riveted: riv, Hc, tmin };
+    if (B.D > 0 && B.G > 0 && al.Sd > 0 && Ej > 0) {
+      tmin = job.units === 'metric' // C-27: SI form for metric jobs, t = 4.9 D (H − 0.3) G / (S E) ≥ 2.5 mm
+        ? Math.max((4.9 * (B.D / 1000) * Math.max(0, (B.fill - z0) / 1000 - 0.3) * B.G) / (SdMPa * Ej), 2.5)
+        : Math.max((2.6 * Math.max(0, Hc - 1) * (B.D / FT) * B.G) / (al.Sd * Ej), 0.1) * IN;
+    }
+    return { id: c.id, no: i + 1, z0, z1: z, matl, known: !!m, Y, T, Emod, Sd: al.Sd, St: al.St, SdMPa, StMPa, sSrc: al.src, jKey, Ej, riveted: riv, Hc, tmin };
   });
 }
 
@@ -43,6 +48,10 @@ export function courseDesigns(job) {
 export function fillFromT(job, d, tmm) {
   const B = designBasis(job);
   if (!(B.D > 0) || !(tmm > 0)) return { prod: null, hydro: null };
+  if (job.units === 'metric') { // SI forms: H = S E t / (4.9 D G) + 0.3; Ht = St E t / (4.9 D) + 0.3 (m)
+    const Dm = B.D / 1000, Sd = d.SdMPa ?? d.Sd / PSI_MPA, St = d.StMPa ?? d.St / PSI_MPA;
+    return { prod: B.G > 0 ? ((Sd * d.Ej * tmm) / (4.9 * Dm * B.G) + 0.3) * 1000 + d.z0 : null, hydro: ((St * d.Ej * tmm) / (4.9 * Dm) + 0.3) * 1000 + d.z0 };
+  }
   const t = tmm / IN, Dft = B.D / FT;
   const prod = B.G > 0 ? ((d.Sd * d.Ej * t) / (2.6 * Dft * B.G) + 1) * FT + d.z0 : null;
   const hydro = ((d.St * d.Ej * t) / (2.6 * Dft) + 1) * FT + d.z0;
