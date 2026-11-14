@@ -727,6 +727,23 @@ export const CASES = [
     }
   },
 
+  {
+    id: 'V-56', area: 'Rim seal', units: 'metric', basis: 'equation',
+    title: 'US EPA Subpart Kb external-roof limits (61 cm shoe; gaps "shall not exceed")',
+    input: 'External floating roof, Kb only. Mechanical shoe 60 cm above the liquid, into the liquid. Primary widest gap exactly 3.81 cm; secondary widest gap exactly 1.27 cm.',
+    steps: ['§60.113b(b)(4)(i): shoe at least 61 cm above the liquid → 60 cm fails', '"Shall not exceed" 3.81 cm / 1.27 cm → a gap of exactly the limit passes', '§60.113b(b)(3): area divided by the nominal diameter'],
+    expected: { shoeOk: false, pWidthOk: true, sWidthOk: true }, tol: null, unit: '',
+    source: '40 CFR 60.113b(b)(3), (b)(4)',
+    run() {
+      const job = newJob('metric'); job.tank.diameter = 30000; job.roof.type = 'efr';
+      job.roof.seal.std = { kb: true, ca: false, custom: false };
+      Object.assign(job.roof.seal.primary, { type: 'Mechanical shoe', shoeAbove: 600, shoeBelow: 100, gaps: [{ id: 'p', len: 1000, wAvg: 38.1, wMax: 38.1 }] });
+      job.roof.seal.secondary.gaps = [{ id: 's', len: 100, wAvg: 12.7, wMax: 12.7 }];
+      const ev = sealEval(job, 'kb'), f = (re) => ev.rows.find((r) => re.test(r.item));
+      return { shoeOk: f(/top above liquid/)?.ok, pWidthOk: f(/Primary seal — widest/)?.ok, sWidthOk: f(/Secondary seal — widest/)?.ok };
+    }
+  },
+
   /* ------------------------------------------------------------------- repair patches --- */
   {
     id: 'V-43', area: 'Patch plates', units: 'imperial', basis: 'equation',

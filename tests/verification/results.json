@@ -1660,6 +1660,44 @@
   ]
  },
  {
+  "id": "V-56",
+  "area": "Rim seal",
+  "units": "metric",
+  "basis": "equation",
+  "title": "US EPA Subpart Kb external-roof limits (61 cm shoe; gaps \"shall not exceed\")",
+  "input": "External floating roof, Kb only. Mechanical shoe 60 cm above the liquid, into the liquid. Primary widest gap exactly 3.81 cm; secondary widest gap exactly 1.27 cm.",
+  "steps": [
+   "§60.113b(b)(4)(i): shoe at least 61 cm above the liquid → 60 cm fails",
+   "\"Shall not exceed\" 3.81 cm / 1.27 cm → a gap of exactly the limit passes",
+   "§60.113b(b)(3): area divided by the nominal diameter"
+  ],
+  "tol": null,
+  "unit": "",
+  "source": "40 CFR 60.113b(b)(3), (b)(4)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "shoeOk",
+    "expected": "false",
+    "actual": "false",
+    "ok": true
+   },
+   {
+    "key": "pWidthOk",
+    "expected": "true",
+    "actual": "true",
+    "ok": true
+   },
+   {
+    "key": "sWidthOk",
+    "expected": "true",
+    "actual": "true",
+    "ok": true
+   }
+  ]
+ },
+ {
   "id": "V-43",
   "area": "Patch plates",
   "units": "imperial",
