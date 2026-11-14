@@ -298,6 +298,67 @@ export default {
     await page.context().close();
   },
 
+  async 'recovery: changes that never reached the device are offered back after the tab is killed'({ browser, url, appPage }) {
+    const ctx = await browser.newContext({ serviceWorkers: 'block' });
+    await ctx.addInitScript(() => { window.__tfiAliveMs = 600; });
+    const a = await appPage(browser, url, { ctx });
+    const id = await a.evaluate(() => window.tfi.job().id);
+    await a.waitForFunction(() => document.querySelector('#saveState').textContent === 'Saved locally', null, { timeout: 10000 }).catch(() => {});
+    await a.evaluate(() => { IDBObjectStore.prototype.put = function () { throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); }; });
+    await a.evaluate(() => { window.tfi.job().info.client = 'Recovered client'; window.tfi.go('shell'); window.tfi.commit(); });
+    await a.waitForFunction(() => /^Not saved/.test(document.querySelector('#saveState').textContent));
+    await a.close({ runBeforeUnload: false }); // the tab dies with the change only in memory and the journal
+    await new Promise((r) => setTimeout(r, 900));
+    const b = await ctx.newPage(); b.errors = []; b.on('pageerror', (e) => b.errors.push(String(e)));
+    await b.goto(url);
+    await b.waitForSelector('#confirmDlg[open] [data-cf="restore"]', { timeout: 10000 });
+    const msg = await b.textContent('#confirmDlg');
+    assert.match(msg, /closed before some changes reached this device/);
+    assert.match(msg, /TK-101/); assert.match(msg, /Shell/);
+    await b.click('#confirmDlg [data-cf="restore"]');
+    await b.waitForFunction(() => window.tfi?.job());
+    const r = await b.evaluate(async (jid) => { const { db } = await import('./js/db.js'); const revs = await db.jobRevisions(jid); return { client: (await db.getJob(jid)).info.client, open: window.tfi.job().info.client, rev: revs.at(-1)?.reason, prevClient: revs.at(-1)?.job.info.client, journal: Object.keys(localStorage).filter((k) => k.startsWith('tfi-journal:')) }; }, id);
+    assert.equal(r.client, 'Recovered client');
+    assert.equal(r.open, 'Recovered client');
+    assert.equal(r.rev, 'before-replace', 'the device copy before recovery is kept as a revision');
+    assert.notEqual(r.prevClient, 'Recovered client');
+    assert.deepEqual(r.journal, []);
+    // not offered again
+    await b.reload(); await b.waitForFunction(() => window.tfi?.job()); await b.waitForTimeout(500);
+    assert.equal(await b.isVisible('#confirmDlg[open]'), false);
+    assert.deepEqual(b.errors, []);
+    await ctx.close();
+  },
+
+  async 'recovery: discarding keeps the device copy; an open tab and a clean close leave nothing to recover'({ browser, url, appPage }) {
+    const ctx = await browser.newContext({ serviceWorkers: 'block' });
+    await ctx.addInitScript(() => { window.__tfiAliveMs = 600; });
+    const a = await appPage(browser, url, { ctx });
+    const id = await a.evaluate(() => window.tfi.job().id);
+    const before = await a.evaluate(async (jid) => { for (let i = 0; i < 40 && document.querySelector('#saveState').textContent !== 'Saved locally'; i++) await new Promise((r) => setTimeout(r, 100)); return (await (await import('./js/db.js')).db.getJob(jid)).info.client; }, id);
+    // a clean change: saved, so nothing is left in the journal
+    await a.evaluate(() => { window.tfi.job().info.site = 'Clean'; window.tfi.commit(); });
+    await a.waitForFunction(() => document.querySelector('#saveState').textContent === 'Saved locally');
+    assert.deepEqual(await a.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('tfi-journal:'))), []);
+    // a pending change in a tab that stays open is not treated as a crash by a second tab
+    await a.evaluate(() => { IDBObjectStore.prototype.put = function () { throw new DOMException('full', 'QuotaExceededError'); }; window.tfi.job().info.client = 'Pending in A'; window.tfi.commit(); });
+    await a.waitForFunction(() => /^Not saved/.test(document.querySelector('#saveState').textContent));
+    const b = await ctx.newPage(); await b.goto(url); await b.waitForFunction(() => window.tfi && document.querySelector('#main').children.length);
+    await b.waitForTimeout(1200);
+    assert.equal(await b.isVisible('#confirmDlg[open]'), false, 'tab A is still running');
+    await b.close();
+    // now tab A dies; the next start offers the change, and Discard keeps the device copy
+    await a.close({ runBeforeUnload: false });
+    await new Promise((r) => setTimeout(r, 900));
+    const c = await ctx.newPage(); await c.goto(url);
+    await c.waitForSelector('#confirmDlg[open] [data-cf="discard"]', { timeout: 10000 });
+    await c.click('#confirmDlg [data-cf="discard"]');
+    await c.waitForFunction(() => window.tfi?.job());
+    assert.equal(await c.evaluate(async (jid) => (await (await import('./js/db.js')).db.getJob(jid)).info.client, id), before);
+    assert.deepEqual(await c.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('tfi-journal:'))), []);
+    await ctx.close();
+  },
+
   async 'offline: an update never caches stale files from the browser HTTP cache'({ browser, serve }) {
     const { readFile } = await import('node:fs/promises');
     const root = new URL('../../', import.meta.url);

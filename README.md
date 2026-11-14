@@ -7,6 +7,21 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Data integrity upgrade — stage 3: recovery after an unexpected close (v3.10.0)
+
+On every change the app also keeps a recovery copy of the open job in the browser's local storage
+(`js/journal.js`), which is written instantly, and removes it as soon as the change is confirmed on the
+device. If the browser or tablet shuts down, the tab is killed, or device writes were failing at the time,
+the copy is still there on the next start, and the app asks:
+
+> The app closed before some changes reached this device. TK-101 — 2 changes (Shell), last made … Restore them?
+
+**Restore** puts the changes back; **Discard** keeps the job as it is on the device. Either way, the device
+copy is first kept as a revision. Each open tab keeps a heartbeat, so changes still being saved in another
+open window are never mistaken for a crash. Photos are written to the device straight away and are not
+part of the recovery copy. If the browser refuses the recovery copy (storage full), the app says so once and
+carries on saving normally.
+
 ## Data integrity upgrade — stage 2: unsaved change detection (v3.9.0)
 
 The header shows two separate things:

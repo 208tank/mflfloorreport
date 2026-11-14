@@ -2,6 +2,7 @@
 import { db, requestPersistence, dbConfig } from './db.js';
 import { pendingSteps } from './migrations.js';
 import { createSaver, saveErrorText } from './saver.js';
+import { createJournal, recoveryDiff } from './journal.js';
 import { sha256 } from './util.js';
 import { u, toMm, inVal, fmt, fmtRate, unitLabel, num, UNITS } from './units.js';
 import { buildLayout, stackSections, suggestCount, halfChord, plateAt, toLocal, itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
@@ -29,7 +30,7 @@ import { esc as h } from './util.js';
 import { $, $$, toast, askConfirm, askChoice } from './ui.js';
 import { jobCard, indCount } from './cards.js';
 
-const APP_VERSION = '3.9.0';
+const APP_VERSION = '3.10.0';
 
 const S = {
   jobs: [], tanks: [], reg: { q: '', open: new Set() }, job: null, layout: null, calc: null, photos: [], company: {},
@@ -90,6 +91,10 @@ function recompute() {
 
 /* Automatic saving (saver.js): one write at a time, retried on failure, never silent. */
 const saver = createSaver({ write: writeCurrent, onState: showSaveState });
+/* Crash recovery (stage 3): a synchronous copy of the open job until its device write commits. */
+const journal = createJournal({ aliveMs: globalThis.__tfiAliveMs || 10000 });
+journal.heartbeat(); setInterval(() => journal.heartbeat(), Math.max(200, (globalThis.__tfiAliveMs || 10000) / 3));
+let journalWarned = false;
 async function writeCurrent() {
   const job = S.job; if (!job) return;
   if (job.regEdit) {
@@ -104,6 +109,7 @@ async function writeCurrent() {
 let saveErrToast = 0;
 function showSaveState(st, err) {
   const reg = !!S.job?.regEdit;
+  if (st === 'saved' && S.job && !reg && !saver.pending()) journal.clear(S.job.id);
   const txt = { idle: '', pending: 'Saving…', saving: 'Saving…', saved: reg ? 'Saved to registry' : 'Saved locally', retrying: 'Not saved — retrying', error: 'Not saved' }[st] ?? '';
   setSaveState(txt);
   if ((st === 'retrying' || st === 'error') && Date.now() - saveErrToast > 8000) {
@@ -121,6 +127,7 @@ function scheduleSave() {
     j.edits = (j.edits || 0) + 1;
     const area = VIEW_AREA[S.view] || 'Other'; if (!(j.editAreas || []).includes(area)) j.editAreas = [...(j.editAreas || []), area];
   }
+  if (!j.regEdit && !journal.put(j) && !journalWarned) { journalWarned = true; toast('Crash protection is paused: the browser refused to store a recovery copy (storage full). Changes are still saved to the device as normal.'); }
   saver.touch();
   showFileState();
 }
@@ -178,6 +185,25 @@ async function baselineRevisions() {
     await addRevision(j, 'migration', 'Baseline at upgrade to the data integrity version');
   }
   await db.setMeta('baseline:v4', Date.now());
+}
+
+/** Changes left in the recovery journal by a tab that closed before they reached the device. */
+async function recoverAfterCrash() {
+  let restored = 0;
+  for (const e of journal.orphans()) {
+    if (e.broken) { journal.remove(e.key.slice('tfi-journal:'.length)); continue; }
+    const stored = await db.getJob(e.job.id), d = recoveryDiff(e, stored);
+    if (d.action !== 'offer') { journal.remove(e.job.id); continue; }
+    const name = e.job.info?.tankId || 'Untitled tank';
+    const choice = await askChoice(`The app closed before some changes reached this device.\n\n${name}${e.job.info?.client ? ' — ' + e.job.info.client : ''}\n${d.n} change${d.n === 1 ? '' : 's'}${d.areas.length ? ' (' + d.areas.join(', ') + ')' : ''}, last made ${new Date(d.at).toLocaleString()}.\n\nRestore them? The job as it is on the device now is kept as a revision either way.`, [['discard', 'Discard these changes', 'danger'], ['restore', 'Restore them', 'primary']]);
+    if (choice === 'restore') {
+      await addRevision(stored, 'before-replace', 'Before restoring changes after an unexpected close');
+      await db.putJob(migrate(e.job));
+      restored++;
+    }
+    if (choice === 'restore' || choice === 'discard') journal.remove(e.job.id); // no answer (dialog dismissed): ask again next time
+  }
+  if (restored) { await loadJobs(); toast(`Restored the changes to ${restored} job${restored > 1 ? 's' : ''}.`); }
 }
 
 function dbFailed(e) {
@@ -3383,7 +3409,7 @@ function flushNow() {
   if (saver.pending()) flushSave();
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushNow(); });
-window.addEventListener('pagehide', flushNow);
+window.addEventListener('pagehide', () => { flushNow(); if (!saver.pending()) journal.end(); });
 // Closing while a change is not yet on the device: ask first (the browser shows its own wording).
 window.addEventListener('beforeunload', (e) => { flushNow(); if (saver.pending()) { e.preventDefault(); e.returnValue = ''; } });
 window.addEventListener('beforeprint', () => { if (S.view !== 'report' && S.job) { S._prevView = S.view; go('report'); } });
@@ -3408,6 +3434,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   try { S.company = (await db.getMeta('company')) || {}; }
   catch (e) { dbFailed(e); return; }
   await loadJobs(); await loadTanks();
+  await recoverAfterCrash().catch((e) => console.warn('Recovery check', e));
   setTimeout(() => baselineRevisions().catch((e) => console.warn('Baseline revisions', e)), 1500);
   const last = await db.getMeta('lastJob');
   if (last && S.jobs.some((j) => j.id === last)) await openJob(last, 'dash');
