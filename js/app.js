@@ -3255,6 +3255,7 @@ async function uploadLoader(file) {
   toast(`Updated ${res.total} reading${res.total === 1 ? '' : 's'} from ${file.name}.`);
 }
 
+window.addEventListener('tfi-db-blocked', () => toast('Close any other Tank Floor Inspector windows or tabs to finish updating the app.'));
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installEvt = e; renderHeader(); });
 window.addEventListener('online', () => { const n = $('#netState'); if (n) n.textContent = 'Online'; });
 window.addEventListener('offline', () => { const n = $('#netState'); if (n) n.textContent = 'Offline'; });

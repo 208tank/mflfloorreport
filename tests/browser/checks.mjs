@@ -494,5 +494,18 @@ export default {
     assert.equal(await page.isVisible('#toast'), false);
     assert.deepEqual(page.errors, []);
     await page.context().close();
+  },
+
+  async 'storage: an old version open in another window delays the upgrade with a message, then it completes'({ browser, url }) {
+    const ctx = await browser.newContext({ serviceWorkers: 'block' });
+    const old = await ctx.newPage();
+    await old.goto(url + 'icons/icon.svg');
+    await old.evaluate(() => new Promise((res) => { const q = indexedDB.open('tank-floor-inspector', 2); q.onupgradeneeded = () => { const d = q.result; d.createObjectStore('jobs', { keyPath: 'id' }); d.createObjectStore('photos', { keyPath: 'id' }).createIndex('jobId', 'jobId'); d.createObjectStore('meta', { keyPath: 'key' }); d.createObjectStore('tanks', { keyPath: 'id' }); }; q.onsuccess = () => { window.__keep = q.result; res(); }; }));
+    const page = await ctx.newPage();
+    await page.goto(url);
+    await page.waitForFunction(() => /Close any other Tank Floor Inspector windows/.test(document.querySelector('#toast')?.textContent || ''), null, { timeout: 10000 });
+    await old.close();
+    await page.waitForFunction(() => window.tfi && document.querySelector('#main').children.length, null, { timeout: 10000 });
+    await ctx.close();
   }
 };

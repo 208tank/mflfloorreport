@@ -35,6 +35,8 @@ function open() {
       resolve(db);
     };
     req.onerror = () => reject(req.error);
+    // an older version of the app is open in another window and hasn't let go of the database yet
+    req.onblocked = () => globalThis.dispatchEvent?.(new Event('tfi-db-blocked'));
   });
   return dbp;
 }
