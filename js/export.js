@@ -179,8 +179,8 @@ export function settleCSV(job) {
   rows.push(['Edge settlement', 'Angle (deg)', `R (${U.big})`, `B (${U.small})`, 'Weld', 'Alpha (deg)', `Bew (${U.small})`, `Be (${U.small})`, `Allowable (${U.small})`, 'B/allow (%)', 'Status', 'Notes']);
   st.edge.forEach((x, i) => { const ev = edgeEval(x, job); rows.push([`E${i + 1}`, x.angle ?? '', bg(x.R), sm(x.B), x.weld, x.alpha ?? '', sm(ev.Bew), sm(ev.Be), sm(ev.allow), r(ev.pct, 0), ev.status, x.notes || '']); });
   rows.push([]);
-  rows.push(['Depression', 'Angle (deg)', `From centre (${U.big})`, `R (${U.big})`, `Depth B (${U.small})`, `Allowable 0.37R (${U.small})`, 'B/allow (%)', 'Status', 'Notes']);
-  st.dep.forEach((x, i) => { const ev = depEval(x); rows.push([`D${i + 1}`, x.angle ?? '', bg(x.r), bg(x.R), sm(x.B), sm(ev.allow), r(ev.pct, 0), ev.status, x.notes || '']); });
+  rows.push(['Depression', 'Angle (deg)', `From centre (${U.big})`, `R (${U.big})`, `Depth B (${U.small})`, `Allowable ${job.units === 'metric' ? '0.031R' : '0.37R'} (${U.small})`, 'B/allow (%)', 'Status', 'Notes']);
+  st.dep.forEach((x, i) => { const ev = depEval(x, job); rows.push([`D${i + 1}`, x.angle ?? '', bg(x.r), bg(x.R), sm(x.B), sm(ev.allow), r(ev.pct, 0), ev.status, x.notes || '']); });
   return toCSV(rows);
 }
 

@@ -5,7 +5,7 @@ import { fmt } from './units.js';
 import { esc } from './util.js';
 import { nozzleUT, nozzleWall } from './calc.js';
 import { courseSummary, coursesWithElev } from './shell.js';
-import { hasFixed, hasFloating, floatingLayout, plateUT, pointStatus } from './roof.js';
+import { hasFixed, hasFloating, floatingLayout, plateUT, pointStatus, roofBad } from './roof.js';
 import { sealEval, activeStds } from './seal.js';
 import { settleCalc, profileEval, edgeEval, depEval, stations, hasSettle } from './settle.js';
 import { designBasis, fillFromT } from './design.js';
@@ -112,12 +112,12 @@ export function findings(job, layout, calc) {
       for (const r of calc?.regions || []) {
         if (r.MRT == null) continue;
         f.lines.push(`${r.label}: MRT ${t(r.MRT)} at O<sub>r</sub> = ${calc.Or} yr (minimum ${t(r.limit)}) — ${r.ok ? 'acceptable' : 'not acceptable'}.`);
-        if (r.ok === false) add('floor', { key: 'floor-mrt-' + r.name, finding: `${r.label}: minimum remaining thickness ${t(r.MRT)} at the next internal inspection (${calc.Or} yr) is below the ${t(r.limit)} minimum (API 653 4.4.7).`, loc: r.label, action: 'Repair the thinned areas or shorten the internal inspection interval so the bottom meets the MRT limit.', priority: 'P2', ref: 'API 653 4.4.7' });
+        if (r.ok === false) add('floor', { key: 'floor-mrt-' + r.name, finding: `${r.label}: minimum remaining thickness ${t(r.MRT)} at the next internal inspection (${calc.Or} yr) is below the ${t(r.limit)} minimum (API 653 §4.4.5).`, loc: r.label, action: 'Repair the thinned areas or shorten the internal inspection interval so the bottom meets the MRT limit.', priority: 'P2', ref: 'API 653 §4.4.5' });
       }
       const reps = inds.filter((i) => calc?.per?.get(i.id)?.repair);
       if (reps.length) add('floor', { key: 'floor-repairs', finding: `${reps.length} floor location${reps.length > 1 ? 's' : ''} require repair: ${reps.map((i) => i.no + ' (' + (calc.per.get(i.id)?.plate?.label || '') + ')').join(', ')}.`, loc: 'See floor map', action: 'Repair by patch plate, weld build-up or plate replacement per API 653 Section 9 and re-test (vacuum box) before return to service.', priority: 'P2', ref: 'API 653 9.10' });
       try {
-        for (const pp of patchList(job, layout, calc).filter((x) => x.status === 'Fails')) add('floor', { key: 'floor-patch-' + pp.id, finding: `Patch ${pp.id} in the critical zone does not meet API 653 9.10.1.2: ${pp.checks.filter((k) => k.ok === false).map((k) => k.item.toLowerCase()).join('; ')}.`, loc: `Patch ${pp.id}`, action: 'Change the patch (thickness, shape, position) or replace the bottom plate in the critical zone; engineering approval where required.', priority: 'P2', ref: 'API 653 9.10.1.2' });
+        for (const pp of patchList(job, layout, calc).filter((x) => x.status === 'Fails')) add('floor', { key: 'floor-patch-' + pp.id, finding: `Patch ${pp.id} in the critical zone does not meet API 653 §9.11.1.2: ${pp.checks.filter((k) => k.ok === false).map((k) => k.item.toLowerCase()).join('; ')}.`, loc: `Patch ${pp.id}`, action: 'Change the patch (thickness, shape, position) or replace the bottom plate in the critical zone; engineering approval where required.', priority: 'P2', ref: 'API 653 §9.11.1.2' });
       } catch { /* */ }
       if (pend) { add('floor', { key: 'floor-pending', finding: `${pend} MFL indication${pend > 1 ? 's have' : ' has'} not been proven up.`, loc: 'See indications list', action: 'Prove up the remaining MFL indications by UT / VT and update the evaluation.', priority: 'P2', ref: '' }); }
     }
@@ -133,11 +133,12 @@ export function findings(job, layout, calc) {
       for (const c of cs) {
         if (c.min == null) continue;
         f.lines.push(`Course ${c.no}: minimum ${t(c.min)}${c.tMin ? ` vs t-min ${t(c.tMin)}` : ''} — ${c.status || 'no t-min'}.`);
-        if (c.status === 'Below t-min') add('shell', { key: 'shell-c' + c.no, finding: `Shell course ${c.no}: minimum reading ${t(c.min)} is below the minimum required thickness ${t(c.tMin)}.`, loc: `Course ${c.no}`, action: 'Evaluate the thin area per API 653 4.3.2 (locally thinned areas / pitting); otherwise repair (insert or door sheet) or re-rate the maximum fill height.', priority: 'P2', ref: 'API 653 4.3.2 / 4.3.3' });
+        if (c.status === 'Below t-min') add('shell', { key: 'shell-c' + c.no, finding: `Shell course ${c.no}: ${c.fail} reading${c.fail > 1 ? 's are' : ' is'} below 60 % of the t-min for ${c.fail > 1 ? 'their' : 'its'} location (minimum ${t(c.min)}; API 653 §4.3.2.1).`, loc: `Course ${c.no}`, action: 'Repair (insert or door sheet) or re-rate the maximum fill height, unless the readings are widely scattered pits acceptable under API 653 §4.3.2.2.', priority: 'P2', ref: 'API 653 §4.3.2 / §4.3.3' });
+        else if (c.status === 'Evaluate per §4.3.2') add('shell', { key: 'shell-c' + c.no, finding: `Shell course ${c.no}: ${c.below} reading${c.below > 1 ? 's are' : ' is'} below the t-min for ${c.below > 1 ? 'their' : 'its'} location (minimum ${t(c.min)}).`, loc: `Course ${c.no}`, action: 'Evaluate the corroded area per API 653 §4.3.2: the average thickness over the averaging length must be at least t-min, and the least thickness at least 60 % of t-min; otherwise repair or re-rate the fill height.', priority: 'P3', ref: 'API 653 §4.3.2 / §4.3.3.1 b' });
         const d = courses.find((x) => x.id === c.id)?.d; const fl = d ? fillFromT(job, d, c.min) : null;
         if (fl?.prod != null && (pm === null || fl.prod < pm.v)) pm = { v: fl.prod, c: c.no };
       }
-      if (pm && B.fill && pm.v < B.fill - 1) add('shell', { key: 'shell-fill', finding: `The minimum shell readings support a maximum product fill height of ${big(pm.v)} (course ${pm.c}), below the ${big(B.fill)} maximum fill height.`, loc: `Course ${pm.c}`, action: `Reduce the maximum fill height to ${big(pm.v)} or repair course ${pm.c}.`, priority: 'P2', ref: 'API 653 4.3.3.1' });
+      if (pm && B.fill && pm.v < B.fill - 1) add('shell', { key: 'shell-fill', finding: `The minimum shell readings support a maximum product fill height of ${big(pm.v)} (course ${pm.c}), below the ${big(B.fill)} maximum fill height.`, loc: `Course ${pm.c}`, action: `Reduce the maximum fill height to ${big(pm.v)} or repair course ${pm.c}.`, priority: 'P2', ref: 'API 653 §4.3.3.1' });
     }
   } catch { /* */ }
 
@@ -148,9 +149,9 @@ export function findings(job, layout, calc) {
       if (st.length) {
         const f = F.froof; f.status = 'ok'; const mn = Math.min(...st.map((x) => x.s.t));
         f.lines.push(`${st.length} roof UT readings, minimum ${t(mn)}.`);
-        const bad = st.filter((x) => x.s.status === 'Below t-min');
+        const bad = st.filter((x) => roofBad(x.s.status));
         f.lines.push(bad.length ? `${bad.length} reading${bad.length > 1 ? 's' : ''} below t-min.` : 'All readings at or above t-min.');
-        if (bad.length) add('froof', { key: 'froof-tmin', finding: `${bad.length} fixed roof reading${bad.length > 1 ? 's are' : ' is'} below t-min (${bad.map((x) => (x.p.label || '') + ' ' + t(x.s.t)).join(', ')}).`, loc: 'See roof plan', action: 'Repair or replace the thin roof plates (API 653 4.2.1.2: average thickness below 0.09 in over any 100 in² requires repair or replacement).', priority: 'P3', ref: 'API 653 4.2.1.2' });
+        if (bad.length) add('froof', { key: 'froof-tmin', finding: `${bad.length} fixed roof reading${bad.length > 1 ? 's are' : ' is'} below t-min (${bad.map((x) => (x.p.label || '') + ' ' + t(x.s.t)).join(', ')}).`, loc: 'See roof plan', action: 'Repair or replace the thin roof plates (API 653 §4.2.1.2: any hole through a plate, or an average below 0.09 in over any 100 in², requires repair or replacement).', priority: 'P3', ref: 'API 653 §4.2.1.2' });
       }
     }
   } catch { /* */ }
@@ -163,7 +164,7 @@ export function findings(job, layout, calc) {
       const pons = lay.plates.filter((p) => p.kind === 'annular').filter((p) => ['Liquid present', 'Leaking'].includes(F2.pont?.[p.key]?.cond));
       const f = F.flroof;
       if (deck.length || pons.length) { f.status = 'ok'; f.lines.push(`${deck.length} deck plates read, minimum ${deck.length ? t(Math.min(...deck.map((x) => x.s.min))) : '—'}.`); }
-      const bad = deck.filter((x) => x.s.status === 'Below t-min');
+      const bad = deck.filter((x) => roofBad(x.s.status));
       if (bad.length) add('flroof', { key: 'flroof-deck', finding: `${bad.length} floating roof deck plate${bad.length > 1 ? 's are' : ' is'} below t-min: ${bad.map((x) => x.p.label).join(', ')}.`, loc: 'See floating roof plan', action: 'Repair or replace the thin deck plates.', priority: 'P2', ref: 'API 653 4.2.2' });
       if (pons.length) add('flroof', { key: 'flroof-pont', finding: `${pons.length > 1 ? 'Pontoons' : 'Pontoon'} ${pons.map((p) => p.label).join(', ')} ${pons.length > 1 ? 'contain liquid or are leaking' : 'contains liquid or is leaking'}.`, loc: 'Pontoons', action: 'Drain, locate and repair the leaks; re-test the pontoons.', priority: 'P2', ref: 'API 653 4.2.2' });
       if (job.roof.seal) for (const k of activeStds(job.roof.seal)) {
@@ -179,8 +180,10 @@ export function findings(job, layout, calc) {
     const nz = (job.nozzles || []).map((n) => ({ n, r: nozzleUT(n, job) })).filter((x) => x.r.count);
     if (nz.length) {
       const f = F.nozzles; f.status = 'ok'; f.lines.push(`${nz.length} of ${(job.nozzles || []).length} nozzles UT tested.`);
-      const bad = nz.filter((x) => x.r.status === 'Below t-min');
+      const bad = nz.filter((x) => x.r.status === 'Below t-min' || x.r.status === 'Below construction min.');
+      const noRet = nz.filter((x) => x.r.construction);
       f.lines.push(bad.length ? `Below t-min: ${bad.map((x) => esc(x.n.mark) + ' (' + t(x.r.min) + ')').join(', ')}.` : 'All tested necks at or above t-min.');
+      if (noRet.length) f.lines.push(`No retirement thickness entered for ${noRet.map((x) => esc(x.n.mark)).join(', ')}: compared with the construction minimum only (API 650 Tables 5.6b / 5.7b less mill tolerance); not accepted until an engineer enters a retirement thickness.`);
       for (const x of bad) add('nozzles', { key: 'noz-' + x.n.id, finding: `Nozzle ${x.n.mark} neck minimum ${t(x.r.min)} is below the minimum ${t(nozzleWall(x.n, job).tMin)}.`, loc: `Nozzle ${x.n.mark}${x.n.angle != null ? ' at ' + x.n.angle + '°' : ''}`, action: 'Replace the nozzle neck or evaluate it for the design conditions.', priority: 'P2', ref: 'API 653 4.3.10' });
     }
   } catch { /* */ }
@@ -190,7 +193,7 @@ export function findings(job, layout, calc) {
     if (hasSettle(job)) {
       const f = F.settle, c = settleCalc(job); f.status = 'ok';
       if (c.fit) f.lines.push(`Shell settlement: ${c.status.toLowerCase()} (R² ${c.fit.R2.toFixed(2)}, tilt ${fmt(c.fit.tilt, 'small', job)} towards ${c.fit.loDeg.toFixed(0)}°).`);
-      if (c.tiltOk === false) add('settle', { key: 'set-tilt', finding: `Planar tilt gives an out-of-plumbness of ${fmt(c.fit.plumb, 'small', job)} at the top of the shell, over the ${fmt(c.fit.plumbLim, 'small', job)} limit.`, loc: `Low side ${c.fit.loDeg.toFixed(0)}°`, action: 'Engineering evaluation of the tilt; re-level the tank (jacking) if required.', priority: 'P2', ref: 'API 653 10.5.2.1 / Annex B' });
+      if (c.tiltOk === false) add('settle', { key: 'set-tilt', finding: `Planar tilt gives an out-of-plumbness of ${fmt(c.fit.plumb, 'small', job)} at the top of the shell, over the ${fmt(c.fit.plumbLim, 'small', job)} limit.`, loc: `Low side ${c.fit.loDeg.toFixed(0)}°`, action: 'Engineering evaluation of the tilt; re-level the tank (jacking) if required.', priority: 'P2', ref: 'Compared with API 653 §10.5.2.1 / Annex B' });
       if (c.oopOk === false) add('settle', { key: 'set-oop', finding: `Out-of-plane (differential) shell settlement exceeds the API 653 Annex B allowable${c.fit?.maxAt ? ` (station ${c.fit.maxAt})` : ''}.`, loc: c.fit?.maxAt ? `Station ${c.fit.maxAt}` : 'Shell', action: 'Engineering evaluation per API 653 B.3.2; re-level or repair the foundation as required.', priority: 'P2', ref: 'API 653 B.3.2' });
       if (c.fit && !c.valid && c.arcs?.ok === null) add('settle', { key: 'set-fit', finding: `Cosine fit R² = ${c.fit.R2.toFixed(2)} is below 0.90; the out-of-plane settlement could not be evaluated by B.3.2.1.`, loc: 'Shell', action: 'Rigorous settlement evaluation by an engineer (B.3.2.2 or finite element).', priority: 'P2', ref: 'API 653 B.2.2.4' });
       const edges = stations(job).map((x) => ({ x, p: profileEval(job, x.i) })).filter((e) => e.p.ev);
@@ -200,7 +203,7 @@ export function findings(job, layout, calc) {
       const nde = edges.filter((e) => e.p.status === 'NDE required');
       if (nde.length) add('settle', { key: 'set-edge-nde', finding: `Edge settlement over 75 % of the allowable at station${nde.length > 1 ? 's' : ''} ${nde.map((e) => e.x.i).join(', ')}.`, loc: nde.map((e) => `Stn ${e.x.i}`).join(', '), action: 'Examine the shell-to-bottom and bottom welds in the settled areas visually and by MT or PT; VT of welds within 12 in of the breakover.', priority: 'P2', ref: 'API 653 B.3.4.1' });
       (job.settle.edge || []).forEach((e, i) => { const ev = edgeEval(e, job); if (ev.status === 'Exceeds') add('settle', { key: 'set-area-' + e.id, finding: `Edge settlement area E${i + 1} exceeds the allowable (${fmt(ev.B, 'small', job)} vs ${fmt(ev.allow, 'small', job)}).`, loc: `E${i + 1}${e.angle != null ? ' at ' + e.angle + '°' : ''}`, action: 'Repair or engineering evaluation.', priority: 'P2', ref: 'API 653 B.3.4' }); });
-      (job.settle.dep || []).forEach((d, i) => { const ev = depEval(d); if (ev.status === 'Exceeds') add('settle', { key: 'set-dep-' + d.id, finding: `Bottom depression D${i + 1} (${fmt(ev.B, 'small', job)}) exceeds 0.37R (${fmt(ev.allow, 'small', job)}).`, loc: `D${i + 1}`, action: 'Repair the depression (re-level and re-support the bottom) or engineering evaluation.', priority: 'P2', ref: 'API 653 B.3.3' }); });
+      (job.settle.dep || []).forEach((d, i) => { const ev = depEval(d, job); if (ev.status === 'Exceeds') add('settle', { key: 'set-dep-' + d.id, finding: `Bottom depression D${i + 1} (${fmt(ev.B, 'small', job)}) exceeds ${job.units === 'metric' ? '0.031R' : '0.37R'} (${fmt(ev.allow, 'small', job)}).`, loc: `D${i + 1}`, action: 'Repair the depression (re-level and re-support the bottom) or engineering evaluation.', priority: 'P2', ref: 'API 653 B.3.3' }); });
     }
   } catch { /* */ }
 

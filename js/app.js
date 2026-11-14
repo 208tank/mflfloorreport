@@ -2,9 +2,9 @@
 import { db, requestPersistence } from './db.js';
 import { u, toMm, inVal, fmt, fmtRate, unitLabel, num, UNITS } from './units.js';
 import { buildLayout, stackSections, suggestCount, halfChord, plateAt, toLocal, itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
-import { api653, RESULTS, RESULT_SHORT, czLimitAuto, plateNominal, NZ_CONN, NZ_CONN_SHORT, UT_CLOCK, nozzleUT, nozzleWall } from './calc.js';
+import { api653, RESULTS, RESULT_SHORT, czLimitAuto, plateNominal, NZ_CONN, NZ_CONN_SHORT, UT_CLOCK, nozzleUT, nozzleWall, statusText } from './calc.js';
 import { renderMapSVG, MapController } from './map.js';
-import { ROOF_TYPES, FIXED_TYPES, FIXED_SUPPORT, FLOAT_TYPES, PT5, PT5_SHORT, PONT_COND, hasFixed, hasFloating, floatingLayout, roofDiameter, autoPontCount, plateUT, pointStatus, floatingSVG, fixedSVG } from './roof.js';
+import { roofBad, ROOF_NOTE, ROOF_TYPES, FIXED_TYPES, FIXED_SUPPORT, FLOAT_TYPES, PT5, PT5_SHORT, PONT_COND, hasFixed, hasFloating, floatingLayout, roofDiameter, autoPontCount, plateUT, pointStatus, floatingSVG, fixedSVG } from './roof.js';
 import { download, indicationsCSV, platesCSV, nozzlesCSV, shellCSV, roofCSV, settleCSV, svgForExport, svgToPng, fileBase } from './export.js';
 import { buildReport, legendHTML, buildDefReport } from './report.js';
 import { patchList, patchOf } from './patches.js';
@@ -26,7 +26,7 @@ import { esc as h } from './util.js';
 import { $, $$, toast, askConfirm, askChoice } from './ui.js';
 import { jobCard, indCount } from './cards.js';
 
-const APP_VERSION = '3.5.0';
+const APP_VERSION = '3.6.0';
 
 const S = {
   jobs: [], tanks: [], reg: { q: '', open: new Set() }, job: null, layout: null, calc: null, photos: [], company: {},
@@ -1085,9 +1085,10 @@ function indEditor(ind, where) {
     <div class="ed-sum" data-part="sum">${summaryBox(a)}</div>
     <fieldset><legend>Repair &amp; remarks</legend><div class="fgrid">
       ${f('Repair', 'repair', 'sel', { options: [['auto', 'Auto (API 653 calc)'], ['yes', 'Yes'], ['no', 'No']] })}${f('Repair method', 'repairMethod', 'sel', { options: REPAIR_METHOD })}
-      ${(() => { const pp = patchOf(patchList(S.job, S.layout, S.calc), ind.id); return pp ? `<p class="small span2 patch-note"><b>${h(pp.id)}</b> ${pp.auto ? 'auto patch' : 'patch'} ${fmt(pp.L, 'small', S.job, false)} × ${fmt(pp.W, 'small', S.job)}${pp.kind === 'tomb' ? ' (radial × along the shell)' : ''}${pp.inds.length > 1 ? ` — combined with ${pp.inds.filter((x) => x.id !== ind.id).map((x) => h(x.no)).join(', ')}` : ''}${pp.kind === 'tomb' ? ' · tombstone, sides at 90° to the shell' : ''}. Type a size below to override.${pp.checks.length ? `<br><b>Critical zone (API 653 9.10.1.2): <span class="${pp.status === 'Fails' ? 'bad' : pp.status === 'OK' ? 'ok' : 'warn-txt'}">${pp.status}</span></b><br>${pp.checks.map((k) => `${k.ok === true ? '✓' : k.ok === false ? '✕' : '?'} ${h(k.item)} — <span class="muted">${h(k.note)}</span>`).join('<br>')}` : ''}</p>` : ''; })()}
+      ${(() => { const pp = patchOf(patchList(S.job, S.layout, S.calc), ind.id); return pp ? `<p class="small span2 patch-note"><b>${h(pp.id)}</b> ${pp.auto ? 'auto patch' : 'patch'} ${fmt(pp.L, 'small', S.job, false)} × ${fmt(pp.W, 'small', S.job)}${pp.kind === 'tomb' ? ' (radial × along the shell)' : ''}${pp.inds.length > 1 ? ` — combined with ${pp.inds.filter((x) => x.id !== ind.id).map((x) => h(x.no)).join(', ')}` : ''}${pp.kind === 'tomb' ? ' · tombstone, sides at 90° to the shell' : ''}. Type a size below to override.${pp.checks.length ? `<br><b>Critical zone (API 653 §9.11.1.2): <span class="${pp.status === 'Fails' ? 'bad' : pp.status === 'OK' ? 'ok' : 'warn-txt'}">${pp.status}</span></b><br>${pp.checks.map((k) => `${k.ok === true ? '✓' : k.ok === false ? '✕' : '?'} ${h(k.item)} — <span class="muted">${h(k.note)}</span>`).join('<br>')}` : ''}</p>` : ''; })()}
       ${f('Repair / patch plate length', 'repLen', 'small', { ph: S.job.calc.autoPatch !== false && S.calc.per.get(ind.id)?.repair ? 'auto' : '' })}${f('Repair / patch plate width', 'repWid', 'small', { ph: S.job.calc.autoPatch !== false && S.calc.per.get(ind.id)?.repair ? 'auto' : '' })}
       ${f('Patch plate thickness', 'repT', 't')}${f('Repair ID / patch no.', 'repId', 'text', { ph: 'e.g. P-3, or shared patch' })}
+      ${f('Cause of soil-side corrosion removed (repaired area leaves UPᵣ — API 653 §4.4.5.1 Note 1)', 'causeRemoved', 'bool', { cls: 'span2' })}
       ${f('Comments', 'comments', 'area', { rows: 2, cls: 'span2' })}
     </div></fieldset>
     <fieldset><legend>Photos</legend>
@@ -1112,7 +1113,7 @@ function summaryBox(a) {
     <div><span>Remaining</span><b>${fmt(a.rem, 't', S.job)}</b><small>${h(a.src || '')}</small></div>
     <div><span>Wall loss</span><b>${a.lossPct != null ? a.lossPct.toFixed(0) + '%' : '—'}</b><small>${a.loss != null ? fmt(a.loss, 't', S.job) : ''}</small></div>
     <div><span>At next insp.</span><b>${fmt(a.projected, 't', S.job)}</b><small>min ${fmt(a.limit, 't', S.job)}</small></div>
-  </div><div class="sum-status ${cls}">${st === 'n/a' ? 'Not used in calculation' : h(st === 'repair (calc)' ? 'Repair — below MRT at next inspection' : st === 'repair' ? 'Repair — specified' : st === 'below MRT' ? 'Below MRT — repair set to No' : st === 'pending' ? 'Pending prove-up' : st === 'no action' ? 'No action' : st === 'OK' ? 'Acceptable for next interval' : st)}</div>`;
+  </div><div class="sum-status ${cls}">${h(st === 'OK' ? 'Acceptable for next interval' + (a.est ? ' (MFL estimate — provisional)' : '') : statusText(a))}${a.issues?.bad?.length ? `<br><small class="bad">Not used: ${h(a.issues.bad.join('; '))}</small>` : ''}${a.nearCZ ? '<br><small>Near the critical zone — enter the length / width to check (§3.11)</small>' : ''}</div>`;
 }
 
 function refreshEditorParts(root) {
@@ -1139,7 +1140,7 @@ function nozzleEditor() {
       ${f('Notes', 'notes', 'area', { rows: 2, cls: 'span2' })}
     </div>
     <fieldset><legend>Neck UT</legend><div class="fgrid g3">
-      ${f('Schedule / class', 'sched', 'text', { ph: 'e.g. Sch 40, STD, XS' })}${(() => { const w = nozzleWall({ ...nz, tNom: null, tMin: null }, S.job); return f('Nominal wall', 'tNom', 't', { ph: w.tNom ? inVal(w.tNom, 't', S.job) : '', hint: w.tNom ? 'Blank = ' + w.src : '' }) + f('t-min (required)', 'tMin', 't', { ph: w.tMin ? inVal(w.tMin, 't', S.job) : '', hint: w.tMin ? 'Blank = nominal less 12.5 % mill tolerance' : '' }); })()}
+      ${f('Schedule / class', 'sched', 'text', { ph: 'e.g. Sch 40, STD, XS' })}${(() => { const w = nozzleWall({ ...nz, tNom: null, tMin: null }, S.job); return f('Nominal wall', 'tNom', 't', { ph: w.tNom ? inVal(w.tNom, 't', S.job) : '', hint: w.tNom ? 'Blank = ' + w.src : '' }) + f('Retirement thickness (engineer)', 'tMin', 't', { ph: w.tMin ? inVal(w.tMin, 't', S.job) : '', hint: w.tMin ? 'Blank = construction minimum only (nominal less 12.5 % mill tolerance) — not an acceptance value' : '' }); })()}
     </div>
     <div class="ut-clock">${UT_CLOCK.map(([k, lab]) => field(`${lab} o’clock`, k, 't', { attr: 'data-nb', value: nz[k], attrs: `data-id="${nz.id}"` })).join('')}</div>
     <div class="ut-extra">${(nz.utx || []).map((r) => `<div class="utx-row"><input data-nbx="loc" data-id="${nz.id}" data-rid="${r.id}" data-kind="text" value="${h(r.loc || '')}" placeholder="Location, e.g. flange side 12"><span class="ctl"><input data-nbx="t" data-id="${nz.id}" data-rid="${r.id}" data-kind="t" inputmode="decimal" value="${h(inVal(r.t, 't', S.job))}"><i class="unit">${u(S.job).small}</i></span><button aria-label="Remove reading" class="btn sm icon ghost danger" data-act="utx-del" data-id="${nz.id}" data-rid="${r.id}" title="Remove reading">✕</button></div>`).join('')}
@@ -1344,14 +1345,17 @@ function viewApi() {
   const v = (mm) => (met ? `${mm.toFixed(2)} mm` : `${(mm / 25.4).toFixed(3)} in`);
   const f = (label, key, kind, extra = {}) => field(label, 'calc.' + key, kind, extra);
   return `<div class="page">
-  <div class="page-head"><div><h1>API 653 bottom evaluation</h1><p class="muted">Minimum remaining thickness at the next internal inspection (API 653 §4.4.7). Check the limits against the edition in force and the tank's design.</p></div></div>
+  <div class="page-head"><div><h1>API 653 bottom evaluation</h1><p class="muted">Minimum remaining thickness at the next internal inspection (API 653, 5th ed. Addendum 4 (2025), §4.4.5). Check the limits against the edition in force and the tank's design.</p></div></div>
   ${findingsBox('floor')}
   <div class="api-grid">
     <section class="card"><h2>Inputs</h2><div class="fgrid">
-      ${f('Oᵣ — years to next internal inspection', 'Or', 'num', { unit: 'yr' })}
-      ${f('Corrosion rate basis', 'years', 'num', { unit: 'yr', hint: 'Years in service, or since the last baseline' })}
+      ${f('Oᵣ — years to next internal inspection', 'Or', 'num', { unit: 'yr', hint: `§6.4.2.2.1: at most ${S.job.tank.rpb ? 30 : 20} years${S.job.tank.rpb ? ' (with RPB)' : ' (30 with an RPB)'}` })}
+      ${f('Tank age (years) — UPᵣ basis', 'years', 'num', { unit: 'yr', hint: 'API 653 §4.4.5.1: UPᵣ is a linear rate over the age of the tank' })}
+      ${f('StPᵣ basis (optional)', 'stprYears', 'num', { unit: 'yr', ph: 'tank age', hint: 'e.g. years since the coating or the last inspection' })}
+      ${f('MFL threshold', 'mflThresholdPct', 'num', { unit: '% of nominal', hint: 'API 653 §4.4.5.1 Note 1: UPᵣ uses the lesser of the threshold and the thinnest unrepaired area' })}
       ${f('Min. remaining — bottom plates', 'mrtBottom', 't')}
-      ${f('Min. remaining — annular plates', 'mrtAnnular', 't', { hint: 'See Table 4.5 where annular plates are required' })}
+      ${f('Min. remaining — annular plates', 'mrtAnnular', 't', { ph: S.calc?.ann?.tbl != null ? inVal(S.calc.ann.tbl, 't', S.job) : '', hint: 'Blank = Table 4.5 / API 650 Table 5.1 value + CA (§4.4.6)' })}
+      ${f('Annular corrosion allowance', 'annCA', 't', { hint: 'Added to the table value (§4.4.6.2)' })}<div></div>
       ${(() => { const a = annularReq(S.job); if (!a) return '<p class="muted small span2">Annular plate minimum (API 653 Table 4.5 / API 650 Table 5.1b): enter the shell courses (course 1 nominal t), the maximum fill height and the product SG to calculate it.</p>'; return `<p class="small span2 ann-req">${h(a.table)}: S<sub>b</sub> = ${Math.round(a.Sb).toLocaleString()} psi with course 1 t = ${fmt(+S.job.shell.courses[0].tNom, 't', S.job)} → minimum annular plate <b>${a.over ? 'beyond the table — engineering evaluation' : fmt(a.tmm, 't', S.job)}</b> ${!a.over ? `<button class="btn sm" data-act="ann-apply" data-v="${a.tmm}">Use for annular plates</button>` : ''}<br><span class="muted">${(S.job.tank.sg ?? 1) >= 1 ? 'SG ≥ 1: S<sub>b</sub> = 2.6 D (H − 1) G / t' : 'SG &lt; 1: S<sub>b</sub> = 2.34 D (H − 1) / t'}, interpolated between stress columns.</span></p>`; })()}
       <div class="span2 presets"><span class="muted small">Bottom limit presets:</span>
         <button class="btn sm" data-act="mrt-preset" data-v="2.54">${v(2.54)} — no leak detection / containment</button>
@@ -1360,12 +1364,18 @@ function viewApi() {
       <h3 class="span2" style="margin:8px 0 0">Repair patch plates</h3>
       ${f('Auto patch repair indications', 'autoPatch', 'bool', { value: S.job.calc.autoPatch !== false, cls: 'span2' })}
       ${f('Default patch length', 'patchL', 'small', { ph: met ? '300' : '12' })}${f('Default patch width', 'patchW', 'small', { ph: met ? '300' : '12' })}
-      ${f('Extend past the corrosion by at least', 'patchMargin', 'small', { hint: 'API 653 9.10.1.1 b: 2 in' })}${f('Patch plate thickness', 'patchT', 't', { hint: 'Critical zone: 1/4 in max.' })}<p class="muted small" id="patchSum">${(() => { const pl = patchList(S.job, S.layout, S.calc); return pl.length ? `${pl.length} patch${pl.length > 1 ? 'es' : ''}: ${pl.map((p) => `${p.id} ${fmt(p.L, 'small', S.job, false)} × ${fmt(p.W, 'small', S.job)}${p.kind === 'tomb' ? ' tombstone' : ''}${p.status !== 'OK' ? ' (' + p.status.toLowerCase() + ')' : ''}`).join(', ')}` : 'No patches.'; })()}</p>
+      ${f('Extend past the corrosion by at least', 'patchMargin', 'small', { hint: 'API 653 §9.11.1.1 c: 2 in' })}${f('Patch plate thickness', 'patchT', 't', { hint: 'Critical zone: 1/4 in max.' })}<p class="muted small" id="patchSum">${(() => { const pl = patchList(S.job, S.layout, S.calc); return pl.length ? `${pl.length} patch${pl.length > 1 ? 'es' : ''}: ${pl.map((p) => `${p.id} ${fmt(p.L, 'small', S.job, false)} × ${fmt(p.W, 'small', S.job)}${p.kind === 'tomb' ? ' tombstone' : ''}${p.status !== 'OK' ? ' (' + p.status.toLowerCase() + ')' : ''}`).join(', ')}` : 'No patches.'; })()}</p>
       ${f('Critical zone width (from shell)', 'czDist', 'small')}
-      ${f('Critical zone limit', 'czLimit', 't', { ph: inVal(czLimitAuto(S.job), 't', S.job), hint: 'Blank = auto: ½ original plate t or ½ shell t-min, ≥ 0.1 in' })}
-      ${f('Lower shell course t-min', 'shellTmin', 't', { hint: 'Optional, for the critical zone limit' })}<div></div>
+      ${f('Critical zone limit', 'czLimit', 't', { ph: inVal(czLimitAuto(S.job), 't', S.job), hint: `Blank = §4.4.5.4: the smaller of ${met ? '3 mm' : '0.118 in'} and ½ course 1 t-min, not less than ${met ? '2.5 mm' : '0.10 in'}` })}
+      ${f('Reason for an entered critical zone limit', 'czLimitReason', 'text', { ph: 'e.g. isolated pitting, Table 4.4' })}
+      ${f('Lower shell course t-min', 'shellTmin', 't', { hint: 'Optional, for the critical zone limit' })}
+      ${field('Shell toughness (critical-zone patch spacing)', 'tank.shellTough', 'sel', { options: [['', 'Unknown — §9.11.1.2 g applies'], ['known', 'Known (meets API 650 toughness)']] })}
+      ${field('Bottom projection beyond the shell — thickness at the outside weld toe', 'tank.projT', 't', { hint: 'API 653 §4.4.5.7: at least 0.10 in (2.5 mm)' })}
+      ${field('Bottom projection beyond the shell — width', 'tank.projW', 'small', { hint: 'API 653 §4.4.5.7: at least 3/8 in (10 mm)' })}
       ${f('Product side coated, coating life ≥ Oᵣ (StPᵣ = 0)', 'coated', 'bool', { cls: 'span2' })}
+      ${f('Coating basis confirmed by the engineer despite recorded product-side pitting', 'coatConfirmed', 'bool', { cls: 'span2' })}
       ${f('Effective cathodic protection (UPᵣ = 0)', 'cp', 'bool', { cls: 'span2' })}
+      ${f('Oᵣ set by an RBI assessment (§6.4.2.2.2)', 'rbi', 'bool', { cls: 'span2' })}
       ${f('Include pending MFL calls using the MFL % estimate (as soil side)', 'includeUnverified', 'bool', { cls: 'span2' })}
       ${field('StPᵣ override', 'calc.stprOverride', 't', { unit: u(S.job).rateUnit, ph: 'calculated' })}
       ${field('UPᵣ override', 'calc.uprOverride', 't', { unit: u(S.job).rateUnit, ph: 'calculated' })}
@@ -1381,16 +1391,17 @@ function refreshApi() {
   const reps = S.job.indications.filter((i) => c.per.get(i.id)?.repair || c.per.get(i.id)?.status === 'below MRT').sort(byNo);
   el.innerHTML = `<h2>Results</h2>
     <p class="formula">MRT = min(RT<sub>bc</sub>, RT<sub>ip</sub>) − O<sub>r</sub>(StP<sub>r</sub> + UP<sub>r</sub>)</p>
-    <div class="rates"><div><span>StP<sub>r</sub> product side</span><b>${fmtRate(c.StPr, S.job)}</b><small>${c.C.coated ? 'coated → 0' : c.stSrc === 'override' ? 'entered' : c.stSrc ? 'from ' + h(c.stSrc.no) : 'no product side loss'}</small></div>
-      <div><span>UP<sub>r</sub> soil side</span><b>${fmtRate(c.UPr, S.job)}</b><small>${c.C.cp ? 'effective CP → 0' : c.upSrc === 'override' ? 'entered' : c.upSrc ? 'from ' + h(c.upSrc.no) : 'no soil side loss'}</small></div>
+    <div class="rates"><div><span>StP<sub>r</sub> product side</span><b>${fmtRate(c.StPr, S.job)}</b><small>${c.stSrc === 'override' ? 'entered' : c.C.coated && !c.stSrc ? 'coated → 0' : c.stSrc ? 'from ' + h(c.stSrc.no) + (c.stYears !== c.years ? ` over ${c.stYears} yr` : '') : 'no product side loss'}</small></div>
+      <div><span>UP<sub>r</sub> soil side</span><b>${fmtRate(c.UPr, S.job)}</b><small>${c.C.cp ? 'effective CP → 0' : c.upSrc === 'override' ? 'entered' : c.upSrc === 'threshold' ? `MFL threshold ${c.C.mflThresholdPct} %` : c.upSrc ? 'from ' + h(c.upSrc.no) : 'no soil side loss'}</small></div>
       <div><span>Loss over O<sub>r</sub></span><b>${t(c.Or * c.K)}</b><small>${c.Or} yr × combined rate</small></div></div>
     <table class="grid"><thead><tr><th>Area (${u(S.job).small})</th><th class="n">RT<sub>ip</sub></th><th class="n">RT<sub>bc</sub></th><th class="n">MRT</th><th class="n">Min.</th><th class="n">Max. O<sub>r</sub></th><th></th></tr></thead><tbody>
-    ${c.regions.map((r) => `<tr><td>${h(r.label)}</td><td class="n">${tn(r.RTip)}</td><td class="n">${tn(r.RTbc)}</td><td class="n"><b>${tn(r.MRT)}</b></td><td class="n">${tn(r.limit)}</td><td class="n">${r.OrMax == null ? '—' : Number.isFinite(r.OrMax) ? Math.max(0, r.OrMax).toFixed(1) + ' yr' : '∞'}</td><td class="${r.ok ? 'ok' : 'bad'}">${r.ok == null ? '—' : r.ok ? '✓ OK' : '✕ Fails'}</td></tr>`).join('')}
+    ${c.regions.map((r) => `<tr><td>${h(r.label)}</td><td class="n">${tn(r.RTip)}</td><td class="n">${tn(r.RTbc)}</td><td class="n"><b>${tn(r.MRT)}</b></td><td class="n">${tn(r.limit)}</td><td class="n">${r.OrMax == null ? '—' : Number.isFinite(r.OrMax) ? Math.max(0, r.OrMax).toFixed(1) + ' yr' : '∞'}</td><td class="${r.ok ? 'ok' : r.ok === false ? 'bad' : ''}">${r.notEvaluated ? 'Not evaluated' : r.ok == null ? '—' : r.ok ? (r.provisional ? `✓ Provisional (${r.provisional} on MFL estimates)` : '✓ OK') : '✕ Fails'}</td></tr>`).join('')}
     </tbody></table>
+    <p class="muted small">Limits: bottom ${t(c.mBot)}${S.layout.Ri < S.layout.R ? ` · annular ${t(c.mAnn)} (${h(c.ann.src)})` : ''} · critical zone ${t(c.czLim)} (${c.C.czLimit != null ? 'entered' + (c.C.czLimitReason ? ': ' + h(c.C.czLimitReason) : '') : '§4.4.5.4'})${c.projection ? ` · bottom projection ${c.projection.ok === true ? '✓' : c.projection.ok === false ? '✕' : '?'} (§4.4.5.7)` : ''}</p>
     <p class="muted small">Any unrepaired location thinner than <b>${t(c.regions[0]?.tReq)}</b> today (bottom plates) will be below the minimum after ${c.Or} years at the current rates. Locations set to Repair "Auto" are marked for repair worst-first until the rest pass; rates are then re-derived from what is left unrepaired.</p>
     ${c.warnings.length ? `<ul class="warn">${c.warnings.map((w) => `<li>${h(w)}</li>`).join('')}</ul>` : ''}
     <h3>Repairs (${reps.length})</h3>
-    <div class="ind-list">${reps.map((i) => { const a = c.per.get(i.id); return `<button class="ind-row" data-act="open-ind" data-id="${i.id}"><span class="dot r-${i.result}"></span><b>${h(i.no)}</b><span>${h(a.plate?.label)}</span><span class="n">${t(a.rem)}</span><span class="st st-${a.status.replace(/\W+/g, '-')}">${h(a.status)}</span></button>`; }).join('') || '<p class="muted small">No repairs required.</p>'}</div>`;
+    <div class="ind-list">${reps.map((i) => { const a = c.per.get(i.id); return `<button class="ind-row" data-act="open-ind" data-id="${i.id}"><span class="dot r-${i.result}"></span><b>${h(i.no)}</b><span>${h(a.plate?.label)}</span><span class="n">${t(a.rem)}</span><span class="st st-${a.status.replace(/\W+/g, '-')}">${h(statusText(a))}</span></button>`; }).join('') || '<p class="muted small">No repairs required.</p>'}</div>`;
 }
 
 /* ------------------------------------------------------------------- roof view */
@@ -1419,18 +1430,18 @@ function fixedCardHTML() {
   const job = S.job, Fx = job.roof.fixed, U = u(job), pts = Fx.pts || [];
   const vals = pts.map((p) => pointStatus(job, p)).filter((x) => x.t !== null);
   const min = vals.length ? Math.min(...vals.map((x) => x.t)) : null;
-  const bad = vals.filter((x) => x.status === 'Below t-min').length;
+  const bad = vals.filter((x) => roofBad(x.status)).length;
   const pin = (pt, k, kind, extra = '') => `<input data-rpt="${pt.id}" data-f="${k}" data-kind="${kind}" ${kind === 'text' ? '' : 'inputmode="decimal"'} value="${h(kind === 'text' || kind === 'num' ? pt[k] ?? '' : inVal(pt[k], kind, job))}" ${extra}>`;
   return `<section class="card"><div class="sp-head"><h2>Fixed roof</h2><span class="muted small">${pts.length} UT point${pts.length === 1 ? '' : 's'} · min ${min !== null ? fmt(min, 't', job) : '—'}${bad ? ` · <b class="bad">${bad} below t-min</b>` : ''}</span></div>
     <div class="roof-grid">
       <div class="roof-left">
         <div class="fgrid">${field('Roof', 'roof.fixed.kind', 'sel', { options: FIXED_TYPES })}${field('Support', 'roof.fixed.support', 'sel', { options: FIXED_SUPPORT })}
           ${field('Slope / dome radius', 'roof.fixed.slope', 'text', { ph: 'e.g. 3/4 in 12, 1.0 D' })}${field('Nominal plate t', 'roof.fixed.tNom', 't')}
-          ${field('t-min', 'roof.fixed.tMin', 't', { hint: 'API 653 §4.2.1.2: average below 0.09 in over 100 in² — check your edition' })}<div></div>
+          ${field('t-min', 'roof.fixed.tMin', 't', { hint: ROOF_NOTE })}<div></div>
           ${field('Notes', 'roof.fixed.notes', 'area', { rows: 2, cls: 'span2' })}</div>
         <h3>UT points</h3>
         <div class="tblwrap"><table class="grid rpts"><thead><tr><th>Point</th><th>Angle (°)</th><th>From centre (${U.big})</th><th>Reading (${U.small})</th><th>Status</th><th></th></tr></thead><tbody>
-        ${pts.map((pt) => { const st = pointStatus(job, pt); return `<tr class="${S.roofPt === pt.id ? 'sel' : ''}${st.status === 'Below t-min' ? ' is-bad' : ''}"><td>${pin(pt, 'label', 'text', 'class="lbl"')}</td><td>${pin(pt, 'angle', 'num')}</td><td>${pin(pt, 'r', 'big')}</td><td>${pin(pt, 't', 't')}</td><td>${rStatus(st.status)}</td><td><button aria-label="Delete point" class="btn sm icon ghost danger" data-act="rpt-del" data-id="${pt.id}" title="Delete point">✕</button></td></tr>`; }).join('') || '<tr><td colspan="6" class="empty">No UT points yet.</td></tr>'}
+        ${pts.map((pt) => { const st = pointStatus(job, pt); return `<tr class="${S.roofPt === pt.id ? 'sel' : ''}${roofBad(st.status) ? ' is-bad' : ''}"><td>${pin(pt, 'label', 'text', 'class="lbl"')}</td><td>${pin(pt, 'angle', 'num')}</td><td>${pin(pt, 'r', 'big')}</td><td>${pin(pt, 't', 't')}</td><td>${rStatus(st.status)}</td><td><button aria-label="Delete point" class="btn sm icon ghost danger" data-act="rpt-del" data-id="${pt.id}" title="Delete point">✕</button></td></tr>`; }).join('') || '<tr><td colspan="6" class="empty">No UT points yet.</td></tr>'}
         </tbody></table></div>
         <div class="acts"><button class="btn sm" data-act="rpt-add">+ Point</button><button class="btn sm" data-act="rpt-std">Standard points: edge &amp; mid-radius at each shell UT station + centre</button></div>
       </div>
@@ -1451,12 +1462,12 @@ function floatingCardHTML() {
   const deck = lay.plates.filter((p) => p.kind !== 'annular'), pons = lay.plates.filter((p) => p.kind === 'annular');
   const orphan = Object.keys(F.ut || {}).filter((k) => !lay.byKey.has(k) && !k.startsWith('an') && Object.values(F.ut[k] || {}).some((v) => v != null)).length;
   const all = deck.map((p) => plateUT(job, p));
-  const bad = all.filter((x) => x.status === 'Below t-min').length, done = all.filter((x) => x.count === 5).length;
+  const bad = all.filter((x) => roofBad(x.status)).length, done = all.filter((x) => x.count === 5).length;
   const pBad = pons.filter((p) => ['Liquid present', 'Leaking'].includes(F.pont?.[p.key]?.cond)).length;
   const sel = S.roofSel ? lay.byKey.get(S.roofSel) : null;
   const condSel = (key, cond) => `<select data-rpc="${key}" data-f="cond" data-kind="text">${PONT_COND.map((c) => `<option ${(cond || '') === c ? 'selected' : ''} value="${c}">${c || '—'}</option>`).join('')}</select>`;
   const rin = (p, k) => `<input data-rut="${p.key}" data-pt="${k}" data-kind="t" inputmode="decimal" value="${h(inVal(F.ut?.[p.key]?.[k], 't', job))}">`;
-  const row = (p) => { const x = plateUT(job, p); return `<tr class="${S.roofSel === p.key ? 'sel' : ''}${x.status === 'Below t-min' ? ' is-bad' : ''}"><td><button class="linkbtn" data-act="rsel" data-key="${p.key}">${h(p.label)}</button>${p.cut ? ' <small class="muted">cut</small>' : ''}</td>${PT5.map(([k]) => `<td>${rin(p, k)}</td>`).join('')}<td class="n"><b>${x.min != null ? fmt(x.min, 't', job, false) : '—'}</b></td><td class="n">${x.lossPct != null ? x.lossPct.toFixed(0) + '%' : '—'}</td><td>${rStatus(x.status)}</td></tr>`; };
+  const row = (p) => { const x = plateUT(job, p); return `<tr class="${S.roofSel === p.key ? 'sel' : ''}${roofBad(x.status) ? ' is-bad' : ''}"><td><button class="linkbtn" data-act="rsel" data-key="${p.key}">${h(p.label)}</button>${p.cut ? ' <small class="muted">cut</small>' : ''}</td>${PT5.map(([k]) => `<td>${rin(p, k)}</td>`).join('')}<td class="n"><b>${x.min != null ? fmt(x.min, 't', job, false) : '—'}</b></td><td class="n">${x.lossPct != null ? x.lossPct.toFixed(0) + '%' : '—'}</td><td>${rStatus(x.status)}</td></tr>`; };
   const prow = (p) => { const pc = F.pont?.[p.key] || {}; return `<tr class="${S.roofSel === p.key ? 'sel' : ''}${['Liquid present', 'Leaking'].includes(pc.cond) ? ' is-bad' : ''}"><td><button class="linkbtn" data-act="rsel" data-key="${p.key}">${h(p.label)}</button></td><td>${condSel(p.key, pc.cond)}</td><td><input class="pnote" data-rpc="${p.key}" data-f="notes" data-kind="text" value="${h(pc.notes || '')}"></td></tr>`; };
   const nav = (list, i) => `<div class="acts"><button aria-label="Previous" class="btn sm icon" data-act="rsel-nav" data-d="-1" ${i <= 0 ? 'disabled' : ''} title="Previous">‹</button><button class="btn sm icon" data-act="rsel-nav" data-d="1" ${i >= list.length - 1 ? 'disabled' : ''} title="Next">›</button><button aria-label="Close" class="btn sm icon ghost" data-act="rsel-close" title="Close">✕</button></div>`;
   let panel;
@@ -1627,7 +1638,7 @@ function shellBodyHTML() {
   const courses = coursesWithElev(job), locs = utLocations(job), sum = courseSummary(job);
   const D = +job.tank?.diameter || 0, C = Math.PI * D, auto = autoLocCount(job), H = shellHeight(job);
   const top = courses.slice().reverse();
-  const cin = (c, k, kind, ph = '', cls = '') => { const raw = k === 'tMin' ? c.tMinSet : c[k]; if (k === 'tMin' && !ph && c.tMinCalc) ph = inVal(c.tMinCalc, 't', job); return `<input data-shc="${k}" data-course="${c.id}" data-kind="${kind}" inputmode="decimal" value="${h(kind === 'num' ? raw ?? '' : inVal(raw, kind, job))}" placeholder="${h(ph)}" class="${cls}" ${k === 'tMin' && c.tMinCalc && !c.tMinSet ? 'title="Calculated: API 653 4.3.3.1 — type a value to override"' : ''}>`; };
+  const cin = (c, k, kind, ph = '', cls = '') => { const raw = k === 'tMin' ? c.tMinSet : c[k]; if (k === 'tMin' && !ph && c.tMinCalc) ph = inVal(c.tMinCalc, 't', job); return `<input data-shc="${k}" data-course="${c.id}" data-kind="${kind}" inputmode="decimal" value="${h(kind === 'num' ? raw ?? '' : inVal(raw, kind, job))}" placeholder="${h(ph)}" class="${cls}" ${k === 'tMin' && c.tMinCalc && !c.tMinSet ? 'title="Calculated: API 653 §4.3.3.1 a) — type a value to override"' : ''}>`; };
   const st = (s) => (s.status ? `<span class="st ${s.status === 'OK' ? 'st-OK' : 'st-below-MRT'}">${s.status}</span>` : '');
   const sm = new Map(sum.map((x) => [x.id, x]));
   const zs = readingElevations(job);
@@ -1658,7 +1669,7 @@ function shellBodyHTML() {
       ${top.map((c, k) => { const s = sm.get(c.id); const cp = coursePlates(job, c, c.no - 1); return `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${c.no}</b>${c.no === 1 ? ' <span class="muted small">bottom</span>' : ''}</td><td>${cin(c, 'h', 'big')}</td><td>${cin(c, 'tNom', 't')}</td><td>${cin(c, 'tMin', 't')}</td><td>${cin(c, 'pn', 'num', String(c.plen ? cp.n : autoN), 'xs')}</td><td>${cin(c, 'seam0', 'num', (Math.round(cp.seam0 * 10) / 10).toString(), 'xs')}</td><td>${cin(c, 'plen', 'big', fmt(cp.plates[0]?.len, 'big', job, false))}</td><td class="n">${s.min != null ? fmt(s.min, 't', job, false) : '—'}<small class="muted"> ${s.count}</small></td><td>${st(s)}</td><td><button aria-label="Delete course" class="btn sm icon ghost danger" data-act="course-del" data-course="${c.id}" title="Delete course">✕</button></td></tr>`; }).join('') || `<tr><td colspan="10" class="empty">No courses yet. Add them from the bottom course up, or start with <button class="btn sm" data-act="courses-std" data-n="5">5 courses</button> <button class="btn sm" data-act="courses-std" data-n="6">6 courses</button> <button class="btn sm" data-act="courses-std" data-n="8">8 courses</button></td></tr>`}
       </tbody></table></div>
       <div class="acts"><button class="btn sm" data-act="course-add">+ Course on top</button></div>
-      <p class="muted small">Course 1 is the bottom course. Plates: give the number of plates (equal lengths), or a plate length (full plates from the first seam, the last one is the closure plate). Blank first seam staggers alternate courses by half a plate. t-min is calculated to API 653 4.3.3.1 (grey) once the product SG is entered — see the shell evaluation below; type a value to override it.</p></section>
+      <p class="muted small">Course 1 is the bottom course. Plates: give the number of plates (equal lengths), or a plate length (full plates from the first seam, the last one is the closure plate). Blank first seam staggers alternate courses by half a plate. t-min is calculated to API 653 §4.3.3.1 a) (grey) once the product SG is entered — see the shell evaluation below; type a value to override it.</p></section>
 
     <div class="shell-side">
     <section class="card"><h2>UT stations</h2>
@@ -1717,7 +1728,7 @@ function shellEvalHTML() {
     </div>
     <div class="tblwrap"><table class="grid seval"><thead><tr><th>Course</th><th>Material</th><th>Joint</th><th class="n">E</th><th>Y (${su})</th><th>T (${su})</th><th class="n">Sd (${su})</th><th class="n">St (${su})</th><th class="n">Liquid above course (${U.big})</th><th class="n">t-min calc</th><th class="n">t-min used</th><th class="n">Min. reading</th><th>Status</th><th class="n" title="Product fill height this course's minimum reading supports">Max fill (${U.big})</th><th class="n" title="API 653 4.3.3.2 hydrostatic test height from this course's minimum reading">Hydrotest Ht (${U.big})</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="small">${prodMin ? `Maximum product fill height from the minimum readings: <b>${fmt(prodMin.v, 'big', job)}</b> (course ${prodMin.c})` : ''}${hydMin ? ` · hydrostatic test height: <b>${fmt(hydMin.v, 'big', job)}</b> (course ${hydMin.c})` : ''}${prodMin && prodMin.v < B.fill - 1 ? ` · <b class="bad">below the maximum fill height ${fmt(B.fill, 'big', job)}</b>` : ''}</p>
-    <p class="muted small">t-min = 2.6 (H − 1) D G / (S E), not less than 0.100 in (API 653 4.3.3.1). S = product design stress from Table 4.1 — lower two courses use the smaller of 0.80Y / 0.429T, upper courses 0.88Y / 0.472T; riveted 21,000 psi. E from Table 4.2 (welded, by code and edition) or Table 4.3 (riveted). Hydrotest Ht = St E t / (2.6 D) + 1 (4.3.3.2). Fill and test heights use each course's minimum reading and are measured from the tank bottom. Y / T: type to override the table. Stresses in ${su}.</p>
+    <p class="muted small">t-min = 2.6 (H − 1) D G / (S E), not less than 0.100 in (SI: 4.9 D (H − 0.3) G / (S E), not less than 2.5 mm) (API 653 §4.3.3.1 a). Single readings are compared with the t-min at their elevation (§4.3.3.1 b) and evaluated per §4.3.2 when below it. S = product design stress from Table 4.1 — lower two courses use the smaller of 0.80Y / 0.429T, upper courses 0.88Y / 0.472T; riveted 21,000 psi. E from Table 4.2 (welded, by code and edition) or Table 4.3 (riveted). Hydrotest Ht = St E t / (2.6 D) + 1 (4.3.3.2). Fill and test heights use each course's minimum reading and are measured from the tank bottom. Y / T: type to override the table. Stresses in ${su}.</p>
   </section>`;
 }
 
@@ -1786,16 +1797,16 @@ function settleBodyHTML() {
   const results = F ? `<table class="grid sres settle-res"><thead><tr><th>Check</th><th class="n">Result</th><th class="n">Limit</th><th></th><th>Basis</th></tr></thead><tbody>
       ${res('Cosine fit R²', F.R2.toFixed(3), '≥ 0.90', c.valid, 'B.2.2.4 — fit must be valid to use B.3.2.1')}
       ${res('Planar tilt across the diameter', `${fS(F.tilt)} ${sU}`, '', null, `High side ${F.hiDeg.toFixed(0)}°, low side ${F.loDeg.toFixed(0)}° · slope ${slopeText(F.slope, job)}`)}
-      ${res('Out-of-plumbness at top of shell (tilt × H)', `${fS(F.plumb)} ${sU}`, `≤ ${fS(F.plumbLim)} ${sU}`, c.tiltOk, 'API 653 §10.5.2.1: 1/100 of shell height, 5 in max')}
+      ${res('Out-of-plumbness at top of shell (tilt × H)', `${fS(F.plumb)} ${sU}`, `≤ ${fS(F.plumbLim)} ${sU}`, c.tiltOk, 'Compared with API 653 §10.5.2.1 (a reconstruction tolerance): 1/100 of shell height, 5 in max')}
       ${res('… API 650 new-construction tolerance', `${fS(F.plumb)} ${sU}`, `${fS(F.plumb650)} ${sU}`, null, 'API 650 §7.5.2: 1/200 of height — reference only')}
       ${res('Max out-of-plane deflection |S|', F.maxS !== null ? `${fS(Math.abs(F.maxS))} ${sU} <small class="muted">(stn ${F.maxAt})</small>` : '—', c.Smax !== null ? `≤ ${fS(c.Smax)} ${sU}` : '<span class="muted">needs H, Y, E</span>', c.oopOk, 'B.3.2.1: Smax = 11·L²·Y / (2·E·H)')}
       ${res('Max measured difference (high − low)', `${fS(F.diff)} ${sU}`, '', null, 'Information')}
     </tbody></table>
-    ${c.arcs?.arcs?.length ? `<h3>B.3.2.2 arc method${c.valid ? ' <span class="muted small">(for information — the cosine fit is valid)</span>' : ''}</h3>
+    ${c.arcs?.arcs?.length ? `<h3>B.3.2.2 arc method <span class="muted small">(for information only — not used for acceptance until the engineer confirms the B.3.2.2 cap)</span></h3>
     <table class="grid sres settle-res"><thead><tr><th>Arc (stations)</th><th class="n">Arc length</th><th class="n">Max. settlement</th><th class="n">Allowable</th><th></th></tr></thead><tbody>
     ${c.arcs.arcs.map((a) => `<tr class="${a.ok === false ? 'is-bad' : ''}"><td>${a.from} → ${a.to} <small class="muted">${a.n} spaces${a.at ? ', max at stn ' + a.at : ''}</small></td><td class="n">${fmt(a.Sarc, 'big', job)}</td><td class="n"><b>${fS(Math.abs(a.maxDef))} ${sU}</b></td><td class="n">${a.allow != null ? '≤ ' + fS(a.allow) + ' ' + sU : '—'}</td><td>${a.ok === true ? '<span class="st st-OK">OK</span>' : a.ok === false ? '<span class="st st-below-MRT">Fails</span>' : ''}</td></tr>`).join('')}
     </tbody></table>
-    <p class="muted small">Arcs run between successive high points of the measured elevations${c.arcs.manual ? ' (as entered)' : ''}; settlement is the drop below the straight line joining the arc ends. Allowable = min(K · S<sub>arc</sub> · (D / H) · (Y / E), 4 in) with K = ${c.arcs.K ?? 'n/a'} (${c.arcs.fixed ? 'fixed roof' : 'open top'}, D ${fmt(c.D, 'big', job)}), Y = lowest course yield. ${c.arcs.K === null ? '<b>No K value for this diameter and roof type — engineering evaluation required.</b>' : ''}</p>` : ''}` : '<p class="muted">Enter at least 4 station readings to evaluate the shell settlement.</p>';
+    <p class="muted small">${c.arcs.fold ? 'Fold pattern: settlement arcs of 50 % of the circumference (B.2.2.5.3)' : `Arcs run between successive high points${c.arcs.manual ? ' (as entered)' : ''}`}; settlement is the drop below the straight line joining the arc ends, measured ${c.arcs.fromTilt ? 'from the tilt plane (B.2.2.5.2, Figure B.5)' : 'from the measured elevations (B.2.2.5.1)'}. Allowable = min(K · S<sub>arc</sub> · (D / H) · (Y / E), 4 in) with K = ${c.arcs.K ?? 'n/a'} (${c.arcs.fixed ? 'fixed roof' : 'open top'}, D ${fmt(c.D, 'big', job)}), Y = ${Math.round(c.Y * 145.0377).toLocaleString()} psi, E = ${(c.E * 145.0377 / 1e6).toFixed(1)} × 10⁶ psi (${h(c.Esrc || c.Ysrc || '')}). ${c.arcs.K === null ? '<b>No K value for this diameter and roof type — engineering evaluation required.</b>' : ''}</p>` : ''}` : '<p class="muted">Enter at least 4 station readings to evaluate the shell settlement.</p>';
   const warn = c.warnings.length ? `<div class="warnbox">${c.warnings.map((w) => `<p>${h(w)}</p>`).join('')}</div>` : '';
 
   const ein = (x, k, kind, extra = '') => `<input data-se="edge" data-eid="${x.id}" data-f="${k}" data-kind="${kind}" ${kind === 'text' ? '' : 'inputmode="decimal"'} value="${h(kind === 'num' || kind === 'text' ? x[k] ?? '' : inVal(x[k], kind, job))}" ${extra}>`;
@@ -1805,13 +1816,15 @@ function settleBodyHTML() {
     <td><select data-se="edge" data-eid="${x.id}" data-f="weld" data-kind="text">${WELDS.map(([k, l]) => `<option value="${k}" ${x.weld === k ? 'selected' : ''}>${h(l)}</option>`).join('')}</select></td><td>${x.weld === 'angle' ? ein(x, 'alpha', 'num', 'placeholder="0–90"') : '<span class="muted">—</span>'}</td>
     ${(() => { const cv = edgeCurve(job, +x.R || 0); return `<td>${ein(x, 'Bew', 'small', cv.Bew != null ? `placeholder="${fS(cv.Bew)}"` : '')}</td><td>${ein(x, 'Be', 'small', cv.Be != null ? `placeholder="${fS(cv.Be)}"` : x.weld === 'par' ? 'placeholder="opt."' : '')}</td>`; })()}<td class="n"><b>${ev.allow != null ? fmt(ev.allow, 'small', job, false) : '—'}</b></td><td class="n">${ev.pct != null ? ev.pct.toFixed(0) + '%' : '—'}</td><td title="${h(ev.basis)}">${stt(ev.status)}</td><td>${ein(x, 'notes', 'text', 'class="note"')}</td><td><button aria-label="Remove" class="btn sm icon ghost danger" data-act="se-del" data-k="edge" data-eid="${x.id}" title="Remove">✕</button></td></tr>`; }).join('') || '<tr><td colspan="14" class="empty">No edge settlement recorded.</td></tr>';
   const edgeNotes = [...new Set(st.edge.map((x) => edgeEval(x, S.job).status).filter((s) => s === 'NDE required' || s === 'Exceeds'))].map((s) => `<p class="small"><b>${s}:</b> ${h(EDGE_NOTE[s])}</p>`).join('');
-  const depRows = st.dep.map((x, i) => { const ev = depEval(x); return `<tr class="${ev.status === 'Exceeds' ? 'is-bad' : ''}"><td><b>D${i + 1}</b></td><td>${din(x, 'angle', 'num')}</td><td>${din(x, 'r', 'big')}</td><td>${din(x, 'R', 'big')}</td><td>${din(x, 'B', 'small')}</td><td class="n"><b>${ev.allow != null ? fmt(ev.allow, 'small', job, false) : '—'}</b></td><td class="n">${ev.pct != null ? ev.pct.toFixed(0) + '%' : '—'}</td><td>${stt(ev.status)}</td><td>${din(x, 'notes', 'text', 'class="note"')}</td><td><button aria-label="Remove" class="btn sm icon ghost danger" data-act="se-del" data-k="dep" data-eid="${x.id}" title="Remove">✕</button></td></tr>`; }).join('') || '<tr><td colspan="10" class="empty">No bottom depressions recorded.</td></tr>';
+  const depRows = st.dep.map((x, i) => { const ev = depEval(x, job); return `<tr class="${ev.status === 'Exceeds' ? 'is-bad' : ''}"><td><b>D${i + 1}</b></td><td>${din(x, 'angle', 'num')}</td><td>${din(x, 'r', 'big')}</td><td>${din(x, 'R', 'big')}</td><td>${din(x, 'B', 'small')}</td><td class="n"><b>${ev.allow != null ? fmt(ev.allow, 'small', job, false) : '—'}</b></td><td class="n">${ev.pct != null ? ev.pct.toFixed(0) + '%' : '—'}</td><td>${stt(ev.status)}</td><td>${din(x, 'notes', 'text', 'class="note"')}</td><td><button aria-label="Remove" class="btn sm icon ghost danger" data-act="se-del" data-k="dep" data-eid="${x.id}" title="Remove">✕</button></td></tr>`; }).join('') || '<tr><td colspan="10" class="empty">No bottom depressions recorded.</td></tr>';
 
   return `<section class="card"><div class="sp-head"><h2>Shell settlement survey</h2><span class="muted small">${c.n}/${c.N} stations read · <b class="${stCls}">${c.status}</b></span></div>
     <div class="fgrid g4">${field('Survey date', 'settle.date', 'date')}${field('Surveyed by', 'settle.surveyor')}${field('Instrument', 'settle.instrument', 'text', { ph: 'e.g. level, total station' })}${field('Benchmark', 'settle.benchmark')}
       ${field('Liquid level at survey', 'settle.level', 'text', { ph: 'e.g. empty / 32 ft' })}${field('Number of stations', 'settle.n', 'num', { ph: `${autoN(job)} (API 653)`, hint: `N = D/10 ft, even, ≥ 8, spacing ≤ 32 ft · spacing now ${c.L ? fmt(c.L, 'big', job) : '—'}` })}${field('Station 1 at', 'settle.start', 'num', { unit: '°', ph: '0' })}${field('Reading units', 'settle.eu', 'sel', { options: met ? [['mm', 'mm'], ['m', 'm']] : [['in', 'inches'], ['ft', 'feet (decimal)'], ['mm', 'mm']] })}
       ${field('Readings are rod readings (larger = lower)', 'settle.rod', 'bool')}${field('Shell height H', 'settle.H', 'big', { ph: shH ? fmt(shH, 'big', job, false) + ' (shell courses)' : '' })}
-      ${field('Y and E from the shell course 1 material (Table 4.1)', 'settle.yeAuto', 'bool', { value: st.yeAuto !== false })}${field('B.3.2.2 K value for', 'settle.kRoof', 'sel', { options: [['auto', `Auto — ${kRoofFixed(job) ? 'fixed roof' : 'open top / floating roof'}`], ['open', 'Open top / floating roof'], ['fixed', 'Fixed roof']] })}
+      ${field('Y and E from the shell course 1 material (Table 4.1; E for carbon steel)', 'settle.yeAuto', 'bool', { value: st.yeAuto !== false })}
+      ${field('Fold pattern about a diameter (B.2.2.5.3: arc = 50 % of the circumference)', 'settle.fold', 'bool')}
+      ${field('Out-of-plane subset — every nth station', 'settle.subStep', 'num', { ph: 'auto', hint: 'B.2.2.4 NOTE: Si / Smax on a subset spaced ≤ 32 ft when extra points are taken' })}${field('B.3.2.2 K value for', 'settle.kRoof', 'sel', { options: [['auto', `Auto — ${kRoofFixed(job) ? 'fixed roof' : 'open top / floating roof'}`], ['open', 'Open top / floating roof'], ['fixed', 'Fixed roof']] })}
       <label class="fld"><span class="lbl">Shell yield strength Y</span><span class="ctl"><input data-sts="Y" inputmode="decimal" value="${st.yeAuto !== false ? '' : stress(st.Y)}" placeholder="${stress(c.Y)}" ${st.yeAuto !== false ? 'disabled' : ''}><i class="unit">${met ? 'MPa' : 'psi'}</i></span><small>${st.yeAuto !== false ? h(c.Ysrc) : '30,000 psi (207 MPa) if unknown'}</small></label>
       <label class="fld"><span class="lbl">Young's modulus E</span><span class="ctl"><input data-sts="E" inputmode="decimal" value="${st.yeAuto !== false ? '' : stress(st.E)}" placeholder="${stress(c.E)}" ${st.yeAuto !== false ? 'disabled' : ''}><i class="unit">${met ? 'MPa' : 'psi'}</i></span><small>Table 4.1: 29,400,000 psi (202,706 MPa)</small></label>
       ${field('Notes', 'settle.notes', 'text', { cls: 'span2' })}</div>
@@ -1835,9 +1848,9 @@ function settleBodyHTML() {
     <p class="muted small">Measure B from a projection of the unsettled bottom (Fig. B.6; for cone-up / cone-down bottoms follow Fig. B.7), over the radial width R. <b>Bew</b> (Fig. B.11, bottom lap weld within ±20° of parallel to the shell) and <b>Be</b> (Fig. B.12, no weld, butt welds, or lap weld within ±20° of perpendicular) come from the built-in table at R for this tank diameter when left blank (grey). Lap welds at another angle α to the tank radius: B = Be − (Be − Bew)·sin α (B.3.4.4). Any area may be screened against Bew first. At 75 % of the allowable or more, examine the welds by VT and MT/PT (B.3.4.1). The curves assume 1/4 in (6 mm) bottoms and apply to 5/16–3/8 in (8–10 mm).</p>
   </section>
   <section class="card"><div class="sp-head"><h2>Bottom depressions / bulges</h2><span class="muted small">API 653 B.2.5 / B.3.3 · remote from the shell</span></div>
-    <div class="tblwrap"><table class="grid sedge"><thead><tr><th></th><th>Angle (°)</th><th>From centre (${U.big})</th><th title="Radius of the inscribed circle of the depression">R (${U.big})</th><th>Depth B (${sU})</th><th class="n">Allowable 0.37·R</th><th class="n">B / allow</th><th>Status</th><th>Notes</th><th></th></tr></thead><tbody>${depRows}</tbody></table></div>
+    <div class="tblwrap"><table class="grid sedge"><thead><tr><th></th><th>Angle (°)</th><th>From centre (${U.big})</th><th title="Radius of the inscribed circle of the depression">R (${U.big})</th><th>Depth B (${sU})</th><th class="n">Allowable ${met ? '0.031·R' : '0.37·R'}</th><th class="n">B / allow</th><th>Status</th><th>Notes</th><th></th></tr></thead><tbody>${depRows}</tbody></table></div>
     <div class="acts row-acts"><button class="btn sm" data-act="se-add" data-k="dep">+ Depression / bulge</button></div>
-    <p class="muted small">BB = 0.37·R (BB in inches, R in feet; ${met ? `≈ ${DEP_K.toFixed(4)}·R in mm` : 'metric ≈ 0.031·R'}) for single-pass lap-welded bottoms, smooth depressions with no sharp creases or buckled welds, and plate meeting the minimum bottom thickness. Check that floating roof supports are not affected.</p>
+    <p class="muted small">BB = ${met ? '0.031·R (SI form of B.3.3)' : '0.37·R (BB in inches, R in feet; SI form 0.031·R)'} for single-pass lap-welded bottoms, smooth depressions with no sharp creases or buckled welds, and plate meeting the minimum bottom thickness. Check that floating roof supports are not affected.</p>
   </section>`;
 }
 /** Distance from the shell as 0'-6" / 2'-0" (imperial) or mm. */
@@ -2118,7 +2131,7 @@ function roofAnalysisHTML(k) {
   if (k === 'froof') {
     if (!hasFixed(job)) return '<section class="card"><p class="muted">No fixed roof.</p></section>';
     const pts = (job.roof.fixed.pts || []).map((p) => ({ p, s: pointStatus(job, p) }));
-    return `<section class="card"><h2>Fixed roof readings</h2><table class="grid small"><thead><tr><th>Point</th><th class="n">Angle</th><th class="n">Reading</th><th class="n">Loss</th><th>Status</th></tr></thead><tbody>${pts.map(({ p, s }) => `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td>${h(p.label)}</td><td class="n">${p.angle ?? '—'}°</td><td class="n">${fmt(s.t, 't', job)}</td><td class="n">${s.lossPct != null ? s.lossPct.toFixed(0) + '%' : '—'}</td><td>${rStatus(s.status)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No readings.</td></tr>'}</tbody></table><p class="muted small">t-min ${fmt(job.roof.fixed.tMin, 't', job)} (API 653 4.2.1.2).</p></section>`;
+    return `<section class="card"><h2>Fixed roof readings</h2><table class="grid small"><thead><tr><th>Point</th><th class="n">Angle</th><th class="n">Reading</th><th class="n">Loss</th><th>Status</th></tr></thead><tbody>${pts.map(({ p, s }) => `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td>${h(p.label)}</td><td class="n">${p.angle ?? '—'}°</td><td class="n">${fmt(s.t, 't', job)}</td><td class="n">${s.lossPct != null ? s.lossPct.toFixed(0) + '%' : '—'}</td><td>${rStatus(s.status)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No readings.</td></tr>'}</tbody></table><p class="muted small">t-min ${fmt(job.roof.fixed.tMin, 't', job)} (API 653 §4.2.1.2). ${h(ROOF_NOTE)}</p></section>`;
   }
   if (!hasFloating(job)) return '<section class="card"><p class="muted">No floating roof.</p></section>';
   const res = activeStds(job.roof.seal).map((sk) => { const ev = sealEval(job, sk); return `<tr class="${ev.overall === 'Not compliant' ? 'is-bad' : ''}"><td>${h(ev.L.name)}</td><td><b>${ev.overall}</b></td><td class="small">${ev.fails ? h(ev.repair) : ''}</td></tr>`; }).join('');
@@ -2987,6 +3000,9 @@ function onIndField(el) {
       toast(`${k.toUpperCase()} can't be negative. Measure it from the plate's datum corner (${datumName(S.layout.byKey.get(ind.plate) || { kind: 'floor', datum: { c: S.job.layout.refCorner || 'BL' } })}).`);
       return;
     }
+    const bad = k === 'mflPct' && v !== null && (v < 0 || v > 100) ? 'MFL wall loss must be between 0 and 100 %.'
+      : ['utMin', 'vtDepth', 'utNom', 'len', 'wid'].includes(k) && v !== null && v < 0 ? 'The value can\'t be negative.' : null;
+    if (bad) { el.closest('.fld')?.classList.add('invalid'); toast(bad); return; }
     el.closest('.fld')?.classList.remove('invalid');
     if (v === null || v === '') delete ind[k]; else ind[k] = v;
   }
