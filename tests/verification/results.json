@@ -1,0 +1,1469 @@
+[
+ {
+  "id": "V-01",
+  "area": "Bottom MRT",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "MRT with one soil-side (UT) and one product-side (VT) location",
+  "input": "D 100 ft; nominal bottom 0.250 in; rate basis 20 yr; Or 10 yr. A: soil side, UT 0.180 in. B: product side, VT pit 0.040 in. Uncoated, no CP.",
+  "steps": [
+   "UPr = (0.250 − 0.180) / 20 = 0.0035 in/yr",
+   "StPr = 0.040 / 20 = 0.0020 in/yr",
+   "RTbc = 0.180 in; RTip = 0.250 − 0.040 = 0.210 in",
+   "MRT = min(0.180, 0.210) − 10 × (0.0020 + 0.0035) = 0.125 in"
+  ],
+  "tol": 0.0127,
+  "unit": "mm (shown in in)",
+  "source": "API 653 §4.4.7.1: MRT = (minimum of RTbc or RTip) − Or (StPr + UPr)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "UPr",
+    "expected": 0.0889,
+    "actual": 0.0889,
+    "ok": true
+   },
+   {
+    "key": "StPr",
+    "expected": 0.0508,
+    "actual": 0.0508,
+    "ok": true
+   },
+   {
+    "key": "MRT",
+    "expected": 3.175,
+    "actual": 3.175,
+    "ok": true
+   },
+   {
+    "key": "ok",
+    "expected": "true",
+    "actual": "true",
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-02",
+  "area": "Bottom MRT",
+  "units": "metric",
+  "basis": "equation",
+  "title": "MRT, metric units",
+  "input": "D 30 m; nominal bottom 6.0 mm; rate basis 20 yr; Or 10 yr. A: soil side, UT 4.5 mm. B: product side, VT pit 1.0 mm.",
+  "steps": [
+   "UPr = (6.0 − 4.5) / 20 = 0.075 mm/yr",
+   "StPr = 1.0 / 20 = 0.050 mm/yr",
+   "MRT = min(4.5, 5.0) − 10 × 0.125 = 3.25 mm ≥ 2.54 mm"
+  ],
+  "tol": 0.005,
+  "unit": "mm",
+  "source": "API 653 §4.4.7.1",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "UPr",
+    "expected": 0.075,
+    "actual": 0.075,
+    "ok": true
+   },
+   {
+    "key": "StPr",
+    "expected": 0.05,
+    "actual": 0.05,
+    "ok": true
+   },
+   {
+    "key": "MRT",
+    "expected": 3.25,
+    "actual": 3.25,
+    "ok": true
+   },
+   {
+    "key": "ok",
+    "expected": "true",
+    "actual": "true",
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-03",
+  "area": "Repair selection",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Automatic repair removes the governing location and re-derives the rates",
+  "input": "As V-01 plus C: soil side, UT 0.110 in.",
+  "steps": [
+   "All unrepaired: UPr = 0.140/20 = 0.0070, StPr = 0.0020, K = 0.0090 in/yr",
+   "C projected = 0.110 − 10 × 0.0090 = 0.020 in < 0.100 in → repair C",
+   "Without C: K = 0.0035 + 0.0020 = 0.0055 in/yr; A projected = 0.180 − 0.055 = 0.125 in ≥ 0.100 → OK",
+   "Repairs = [C]; MRT = 0.125 in"
+  ],
+  "tol": 0.0127,
+  "unit": "mm (shown in in)",
+  "source": "API 653 §4.4.7.1 (\"after repairs\"); repair selection is an engineering choice (see report)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "repairs",
+    "expected": "C",
+    "actual": "C",
+    "ok": true
+   },
+   {
+    "key": "K",
+    "expected": 0.1397,
+    "actual": 0.1397,
+    "ok": true
+   },
+   {
+    "key": "MRT",
+    "expected": 3.175,
+    "actual": 3.175,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-04",
+  "area": "Bottom MRT",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "\"Both sides\" location splits loss into product side (VT) and soil side (rest)",
+  "input": "Nominal 0.250 in; UT 0.150 in; VT pit 0.040 in; rate basis 20 yr.",
+  "steps": [
+   "Total loss = 0.250 − 0.150 = 0.100 in",
+   "Product side = VT pit = 0.040 in → StPr = 0.0020 in/yr",
+   "Soil side = 0.100 − 0.040 = 0.060 in → UPr = 0.0030 in/yr"
+  ],
+  "tol": 0.00127,
+  "unit": "mm/yr (shown in in/yr)",
+  "source": "Split rule used by the app; API 653 defines StPr / UPr but not how a through-wall split is apportioned — engineering assumption",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "StPr",
+    "expected": 0.0508,
+    "actual": 0.0508,
+    "ok": true
+   },
+   {
+    "key": "UPr",
+    "expected": 0.0762,
+    "actual": 0.0762,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-05",
+  "area": "MFL vs UT",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Proven soil-side location with only an MFL % estimate",
+  "input": "Nominal 0.250 in; result soil side; MFL 40 % loss; no UT, no VT.",
+  "steps": [
+   "Remaining = 0.250 × (1 − 0.40) = 0.150 in (MFL estimate)",
+   "A warning must say an MFL estimate was used"
+  ],
+  "tol": 0.0127,
+  "unit": "mm (shown in in)",
+  "source": "App rule; MFL % is an estimate of loss, not a measured thickness",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "rem",
+    "expected": 3.81,
+    "actual": 3.81,
+    "ok": true
+   },
+   {
+    "key": "src",
+    "expected": "MFL estimate",
+    "actual": "MFL estimate",
+    "ok": true
+   },
+   {
+    "key": "warned",
+    "expected": "true",
+    "actual": "true",
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-06",
+  "area": "MFL vs UT",
+  "units": "imperial",
+  "basis": "review",
+  "title": "A location evaluated from an MFL estimate must not be reported as a plain \"OK\"",
+  "input": "As V-05 (passes MRT only on the estimate).",
+  "steps": [
+   "Projected = 0.150 − 10 × 0.005 = 0.100 in → passes by 0 margin on an estimate",
+   "Required: status distinguishes estimate from measured, e.g. \"OK (MFL estimate — verify by UT)\""
+  ],
+  "tol": null,
+  "unit": "",
+  "source": "This review (proposed correction C-03): an estimate must not be presented as an acceptance",
+  "status": "FAIL",
+  "error": null,
+  "checks": [
+   {
+    "key": "estimateFlagInStatus",
+    "expected": "true",
+    "actual": "false",
+    "ok": false
+   }
+  ]
+ },
+ {
+  "id": "V-07",
+  "area": "MFL vs UT",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Pending (unproven) MFL calls are excluded and the exclusion is reported",
+  "input": "One proven soil-side location UT 0.200 in; one pending call MFL 60 %.",
+  "steps": [
+   "Pending call excluded (includeUnverified off)",
+   "UPr = 0.050/20 = 0.0025; MRT = 0.200 − 0.025 = 0.175 in",
+   "Warning lists 1 pending call"
+  ],
+  "tol": 0.0127,
+  "unit": "mm (shown in in)",
+  "source": "App rule; API 653 requires the MRT from the inspected bottom — unproven calls are an open item",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "MRT",
+    "expected": 4.445,
+    "actual": 4.445,
+    "ok": true
+   },
+   {
+    "key": "warned",
+    "expected": "true",
+    "actual": "true",
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-08",
+  "area": "Input validation",
+  "units": "imperial",
+  "basis": "review",
+  "title": "MFL loss over 100 % is rejected rather than giving a negative remaining thickness",
+  "input": "Nominal 0.250 in; soil side; MFL 120 %.",
+  "steps": [
+   "A loss over 100 % is not physical",
+   "Required: the value is refused or flagged; no negative remaining thickness enters the MRT"
+  ],
+  "tol": null,
+  "unit": "",
+  "source": "This review (proposed correction C-09)",
+  "status": "FAIL",
+  "error": null,
+  "checks": [
+   {
+    "key": "remNonNegative",
+    "expected": "true",
+    "actual": "false",
+    "ok": false
+   }
+  ]
+ },
+ {
+  "id": "V-09",
+  "area": "Corrosion rates",
+  "units": "imperial",
+  "basis": "review",
+  "title": "With no rate basis (years) the result must not read as acceptable",
+  "input": "As V-01 but rate basis blank.",
+  "steps": [
+   "Rates cannot be computed → MRT = RT (no corrosion allowance for the next interval)",
+   "Required: region result \"not evaluated\", not OK"
+  ],
+  "tol": null,
+  "unit": "",
+  "source": "This review (proposed correction C-04)",
+  "status": "FAIL",
+  "error": null,
+  "checks": [
+   {
+    "key": "regionOk",
+    "expected": "null",
+    "actual": "true",
+    "ok": false
+   }
+  ]
+ },
+ {
+  "id": "V-10",
+  "area": "Coating / CP",
+  "units": "imperial",
+  "basis": "review",
+  "title": "\"Coated\" with proven product-side pitting must not silently zero StPr",
+  "input": "As V-01 with \"coated\" ticked. Location B is product-side pitting (coating evidently not intact there).",
+  "steps": [
+   "API 653 sets StPr = 0 only for coated areas expected to last the interval",
+   "Required: StPr kept for proven product-side locations, or a warning that the coating option conflicts with recorded product-side corrosion"
+  ],
+  "tol": null,
+  "unit": "",
+  "source": "API 653 §4.4.7.1 note on StPr (coated areas); this review (proposed correction C-05)",
+  "status": "FAIL",
+  "error": null,
+  "checks": [
+   {
+    "key": "conflictWarned",
+    "expected": "true",
+    "actual": "false",
+    "ok": false
+   }
+  ]
+ },
+ {
+  "id": "V-11",
+  "area": "Coating / CP",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Effective CP sets UPr = 0",
+  "input": "As V-01 with \"effective CP\" ticked.",
+  "steps": [
+   "UPr = 0; StPr = 0.0020 in/yr",
+   "MRT = 0.180 − 10 × 0.0020 = 0.160 in"
+  ],
+  "tol": 0.0127,
+  "unit": "mm (shown in in)",
+  "source": "API 653 §4.4.7.1 note on UPr (effective cathodic protection)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "UPr",
+    "expected": 0,
+    "actual": 0,
+    "ok": true
+   },
+   {
+    "key": "MRT",
+    "expected": 4.064,
+    "actual": 4.064,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-12",
+  "area": "Critical zone",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Critical-zone limit = lesser of ½ original bottom t or ½ course-1 t-min, not less than 0.1 in",
+  "input": "Bottom 0.250 in, no annular ring; course 1 t-min entered 0.300 in. Soil-side UT 0.150 in, 2 in from the shell; rate basis 20 yr; Or 10.",
+  "steps": [
+   "Limit = max(0.100, min(0.250/2, 0.300/2)) = 0.125 in",
+   "UPr = 0.100/20 = 0.005; projected = 0.150 − 0.050 = 0.100 in < 0.125 → repair"
+  ],
+  "tol": 0.0127,
+  "unit": "mm (shown in in)",
+  "source": "API 653 §4.4.7.4 (critical zone) — confirm paragraph number for the edition",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "czLim",
+    "expected": 3.175,
+    "actual": 3.175,
+    "ok": true
+   },
+   {
+    "key": "critical",
+    "expected": "true",
+    "actual": "true",
+    "ok": true
+   },
+   {
+    "key": "repair",
+    "expected": "true",
+    "actual": "true",
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-13",
+  "area": "Critical zone",
+  "units": "metric",
+  "basis": "equation",
+  "title": "Critical-zone limit floor of 2.54 mm governs (metric)",
+  "input": "Bottom 8 mm; course 1 t-min 5 mm.",
+  "steps": [
+   "Limit = max(2.54, min(8/2, 5/2)) = max(2.54, 2.5) = 2.54 mm"
+  ],
+  "tol": 0.005,
+  "unit": "mm",
+  "source": "API 653 §4.4.7.4",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "czLim",
+    "expected": 2.54,
+    "actual": 2.54,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-14",
+  "area": "Critical zone",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Critical-zone boundary at 3 in from the shell",
+  "input": "Location centres 2.9 in and 3.1 in from the shell.",
+  "steps": [
+   "2.9 in ≤ 3 in → critical zone",
+   "3.1 in > 3 in → not critical zone"
+  ],
+  "tol": null,
+  "unit": "",
+  "source": "API 653 definition of critical zone (within 3 in of the inside edge of the shell)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "at29",
+    "expected": "true",
+    "actual": "true",
+    "ok": true
+   },
+   {
+    "key": "at31",
+    "expected": "false",
+    "actual": "false",
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-15",
+  "area": "Critical zone",
+  "units": "imperial",
+  "basis": "review",
+  "title": "A corroded area that extends into the critical zone is treated as critical",
+  "input": "Location centre 4 in from the shell; recorded width 3 in (inner edge of the corrosion 2.5 in from the shell).",
+  "steps": [
+   "Corrosion reaches 2.5 in from the shell → inside the 3 in critical zone",
+   "Required: critical = true (or the app asks the inspector)"
+  ],
+  "tol": null,
+  "unit": "",
+  "source": "This review (proposed correction C-06): the app tests only the location point",
+  "status": "FAIL",
+  "error": null,
+  "checks": [
+   {
+    "key": "critical",
+    "expected": "true",
+    "actual": "false",
+    "ok": false
+   }
+  ]
+ },
+ {
+  "id": "V-16",
+  "area": "Annular plates",
+  "units": "imperial",
+  "basis": "reference",
+  "title": "Table 4.5 lookup between stress columns",
+  "input": "Course 1 t = 0.75 in; computed stress Sb = 25,000 psi (column \"≤ 27,000\").",
+  "steps": [
+   "Reading the table by step: Sb = 25,000 falls in the ≤ 27,000 column → 0.20 in",
+   "App interpolates between 24,300 and 27,000 → 0.178 in",
+   "If interpolation is not permitted in the edition used, the app is non-conservative by 0.022 in"
+  ],
+  "tol": 0.001,
+  "unit": "in",
+  "source": "API 653 Table 4.5 (values as tabulated in tables.js T45); whether interpolation is permitted must be confirmed (C-07)",
+  "status": "UNVERIFIED",
+  "error": null,
+  "checks": [
+   {
+    "key": "t",
+    "expected": 0.2,
+    "actual": 0.177778,
+    "ok": false
+   }
+  ]
+ },
+ {
+  "id": "V-17",
+  "area": "Annular plates",
+  "units": "imperial",
+  "basis": "reference",
+  "title": "Table 4.5 at a column boundary",
+  "input": "Course 1 t = 1.00 in; Sb exactly 27,000 psi.",
+  "steps": [
+   "Row 0.75 < t ≤ 1.00, column ≤ 27,000 → 0.22 in"
+  ],
+  "tol": 0.001,
+  "unit": "in",
+  "source": "API 653 Table 4.5 (as tabulated in tables.js)",
+  "status": "UNVERIFIED",
+  "error": null,
+  "checks": [
+   {
+    "key": "t",
+    "expected": 0.22,
+    "actual": 0.22,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-18",
+  "area": "Annular plates",
+  "units": "imperial",
+  "basis": "review",
+  "title": "Default annular MRT limit when an annular ring is present",
+  "input": "New job with annular ring ticked; Table 4.5 gives 0.17 in or more.",
+  "steps": [
+   "App default annular limit = 0.10 in until the user presses \"use Table 4.5\"",
+   "Required: the Table 4.5 / 5.1b value is the default when it can be computed, or the limit is flagged as not set"
+  ],
+  "tol": null,
+  "unit": "",
+  "source": "This review (proposed correction C-08)",
+  "status": "FAIL",
+  "error": null,
+  "checks": [
+   {
+    "key": "defaultAtLeastTable",
+    "expected": "true",
+    "actual": "false",
+    "ok": false
+   }
+  ]
+ },
+ {
+  "id": "V-19",
+  "area": "Shell t-min",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Course t-min by API 653 4.3.3.1 (lower two courses use the lower-course Sd)",
+  "input": "D 100 ft; fill 40 ft; G 1.0; 5 courses × 8 ft; A516 Gr 55 (Table 4.1 Sd 23,600 lower / 26,000 upper); E 1.0.",
+  "steps": [
+   "Course 1: H = 40 → 2.6 × 39 × 100 × 1.0 / (23,600 × 1.0) = 0.4297 in",
+   "Course 2: H = 32 → 2.6 × 31 × 100 / 23,600 = 0.3415 in",
+   "Course 3: H = 24 → 2.6 × 23 × 100 / 26,000 = 0.2300 in",
+   "Course 5: H = 8 → 0.070 → minimum 0.100 in"
+  ],
+  "tol": 0.0005,
+  "unit": "in",
+  "source": "API 653 §4.3.3.1: t-min = 2.6 (H − 1) D G / (S E), not less than 0.1 in; S per Table 4.1",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "c1",
+    "expected": 0.429661,
+    "actual": 0.429661,
+    "ok": true
+   },
+   {
+    "key": "c2",
+    "expected": 0.341525,
+    "actual": 0.341525,
+    "ok": true
+   },
+   {
+    "key": "c3",
+    "expected": 0.23,
+    "actual": 0.23,
+    "ok": true
+   },
+   {
+    "key": "c5",
+    "expected": 0.1,
+    "actual": 0.1,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-20",
+  "area": "Shell t-min",
+  "units": "metric",
+  "basis": "equation",
+  "title": "Course 1 t-min, metric input",
+  "input": "D 30 m (98.425 ft); fill 12 m (39.370 ft); G 0.9; A516 Gr 60 (Sd lower 25,600 psi); E 0.85 (API 650 Annex A spot RT).",
+  "steps": [
+   "t-min = 2.6 × (39.370 − 1) × 98.425 × 0.9 / (25,600 × 0.85) = 0.40612 in = 10.315 mm"
+  ],
+  "tol": 0.01,
+  "unit": "mm",
+  "source": "API 653 §4.3.3.1; Table 4.2 (E = 0.85 for API 650 7th ed.+ Annex A spot RT)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "tmin",
+    "expected": 10.3155,
+    "actual": 10.3155,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-21",
+  "area": "Shell t-min",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Allowable stresses from Y and T for a material not in Table 4.1",
+  "input": "Y = 36,000 psi; T = 58,000 psi.",
+  "steps": [
+   "Sd lower = min(0.80 Y, 0.429 T) = min(28,800, 24,882) = 24,882",
+   "Sd upper = min(0.88 Y, 0.472 T) = 27,376",
+   "St lower = min(0.88 Y, 0.472 T) = 27,376",
+   "St upper = min(0.90 Y, 0.519 T) = 30,102"
+  ],
+  "tol": 1,
+  "unit": "psi",
+  "source": "API 653 Table 4.1 rules for materials not listed",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "SdL",
+    "expected": "24882.0",
+    "actual": "24882.0",
+    "ok": true
+   },
+   {
+    "key": "SdU",
+    "expected": "27376.0",
+    "actual": "27376.0",
+    "ok": true
+   },
+   {
+    "key": "StL",
+    "expected": "27376.0",
+    "actual": "27376.0",
+    "ok": true
+   },
+   {
+    "key": "StU",
+    "expected": "30102.0",
+    "actual": "30102.0",
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-22",
+  "area": "Shell t-min",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Hydrotest and product fill heights supported by a thickness",
+  "input": "D 100 ft; course 1 t = 0.500 in; A516 Gr 55 (Sd 23,600, St 26,000); E 1.0; G 1.0.",
+  "steps": [
+   "Ht = St E t / (2.6 D) + 1 = 26,000 × 0.5 / 260 + 1 = 51.0 ft",
+   "H fill = Sd E t / (2.6 D G) + 1 = 46.38 ft"
+  ],
+  "tol": 0.01,
+  "unit": "ft",
+  "source": "API 653 §4.3.3.2 (hydrotest height); inverse of §4.3.3.1",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "Ht",
+    "expected": 51,
+    "actual": 51,
+    "ok": true
+   },
+   {
+    "key": "Hfill",
+    "expected": 46.3846,
+    "actual": 46.3846,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-23",
+  "area": "Shell evaluation",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Course status from the minimum reading",
+  "input": "Course 1 t-min entered 0.430 in; readings 0.450, 0.432, 0.428 in.",
+  "steps": [
+   "Minimum 0.428 < 0.430 → \"Below t-min\" (single reading compared with the whole-course t-min)"
+  ],
+  "tol": 0.0127,
+  "unit": "mm",
+  "source": "API 653 §4.3.3.1 (whole course). §4.3.2 averaging over L for locally thinned areas is not applied — see report",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "status",
+    "expected": "Below t-min",
+    "actual": "Below t-min",
+    "ok": true
+   },
+   {
+    "key": "min",
+    "expected": 10.8712,
+    "actual": 10.8712,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-24",
+  "area": "Nozzles",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Neck minimum, % loss and status",
+  "input": "NPS 4 Sch 80: nominal 0.337 in; t-min entered 0.200 in; readings 0.301, 0.255, 0.290, 0.300 in.",
+  "steps": [
+   "Minimum = 0.255 in",
+   "Loss = (0.337 − 0.255) / 0.337 = 24.33 %",
+   "0.255 ≥ 0.200 → OK"
+  ],
+  "tol": 0.01,
+  "unit": "mm / %",
+  "source": "Arithmetic; the t-min itself is an engineering input (see report)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "min",
+    "expected": 6.477,
+    "actual": 6.477,
+    "ok": true
+   },
+   {
+    "key": "lossPct",
+    "expected": 24.3323,
+    "actual": 24.3323,
+    "ok": true
+   },
+   {
+    "key": "status",
+    "expected": "OK",
+    "actual": "OK",
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-25",
+  "area": "Fixed roof",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Fixed roof point below the 0.09 in limit",
+  "input": "Roof t-min 0.09 in (default); point reading 0.085 in; nominal 0.1875 in.",
+  "steps": [
+   "0.085 < 0.090 → \"Below t-min\"; loss = (0.1875 − 0.085)/0.1875 = 54.7 %"
+  ],
+  "tol": 0.01,
+  "unit": "%",
+  "source": "API 653 §4.2.1.2 (0.09 in averaged over 100 in²) — the app compares single points (conservative)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "status",
+    "expected": "Below t-min",
+    "actual": "Below t-min",
+    "ok": true
+   },
+   {
+    "key": "lossPct",
+    "expected": 54.6667,
+    "actual": 54.6667,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-26",
+  "area": "Fixed roof",
+  "units": "metric",
+  "basis": "equation",
+  "title": "Metric default roof limit is not less than 0.09 in",
+  "input": "New metric job.",
+  "steps": [
+   "0.09 in = 2.286 mm; app default 2.3 mm (≥ 2.286 → conservative)"
+  ],
+  "tol": null,
+  "unit": "",
+  "source": "Unit conversion check",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "atLeast",
+    "expected": "true",
+    "actual": "true",
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-27",
+  "area": "Floating roof",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Deck plate minimum of five readings",
+  "input": "Deck nominal 0.1875 in; t-min 0.09 in; readings 0.18, 0.17, 0.088, 0.16, 0.175 in.",
+  "steps": [
+   "Minimum 0.088 < 0.090 → \"Below t-min\""
+  ],
+  "tol": 0.0127,
+  "unit": "mm",
+  "source": "Arithmetic; the 0.09 in deck limit has no code reference in the app (see report)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "status",
+    "expected": "Below t-min",
+    "actual": "Below t-min",
+    "ok": true
+   },
+   {
+    "key": "min",
+    "expected": 2.2352,
+    "actual": 2.2352,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-28",
+  "area": "Rim seal",
+  "units": "metric",
+  "basis": "equation",
+  "title": "Seal gap area per metre of diameter",
+  "input": "D 30 m; two gaps each 1,000 mm long × 10 mm average width.",
+  "steps": [
+   "Area = 2 × (100 cm × 1 cm) = 200 cm²",
+   "Per metre of diameter = 200 / 30 = 6.667 cm²/m"
+  ],
+  "tol": 0.001,
+  "unit": "cm²/m",
+  "source": "40 CFR 60.113b (gap area per metre of tank diameter)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "perM",
+    "expected": 6.6667,
+    "actual": 6.66667,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-29",
+  "area": "Rim seal",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "cm²/m ↔ in²/ft conversion",
+  "input": "212 cm²/m.",
+  "steps": [
+   "1 in²/ft = 6.4516 cm² / 0.3048 m = 21.1667 cm²/m",
+   "212 / 21.1667 = 10.016 in²/ft"
+  ],
+  "tol": 0.0002,
+  "unit": "in²/ft",
+  "source": "Exact unit definitions (1 in = 2.54 cm)",
+  "status": "FAIL",
+  "error": null,
+  "checks": [
+   {
+    "key": "inft",
+    "expected": 10.0157,
+    "actual": 10.0152,
+    "ok": false
+   }
+  ]
+ },
+ {
+  "id": "V-30",
+  "area": "Settlement — cosine fit",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Exact cosine data: fit, tilt and high point",
+  "input": "D 100 ft; H 40 ft; 8 stations; z = 10 + 2 cos θ + 1 sin θ (in).",
+  "steps": [
+   "Least squares returns a = 10, b = 2, c = 1; R² = 1",
+   "Amplitude = √(2² + 1²) = 2.2361 in; tilt across the diameter = 4.4721 in",
+   "High side at atan2(1, 2) = 26.57°"
+  ],
+  "tol": 0.001,
+  "unit": "mm / °",
+  "source": "API 653 Annex B.2.2.4 (optimum cosine curve by least squares)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "b",
+    "expected": 50.8,
+    "actual": 50.8,
+    "ok": true
+   },
+   {
+    "key": "c",
+    "expected": 25.4,
+    "actual": 25.4,
+    "ok": true
+   },
+   {
+    "key": "R2",
+    "expected": 1,
+    "actual": 1,
+    "ok": true
+   },
+   {
+    "key": "tilt",
+    "expected": 113.592,
+    "actual": 113.592,
+    "ok": true
+   },
+   {
+    "key": "hiDeg",
+    "expected": 26.5651,
+    "actual": 26.5651,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-31",
+  "area": "Settlement — out-of-plane",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Out-of-plane deflection S and Smax",
+  "input": "D 100 ft; H 40 ft; 10 stations (L = 31.416 ft); z = 2 cos θ + 1 sin θ in, +0.5 in at station 3; Y 30,000 psi; E 29,000,000 psi.",
+  "steps": [
+   "Fit by least squares (independent numpy solve): R² = 0.99347",
+   "U = z − fit; S₃ = U₃ − ½(U₂ + U₄) = 0.4809 in",
+   "Smax = 11 L² Y / (2 E H) = 11 × 31.416² × 30,000 / (2 × 29e6 × 40) ft = 1.6846 in",
+   "|S| ≤ Smax → acceptable"
+  ],
+  "tol": 0.0254,
+  "unit": "mm",
+  "source": "API 653 B.3.2.1: S = U_i − ½(U_i−1 + U_i+1); Smax = L² Y 11 / (2 E H)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "R2",
+    "expected": 0.993469,
+    "actual": 0.993469,
+    "ok": true
+   },
+   {
+    "key": "S3",
+    "expected": 12.2149,
+    "actual": 12.2149,
+    "ok": true
+   },
+   {
+    "key": "Smax",
+    "expected": 42.7898,
+    "actual": 42.7898,
+    "ok": true
+   },
+   {
+    "key": "oopOk",
+    "expected": "true",
+    "actual": "true",
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-32",
+  "area": "Settlement — out-of-plane",
+  "units": "metric",
+  "basis": "equation",
+  "title": "Out-of-plane deflection, metric",
+  "input": "D 30 m; H 12 m; 10 stations; z = 50 cos θ + 25 sin θ mm, +12 mm at station 3; Y 206.8 MPa; E 200,000 MPa.",
+  "steps": [
+   "S₃ = 11.5416 mm (independent solve)",
+   "Smax = 11 L² Y / (2 E H) with L = π × 30,000 / 10 mm = 42.096 mm"
+  ],
+  "tol": 0.01,
+  "unit": "mm",
+  "source": "API 653 B.3.2.1 (dimensionally consistent: L²/H is a length, Y/E is dimensionless)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "S3",
+    "expected": 11.5416,
+    "actual": 11.5416,
+    "ok": true
+   },
+   {
+    "key": "Smax",
+    "expected": 42.0963,
+    "actual": 42.0963,
+    "ok": true
+   },
+   {
+    "key": "R2",
+    "expected": 0.993963,
+    "actual": 0.993963,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-33",
+  "area": "Settlement — R²",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Poor cosine fit is not evaluated by B.3.2.1",
+  "input": "8 stations; random-looking elevations (R² < 0.9).",
+  "steps": [
+   "R² < 0.90 → cosine fit not valid for out-of-plane check; result must not be \"Acceptable\" from B.3.2.1"
+  ],
+  "tol": null,
+  "unit": "",
+  "source": "API 653 B.2.2.4 R² criterion as implemented (0.90) — confirm value and wording in the edition used",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "valid",
+    "expected": "false",
+    "actual": "false",
+    "ok": true
+   },
+   {
+    "key": "notAcceptableByB321",
+    "expected": "true",
+    "actual": "true",
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-34",
+  "area": "Settlement — stations",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Number of settlement stations",
+  "input": "D = 40, 150, 330, 400 ft.",
+  "steps": [
+   "N = D/10 rounded up to even, at least 8, spacing ≤ 32 ft",
+   "40 → 4 → 8; 150 → 15 → 16; 330 → 33 → 34; 400 → 40"
+  ],
+  "tol": 0,
+  "unit": "",
+  "source": "API 653 B.2.2.1 / §12.5 as quoted in the app (even-number rounding to be confirmed)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "D40",
+    "expected": 8,
+    "actual": 8,
+    "ok": true
+   },
+   {
+    "key": "D150",
+    "expected": 16,
+    "actual": 16,
+    "ok": true
+   },
+   {
+    "key": "D330",
+    "expected": 34,
+    "actual": 34,
+    "ok": true
+   },
+   {
+    "key": "D400",
+    "expected": 40,
+    "actual": 40,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-35",
+  "area": "Settlement — edge",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Angled lap weld allowable",
+  "input": "Be = 4.0 in, Bew = 3.0 in, α = 45°.",
+  "steps": [
+   "B = Be − (Be − Bew) sin α = 4.0 − 1.0 × 0.7071 = 3.2929 in"
+  ],
+  "tol": 0.0127,
+  "unit": "mm",
+  "source": "API 653 B.3.4 (angled lap welds) — α definition (from the radius or from the shell) must be confirmed",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "allow",
+    "expected": 83.6395,
+    "actual": 83.6395,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-36",
+  "area": "Settlement — edge",
+  "units": "imperial",
+  "basis": "review",
+  "title": "Angled weld allowable is continuous at α = 20° and 70°",
+  "input": "Be 4.0, Bew 3.0 in; α = 19.9°, 20.1°, 69.9°, 70.1°.",
+  "steps": [
+   "Formula gives 3.660 / 3.656 in near 20° but the ±20° rule gives Be = 4.0 at ≤ 20° → 0.34 in step",
+   "Near 70°: formula 3.061 vs rule Bew = 3.0",
+   "Required: confirm whether the ±20° rule and the sin α formula are alternatives or combined"
+  ],
+  "tol": 0.254,
+  "unit": "mm",
+  "source": "This review (proposed correction C-11)",
+  "status": "FAIL",
+  "error": null,
+  "checks": [
+   {
+    "key": "jump20",
+    "expected": 0,
+    "actual": 8.72896,
+    "ok": false
+   },
+   {
+    "key": "jump70",
+    "expected": 0,
+    "actual": 1.54701,
+    "ok": false
+   }
+  ]
+ },
+ {
+  "id": "V-37",
+  "area": "Settlement — edge",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "75 % of allowable triggers NDE",
+  "input": "Allowable Bew 4.0 in (weld parallel); B = 3.0 in and 2.99 in.",
+  "steps": [
+   "3.00 / 4.00 = 75 % → \"NDE required\"",
+   "2.99 / 4.00 = 74.75 % → \"Acceptable\""
+  ],
+  "tol": null,
+  "unit": "",
+  "source": "API 653 B.3.4.1 (as implemented) — confirm threshold in the edition used",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "at75",
+    "expected": "NDE required",
+    "actual": "NDE required",
+    "ok": true
+   },
+   {
+    "key": "below",
+    "expected": "Acceptable",
+    "actual": "Acceptable",
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-38",
+  "area": "Settlement — edge",
+  "units": "imperial",
+  "basis": "reference",
+  "title": "Fig. B.11 / B.12 allowables read from the built-in table",
+  "input": "D 100 ft; R 3 ft.",
+  "steps": [
+   "App table (digitised curves): Bew 3.48 in, Be 4.20 in",
+   "Expected value must be read from Fig. B.11 / B.12 of the edition in use — UNVERIFIED here"
+  ],
+  "tol": 0.05,
+  "unit": "in",
+  "source": "API 653 Fig. B.11 / B.12 (not available to this review) — engineer to confirm",
+  "status": "UNVERIFIED",
+  "error": null,
+  "checks": [
+   {
+    "key": "Bew",
+    "expected": 3.48,
+    "actual": 3.48,
+    "ok": true
+   },
+   {
+    "key": "Be",
+    "expected": 4.2,
+    "actual": 4.2,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-39",
+  "area": "Settlement — edge",
+  "units": "imperial",
+  "basis": "review",
+  "title": "Diameters below the smallest tabulated curve are not extrapolated non-conservatively",
+  "input": "D 15 ft (below the 20 ft curve); R 3 ft.",
+  "steps": [
+   "Allowables grow with diameter, so using the 20 ft curve for a 15 ft tank overstates the allowable",
+   "Required: no value (engineering evaluation) or a conservative value below the tabulated range"
+  ],
+  "tol": null,
+  "unit": "",
+  "source": "This review (proposed correction C-12)",
+  "status": "FAIL",
+  "error": null,
+  "checks": [
+   {
+    "key": "Bew",
+    "expected": "null",
+    "actual": 2,
+    "ok": false
+   }
+  ]
+ },
+ {
+  "id": "V-40",
+  "area": "Settlement — edge profile",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Breakover R and settlement B from a radial profile",
+  "input": "Readings from the shell inward: bottom flat at 0 beyond 36 in; linear drop to −2.0 in at the shell; tolerance 1/8 in.",
+  "steps": [
+   "Line through outer readings: z = 0",
+   "Walking inward, 36 in is within tolerance; 24 in is 0.667 in low → breakover R = 36 in = 3 ft",
+   "B = largest drop inside R = 2.0 in (at the shell)"
+  ],
+  "tol": 0.254,
+  "unit": "mm",
+  "source": "API 653 Fig. B.6 (definitions of B and R); breakover tolerance is an engineering choice",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "R",
+    "expected": 914.4,
+    "actual": 914.4,
+    "ok": true
+   },
+   {
+    "key": "B",
+    "expected": 50.8,
+    "actual": 50.8,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-41",
+  "area": "Settlement — depressions",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Bottom depression limit BB = 0.37 R",
+  "input": "R = 10 ft; depth B = 3.5 in.",
+  "steps": [
+   "BB = 0.37 × 10 = 3.70 in",
+   "3.5 ≤ 3.70 → acceptable"
+  ],
+  "tol": 0.0254,
+  "unit": "mm",
+  "source": "API 653 B.3.3: BB = 0.37 R (BB in in, R in ft)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "allow",
+    "expected": 93.98,
+    "actual": 93.98,
+    "ok": true
+   },
+   {
+    "key": "status",
+    "expected": "Acceptable",
+    "actual": "Acceptable",
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-42",
+  "area": "Settlement — depressions",
+  "units": "metric",
+  "basis": "equation",
+  "title": "Bottom depression limit, metric",
+  "input": "R = 3.0 m; depth 95 mm.",
+  "steps": [
+   "R = 9.8425 ft → BB = 0.37 × 9.8425 = 3.6417 in = 92.50 mm",
+   "95 > 92.50 → exceeds"
+  ],
+  "tol": 0.01,
+  "unit": "mm",
+  "source": "API 653 B.3.3 with exact unit conversion",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "allow",
+    "expected": 92.5,
+    "actual": 92.5,
+    "ok": true
+   },
+   {
+    "key": "status",
+    "expected": "Exceeds",
+    "actual": "Exceeds",
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-46",
+  "area": "Settlement — B.3.2.2 arcs",
+  "units": "imperial",
+  "basis": "reference",
+  "title": "Arc method: deflection below the chord and the allowable",
+  "input": "D 100 ft; H 40 ft; 8 stations; elevations 2, 0, 1.5, 0, 2, 0, 1.5, 0 in (high points at stations 1, 3, 5, 7).",
+  "steps": [
+   "Arc 1→3: chord at station 2 = (2 + 1.5)/2 = 1.75 in; station 2 is at 0 → deflection 1.75 in",
+   "Allowable = min(K · Sarc · (D/H) · (Y/E), 4 in) as implemented — K table, units and formula could not be confirmed against B.3.2.2",
+   "UNVERIFIED: engineer to confirm the formula, K values and units"
+  ],
+  "tol": 0.0254,
+  "unit": "mm",
+  "source": "API 653 B.3.2.2 as implemented in settle.js arcEval — not confirmed (C-13)",
+  "status": "UNVERIFIED",
+  "error": null,
+  "checks": [
+   {
+    "key": "maxDef",
+    "expected": 44.45,
+    "actual": 44.45,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-43",
+  "area": "Patch plates",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Auto patch size extends 2 in past the recorded corrosion",
+  "input": "Repair location 14 in × 3 in; default patch 12 × 12 in; margin 2 in.",
+  "steps": [
+   "L = max(12, 14 + 2 × 2) = 18 in",
+   "W = max(12, 3 + 2 × 2) = 12 in"
+  ],
+  "tol": 0.01,
+  "unit": "mm",
+  "source": "API 653 §9.10.1.1 (patch extends ≥ 2 in past the corroded area) — confirm paragraph",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "L",
+    "expected": 457.2,
+    "actual": 457.2,
+    "ok": true
+   },
+   {
+    "key": "W",
+    "expected": 304.8,
+    "actual": 304.8,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-44",
+  "area": "Patch plates",
+  "units": "imperial",
+  "basis": "review",
+  "title": "With no recorded corrosion size, the \"2 in past the corrosion\" check is not a pass",
+  "input": "Critical-zone repair location with no length / width entered.",
+  "steps": [
+   "Patch defaults to 12 × 12 in centred on the point",
+   "Coverage of the corrosion is unknown → the 9.10.1.1 check must be \"Verify\", not OK"
+  ],
+  "tol": null,
+  "unit": "",
+  "source": "This review (proposed correction C-10)",
+  "status": "FAIL",
+  "error": null,
+  "checks": [
+   {
+    "key": "marginCheck",
+    "expected": "null",
+    "actual": "true",
+    "ok": false
+   }
+  ]
+ },
+ {
+  "id": "V-45",
+  "area": "Units",
+  "units": "both",
+  "basis": "equation",
+  "title": "Input conversion to the internal millimetre basis",
+  "input": "0.25 in thickness; 120 ft diameter; 6.0 mm; 30 m.",
+  "steps": [
+   "0.25 × 25.4 = 6.35 mm",
+   "120 × 304.8 = 36,576 mm",
+   "metric values unchanged (× 1 / × 1000)"
+  ],
+  "tol": 1e-9,
+  "unit": "mm",
+  "source": "Exact definitions: 1 in = 25.4 mm, 1 ft = 304.8 mm",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "t_in",
+    "expected": 6.35,
+    "actual": 6.35,
+    "ok": true
+   },
+   {
+    "key": "D_ft",
+    "expected": "36576.0",
+    "actual": "36576.0",
+    "ok": true
+   },
+   {
+    "key": "t_mm",
+    "expected": 6,
+    "actual": 6,
+    "ok": true
+   },
+   {
+    "key": "D_m",
+    "expected": "30000.0",
+    "actual": "30000.0",
+    "ok": true
+   }
+  ]
+ }
+]

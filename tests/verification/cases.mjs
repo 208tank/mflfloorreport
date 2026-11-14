@@ -1,0 +1,670 @@
+// Independent calculation verification library.
+//
+// Each case states its inputs, the hand-calculation steps, the expected result, the tolerance and where
+// the expected result comes from. Expected values were worked out independently of the app's code
+// (tests/verification/oracle.py reproduces them from the equations alone). `run()` calls the app and
+// returns the actual values; the runner compares them.
+//
+// basis:
+//   'equation'  expected value follows from a governing equation quoted in the report (the code reference
+//               must still be confirmed against the user's edition of API 653)
+//   'review'    behaviour this review proposes the software must have (an engineering-verification
+//               requirement, not a code equation) — a FAIL here is a proposed correction, not a code error
+//   'reference' expected value is a lookup from a figure / table that could not be checked here; the
+//               case records the app's value and is marked UNVERIFIED until an engineer confirms it
+import { newJob, migrate } from '../../js/model.js';
+import { buildLayout, plateAt, toLocal, polar } from '../../js/geometry.js';
+import { api653, nozzleUT } from '../../js/calc.js';
+import { courseDesigns, fillFromT, annularReq } from '../../js/design.js';
+import { allowables, annularMin, edgeAllow } from '../../js/tables.js';
+import { courseSummary } from '../../js/shell.js';
+import { settleCalc, edgeEval, depEval, profileEval, autoN, epOffsets, xKey } from '../../js/settle.js';
+import { pointStatus, plateUT } from '../../js/roof.js';
+import { gapSummary, cm2mToIn2ft } from '../../js/seal.js';
+import { toMm } from '../../js/units.js';
+import { patchList } from '../../js/patches.js';
+
+const IN = 25.4, FT = 304.8;
+
+/* ------------------------------------------------------------------ job builders --- */
+
+/** Floor job: D (mm), tBottom (mm), years, Or; no annular ring. */
+function floorJob({ units = 'imperial', D, tBottom, years = 20, Or = 10, calc = {}, annular = false, tAnnular = null, courses = [] }) {
+  const job = newJob(units);
+  Object.assign(job.tank, { diameter: D, tBottom, tAnnular });
+  Object.assign(job.layout, { annular, annW: 24 * IN });
+  Object.assign(job.calc, { years, Or, ...calc });
+  job.shell.courses = courses;
+  return job;
+}
+/** Indication at radius r (mm) and angle deg from the centre. */
+function indAt(job, r, deg, o) {
+  const L = buildLayout(job), [x, y] = polar(r, deg), p = plateAt(L, x, y), loc = toLocal(L, p, x, y);
+  return { id: o.id, no: o.id, plate: p.key, x: loc.X, y: loc.Y, result: 'pending', repair: 'auto', ...o };
+}
+const evalFloor = (job) => { const L = buildLayout(job); return { L, c: api653(job, L) }; };
+const region = (c, name) => c.regions.find((r) => r.name === name);
+
+/** Shell job: D (mm), fill (mm), G, courses [{h, tNom, tMin?}], material and joint for all courses. */
+function shellJob({ units = 'imperial', D, fill, G, courses, matl = 'ASTM A516 Gr. 55', joint = 'w:650-7:0' }) {
+  const job = newJob(units);
+  Object.assign(job.tank, { diameter: D, fillH: fill, sg: G, code: 'API 650', edition: 'Tenth, November 1998' });
+  job.shell.matl = matl; job.shell.joint = joint;
+  job.shell.courses = courses.map((c, i) => ({ id: 'c' + (i + 1), h: c.h, tNom: c.tNom ?? null, tMin: c.tMin ?? null }));
+  return job;
+}
+
+/** Settlement job: D, H (mm), N stations, elevations (mm) by station, Y / E entered (MPa). */
+function settleJob({ units = 'imperial', D, H, N, z, Y, E }) {
+  const job = newJob(units);
+  job.tank.diameter = D;
+  job.shell.courses = [{ id: 'c1', h: H }];
+  Object.assign(job.settle, { n: N, start: 0, yeAuto: false, Y, E, H, el: Object.fromEntries(z.map((v, i) => [i + 1, v])) });
+  return job;
+}
+const cosZ = (N, a, b, c) => Array.from({ length: N }, (_, i) => a + b * Math.cos((2 * Math.PI * i) / N) + c * Math.sin((2 * Math.PI * i) / N));
+
+/* ------------------------------------------------------------------------- cases --- */
+
+export const CASES = [
+  /* ---------------------------------------------------------------- 1. bottom MRT --- */
+  {
+    id: 'V-01', area: 'Bottom MRT', units: 'imperial', basis: 'equation',
+    title: 'MRT with one soil-side (UT) and one product-side (VT) location',
+    input: 'D 100 ft; nominal bottom 0.250 in; rate basis 20 yr; Or 10 yr. A: soil side, UT 0.180 in. B: product side, VT pit 0.040 in. Uncoated, no CP.',
+    steps: ['UPr = (0.250 − 0.180) / 20 = 0.0035 in/yr', 'StPr = 0.040 / 20 = 0.0020 in/yr', 'RTbc = 0.180 in; RTip = 0.250 − 0.040 = 0.210 in', 'MRT = min(0.180, 0.210) − 10 × (0.0020 + 0.0035) = 0.125 in'],
+    expected: { UPr: 0.0035 * IN, StPr: 0.002 * IN, MRT: 0.125 * IN, ok: true }, tol: 0.0005 * IN, unit: 'mm (shown in in)',
+    source: 'API 653 §4.4.7.1: MRT = (minimum of RTbc or RTip) − Or (StPr + UPr)',
+    run() {
+      const job = floorJob({ D: 100 * FT, tBottom: 0.25 * IN });
+      job.indications = [indAt(job, 10 * FT, 30, { id: 'A', result: 'ss', utMin: 0.18 * IN }), indAt(job, 20 * FT, 120, { id: 'B', result: 'ps', vtDepth: 0.04 * IN })];
+      const { c } = evalFloor(job), b = region(c, 'bottom');
+      return { UPr: c.UPr, StPr: c.StPr, MRT: b.MRT, ok: b.ok };
+    }
+  },
+  {
+    id: 'V-02', area: 'Bottom MRT', units: 'metric', basis: 'equation',
+    title: 'MRT, metric units',
+    input: 'D 30 m; nominal bottom 6.0 mm; rate basis 20 yr; Or 10 yr. A: soil side, UT 4.5 mm. B: product side, VT pit 1.0 mm.',
+    steps: ['UPr = (6.0 − 4.5) / 20 = 0.075 mm/yr', 'StPr = 1.0 / 20 = 0.050 mm/yr', 'MRT = min(4.5, 5.0) − 10 × 0.125 = 3.25 mm ≥ 2.54 mm'],
+    expected: { UPr: 0.075, StPr: 0.05, MRT: 3.25, ok: true }, tol: 0.005, unit: 'mm',
+    source: 'API 653 §4.4.7.1',
+    run() {
+      const job = floorJob({ units: 'metric', D: 30000, tBottom: 6 });
+      job.indications = [indAt(job, 3000, 30, { id: 'A', result: 'ss', utMin: 4.5 }), indAt(job, 6000, 120, { id: 'B', result: 'ps', vtDepth: 1.0 })];
+      const { c } = evalFloor(job), b = region(c, 'bottom');
+      return { UPr: c.UPr, StPr: c.StPr, MRT: b.MRT, ok: b.ok };
+    }
+  },
+  {
+    id: 'V-03', area: 'Repair selection', units: 'imperial', basis: 'equation',
+    title: 'Automatic repair removes the governing location and re-derives the rates',
+    input: 'As V-01 plus C: soil side, UT 0.110 in.',
+    steps: ['All unrepaired: UPr = 0.140/20 = 0.0070, StPr = 0.0020, K = 0.0090 in/yr', 'C projected = 0.110 − 10 × 0.0090 = 0.020 in < 0.100 in → repair C', 'Without C: K = 0.0035 + 0.0020 = 0.0055 in/yr; A projected = 0.180 − 0.055 = 0.125 in ≥ 0.100 → OK', 'Repairs = [C]; MRT = 0.125 in'],
+    expected: { repairs: 'C', K: 0.0055 * IN, MRT: 0.125 * IN }, tol: 0.0005 * IN, unit: 'mm (shown in in)',
+    source: 'API 653 §4.4.7.1 ("after repairs"); repair selection is an engineering choice (see report)',
+    run() {
+      const job = floorJob({ D: 100 * FT, tBottom: 0.25 * IN });
+      job.indications = [indAt(job, 10 * FT, 30, { id: 'A', result: 'ss', utMin: 0.18 * IN }), indAt(job, 20 * FT, 120, { id: 'B', result: 'ps', vtDepth: 0.04 * IN }), indAt(job, 30 * FT, 200, { id: 'C', result: 'ss', utMin: 0.11 * IN })];
+      const { c } = evalFloor(job);
+      return { repairs: c.repairs.join(','), K: c.K, MRT: region(c, 'bottom').MRT };
+    }
+  },
+  {
+    id: 'V-04', area: 'Bottom MRT', units: 'imperial', basis: 'equation',
+    title: '"Both sides" location splits loss into product side (VT) and soil side (rest)',
+    input: 'Nominal 0.250 in; UT 0.150 in; VT pit 0.040 in; rate basis 20 yr.',
+    steps: ['Total loss = 0.250 − 0.150 = 0.100 in', 'Product side = VT pit = 0.040 in → StPr = 0.0020 in/yr', 'Soil side = 0.100 − 0.040 = 0.060 in → UPr = 0.0030 in/yr'],
+    expected: { StPr: 0.002 * IN, UPr: 0.003 * IN }, tol: 0.00005 * IN, unit: 'mm/yr (shown in in/yr)',
+    source: 'Split rule used by the app; API 653 defines StPr / UPr but not how a through-wall split is apportioned — engineering assumption',
+    run() {
+      const job = floorJob({ D: 100 * FT, tBottom: 0.25 * IN });
+      job.indications = [indAt(job, 10 * FT, 30, { id: 'A', result: 'both', utMin: 0.15 * IN, vtDepth: 0.04 * IN })];
+      const { c } = evalFloor(job);
+      return { StPr: c.StPr, UPr: c.UPr };
+    }
+  },
+
+  /* --------------------------------------------- MFL estimates vs verified thickness --- */
+  {
+    id: 'V-05', area: 'MFL vs UT', units: 'imperial', basis: 'equation',
+    title: 'Proven soil-side location with only an MFL % estimate',
+    input: 'Nominal 0.250 in; result soil side; MFL 40 % loss; no UT, no VT.',
+    steps: ['Remaining = 0.250 × (1 − 0.40) = 0.150 in (MFL estimate)', 'A warning must say an MFL estimate was used'],
+    expected: { rem: 0.15 * IN, src: 'MFL estimate', warned: true }, tol: 0.0005 * IN, unit: 'mm (shown in in)',
+    source: 'App rule; MFL % is an estimate of loss, not a measured thickness',
+    run() {
+      const job = floorJob({ D: 100 * FT, tBottom: 0.25 * IN });
+      job.indications = [indAt(job, 10 * FT, 30, { id: 'A', result: 'ss', mflPct: 40 })];
+      const { c } = evalFloor(job), a = c.per.get('A');
+      return { rem: a.rem, src: a.src, warned: c.warnings.some((w) => /MFL % estimate/.test(w)) };
+    }
+  },
+  {
+    id: 'V-06', area: 'MFL vs UT', units: 'imperial', basis: 'review',
+    title: 'A location evaluated from an MFL estimate must not be reported as a plain "OK"',
+    input: 'As V-05 (passes MRT only on the estimate).',
+    steps: ['Projected = 0.150 − 10 × 0.005 = 0.100 in → passes by 0 margin on an estimate', 'Required: status distinguishes estimate from measured, e.g. "OK (MFL estimate — verify by UT)"'],
+    expected: { estimateFlagInStatus: true }, tol: null, unit: '',
+    source: 'This review (proposed correction C-03): an estimate must not be presented as an acceptance',
+    run() {
+      const job = floorJob({ D: 100 * FT, tBottom: 0.25 * IN });
+      job.indications = [indAt(job, 10 * FT, 30, { id: 'A', result: 'ss', mflPct: 40 })];
+      const { c } = evalFloor(job), a = c.per.get('A');
+      return { estimateFlagInStatus: /estimate/i.test(a.status) };
+    }
+  },
+  {
+    id: 'V-07', area: 'MFL vs UT', units: 'imperial', basis: 'equation',
+    title: 'Pending (unproven) MFL calls are excluded and the exclusion is reported',
+    input: 'One proven soil-side location UT 0.200 in; one pending call MFL 60 %.',
+    steps: ['Pending call excluded (includeUnverified off)', 'UPr = 0.050/20 = 0.0025; MRT = 0.200 − 0.025 = 0.175 in', 'Warning lists 1 pending call'],
+    expected: { MRT: 0.175 * IN, warned: true }, tol: 0.0005 * IN, unit: 'mm (shown in in)',
+    source: 'App rule; API 653 requires the MRT from the inspected bottom — unproven calls are an open item',
+    run() {
+      const job = floorJob({ D: 100 * FT, tBottom: 0.25 * IN });
+      job.indications = [indAt(job, 10 * FT, 30, { id: 'A', result: 'ss', utMin: 0.2 * IN }), indAt(job, 15 * FT, 60, { id: 'P', mflPct: 60 })];
+      const { c } = evalFloor(job);
+      return { MRT: region(c, 'bottom').MRT, warned: c.warnings.some((w) => /pending prove-up/.test(w)) };
+    }
+  },
+  {
+    id: 'V-08', area: 'Input validation', units: 'imperial', basis: 'review',
+    title: 'MFL loss over 100 % is rejected rather than giving a negative remaining thickness',
+    input: 'Nominal 0.250 in; soil side; MFL 120 %.',
+    steps: ['A loss over 100 % is not physical', 'Required: the value is refused or flagged; no negative remaining thickness enters the MRT'],
+    expected: { remNonNegative: true }, tol: null, unit: '',
+    source: 'This review (proposed correction C-09)',
+    run() {
+      const job = floorJob({ D: 100 * FT, tBottom: 0.25 * IN });
+      job.indications = [indAt(job, 10 * FT, 30, { id: 'A', result: 'ss', mflPct: 120 })];
+      const { c } = evalFloor(job);
+      return { remNonNegative: c.per.get('A').rem >= 0 };
+    }
+  },
+
+  /* ----------------------------------------------------------- corrosion rate basis --- */
+  {
+    id: 'V-09', area: 'Corrosion rates', units: 'imperial', basis: 'review',
+    title: 'With no rate basis (years) the result must not read as acceptable',
+    input: 'As V-01 but rate basis blank.',
+    steps: ['Rates cannot be computed → MRT = RT (no corrosion allowance for the next interval)', 'Required: region result "not evaluated", not OK'],
+    expected: { regionOk: null }, tol: null, unit: '',
+    source: 'This review (proposed correction C-04)',
+    run() {
+      const job = floorJob({ D: 100 * FT, tBottom: 0.25 * IN, years: null });
+      job.indications = [indAt(job, 10 * FT, 30, { id: 'A', result: 'ss', utMin: 0.18 * IN })];
+      const { c } = evalFloor(job);
+      return { regionOk: region(c, 'bottom').ok };
+    }
+  },
+  {
+    id: 'V-10', area: 'Coating / CP', units: 'imperial', basis: 'review',
+    title: '"Coated" with proven product-side pitting must not silently zero StPr',
+    input: 'As V-01 with "coated" ticked. Location B is product-side pitting (coating evidently not intact there).',
+    steps: ['API 653 sets StPr = 0 only for coated areas expected to last the interval', 'Required: StPr kept for proven product-side locations, or a warning that the coating option conflicts with recorded product-side corrosion'],
+    expected: { conflictWarned: true }, tol: null, unit: '',
+    source: 'API 653 §4.4.7.1 note on StPr (coated areas); this review (proposed correction C-05)',
+    run() {
+      const job = floorJob({ D: 100 * FT, tBottom: 0.25 * IN, calc: { coated: true } });
+      job.indications = [indAt(job, 10 * FT, 30, { id: 'A', result: 'ss', utMin: 0.18 * IN }), indAt(job, 20 * FT, 120, { id: 'B', result: 'ps', vtDepth: 0.04 * IN })];
+      const { c } = evalFloor(job);
+      return { conflictWarned: c.StPr > 0 || c.warnings.some((w) => /coat/i.test(w)) };
+    }
+  },
+  {
+    id: 'V-11', area: 'Coating / CP', units: 'imperial', basis: 'equation',
+    title: 'Effective CP sets UPr = 0',
+    input: 'As V-01 with "effective CP" ticked.',
+    steps: ['UPr = 0; StPr = 0.0020 in/yr', 'MRT = 0.180 − 10 × 0.0020 = 0.160 in'],
+    expected: { UPr: 0, MRT: 0.16 * IN }, tol: 0.0005 * IN, unit: 'mm (shown in in)',
+    source: 'API 653 §4.4.7.1 note on UPr (effective cathodic protection)',
+    run() {
+      const job = floorJob({ D: 100 * FT, tBottom: 0.25 * IN, calc: { cp: true } });
+      job.indications = [indAt(job, 10 * FT, 30, { id: 'A', result: 'ss', utMin: 0.18 * IN }), indAt(job, 20 * FT, 120, { id: 'B', result: 'ps', vtDepth: 0.04 * IN })];
+      const { c } = evalFloor(job);
+      return { UPr: c.UPr, MRT: region(c, 'bottom').MRT };
+    }
+  },
+
+  /* ------------------------------------------------------------------- critical zone --- */
+  {
+    id: 'V-12', area: 'Critical zone', units: 'imperial', basis: 'equation',
+    title: 'Critical-zone limit = lesser of ½ original bottom t or ½ course-1 t-min, not less than 0.1 in',
+    input: 'Bottom 0.250 in, no annular ring; course 1 t-min entered 0.300 in. Soil-side UT 0.150 in, 2 in from the shell; rate basis 20 yr; Or 10.',
+    steps: ['Limit = max(0.100, min(0.250/2, 0.300/2)) = 0.125 in', 'UPr = 0.100/20 = 0.005; projected = 0.150 − 0.050 = 0.100 in < 0.125 → repair'],
+    expected: { czLim: 0.125 * IN, critical: true, repair: true }, tol: 0.0005 * IN, unit: 'mm (shown in in)',
+    source: 'API 653 §4.4.7.4 (critical zone) — confirm paragraph number for the edition',
+    run() {
+      const job = floorJob({ D: 100 * FT, tBottom: 0.25 * IN, courses: [{ id: 'c1', h: 8 * FT, tNom: 0.5 * IN, tMin: 0.3 * IN }] });
+      job.indications = [indAt(job, 50 * FT - 2 * IN, 90, { id: 'A', result: 'ss', utMin: 0.15 * IN })];
+      const { c } = evalFloor(job), a = c.per.get('A');
+      return { czLim: c.czLim, critical: a.critical, repair: a.repair };
+    }
+  },
+  {
+    id: 'V-13', area: 'Critical zone', units: 'metric', basis: 'equation',
+    title: 'Critical-zone limit floor of 2.54 mm governs (metric)',
+    input: 'Bottom 8 mm; course 1 t-min 5 mm.',
+    steps: ['Limit = max(2.54, min(8/2, 5/2)) = max(2.54, 2.5) = 2.54 mm'],
+    expected: { czLim: 2.54 }, tol: 0.005, unit: 'mm',
+    source: 'API 653 §4.4.7.4',
+    run() {
+      const job = floorJob({ units: 'metric', D: 30000, tBottom: 8, courses: [{ id: 'c1', h: 2400, tNom: 10, tMin: 5 }] });
+      return { czLim: evalFloor(job).c.czLim };
+    }
+  },
+  {
+    id: 'V-14', area: 'Critical zone', units: 'imperial', basis: 'equation',
+    title: 'Critical-zone boundary at 3 in from the shell',
+    input: 'Location centres 2.9 in and 3.1 in from the shell.',
+    steps: ['2.9 in ≤ 3 in → critical zone', '3.1 in > 3 in → not critical zone'],
+    expected: { at29: true, at31: false }, tol: null, unit: '',
+    source: 'API 653 definition of critical zone (within 3 in of the inside edge of the shell)',
+    run() {
+      const job = floorJob({ D: 100 * FT, tBottom: 0.25 * IN });
+      job.indications = [indAt(job, 50 * FT - 2.9 * IN, 45, { id: 'A', result: 'ss', utMin: 0.2 * IN }), indAt(job, 50 * FT - 3.1 * IN, 135, { id: 'B', result: 'ss', utMin: 0.2 * IN })];
+      const { c } = evalFloor(job);
+      return { at29: c.per.get('A').critical, at31: c.per.get('B').critical };
+    }
+  },
+  {
+    id: 'V-15', area: 'Critical zone', units: 'imperial', basis: 'review',
+    title: 'A corroded area that extends into the critical zone is treated as critical',
+    input: 'Location centre 4 in from the shell; recorded width 3 in (inner edge of the corrosion 2.5 in from the shell).',
+    steps: ['Corrosion reaches 2.5 in from the shell → inside the 3 in critical zone', 'Required: critical = true (or the app asks the inspector)'],
+    expected: { critical: true }, tol: null, unit: '',
+    source: 'This review (proposed correction C-06): the app tests only the location point',
+    run() {
+      const job = floorJob({ D: 100 * FT, tBottom: 0.25 * IN });
+      job.indications = [indAt(job, 50 * FT - 4 * IN, 45, { id: 'A', result: 'ss', utMin: 0.2 * IN, len: 3 * IN, wid: 3 * IN })];
+      return { critical: evalFloor(job).c.per.get('A').critical };
+    }
+  },
+
+  /* -------------------------------------------------------------------- annular plates --- */
+  {
+    id: 'V-16', area: 'Annular plates', units: 'imperial', basis: 'reference',
+    title: 'Table 4.5 lookup between stress columns',
+    input: 'Course 1 t = 0.75 in; computed stress Sb = 25,000 psi (column "≤ 27,000").',
+    steps: ['Reading the table by step: Sb = 25,000 falls in the ≤ 27,000 column → 0.20 in', 'App interpolates between 24,300 and 27,000 → 0.178 in', 'If interpolation is not permitted in the edition used, the app is non-conservative by 0.022 in'],
+    expected: { t: 0.2 }, tol: 0.001, unit: 'in',
+    source: 'API 653 Table 4.5 (values as tabulated in tables.js T45); whether interpolation is permitted must be confirmed (C-07)',
+    run() {
+      const Dft = 100, t1 = 0.75, H = 1 + (25000 * t1) / (2.34 * Dft); // gives Sb = 25,000 with the app's Sb formula
+      const r = annularMin(Dft, H, 0.85, t1);
+      return { t: r.t, Sb: r.Sb };
+    }
+  },
+  {
+    id: 'V-17', area: 'Annular plates', units: 'imperial', basis: 'reference',
+    title: 'Table 4.5 at a column boundary',
+    input: 'Course 1 t = 1.00 in; Sb exactly 27,000 psi.',
+    steps: ['Row 0.75 < t ≤ 1.00, column ≤ 27,000 → 0.22 in'],
+    expected: { t: 0.22 }, tol: 0.001, unit: 'in',
+    source: 'API 653 Table 4.5 (as tabulated in tables.js)',
+    run() { const t1 = 1, H = 1 + (27000 * t1) / (2.34 * 100); return { t: annularMin(100, H, 0.85, t1).t }; }
+  },
+  {
+    id: 'V-18', area: 'Annular plates', units: 'imperial', basis: 'review',
+    title: 'Default annular MRT limit when an annular ring is present',
+    input: 'New job with annular ring ticked; Table 4.5 gives 0.17 in or more.',
+    steps: ['App default annular limit = 0.10 in until the user presses "use Table 4.5"', 'Required: the Table 4.5 / 5.1b value is the default when it can be computed, or the limit is flagged as not set'],
+    expected: { defaultAtLeastTable: true }, tol: null, unit: '',
+    source: 'This review (proposed correction C-08)',
+    run() {
+      const job = floorJob({ D: 100 * FT, tBottom: 0.25 * IN, annular: true, tAnnular: 0.3125 * IN, courses: [{ id: 'c1', h: 8 * FT, tNom: 0.75 * IN }] });
+      job.tank.fillH = 40 * FT; job.tank.sg = 0.85;
+      const req = annularReq(job);
+      return { defaultAtLeastTable: req?.tmm != null && (job.calc.mrtAnnular ?? 2.54) >= req.tmm - 1e-6, tableIn: req?.t, defaultIn: (job.calc.mrtAnnular ?? 2.54) / IN };
+    }
+  },
+
+  /* ----------------------------------------------------------------- shell evaluation --- */
+  {
+    id: 'V-19', area: 'Shell t-min', units: 'imperial', basis: 'equation',
+    title: 'Course t-min by API 653 4.3.3.1 (lower two courses use the lower-course Sd)',
+    input: 'D 100 ft; fill 40 ft; G 1.0; 5 courses × 8 ft; A516 Gr 55 (Table 4.1 Sd 23,600 lower / 26,000 upper); E 1.0.',
+    steps: ['Course 1: H = 40 → 2.6 × 39 × 100 × 1.0 / (23,600 × 1.0) = 0.4297 in', 'Course 2: H = 32 → 2.6 × 31 × 100 / 23,600 = 0.3415 in', 'Course 3: H = 24 → 2.6 × 23 × 100 / 26,000 = 0.2300 in', 'Course 5: H = 8 → 0.070 → minimum 0.100 in'],
+    expected: { c1: 0.429661, c2: 0.341525, c3: 0.23, c5: 0.1 }, tol: 0.0005, unit: 'in',
+    source: 'API 653 §4.3.3.1: t-min = 2.6 (H − 1) D G / (S E), not less than 0.1 in; S per Table 4.1',
+    run() {
+      const job = shellJob({ D: 100 * FT, fill: 40 * FT, G: 1, courses: Array.from({ length: 5 }, () => ({ h: 8 * FT })) });
+      const d = courseDesigns(job);
+      return { c1: d[0].tmin / IN, c2: d[1].tmin / IN, c3: d[2].tmin / IN, c5: d[4].tmin / IN };
+    }
+  },
+  {
+    id: 'V-20', area: 'Shell t-min', units: 'metric', basis: 'equation',
+    title: 'Course 1 t-min, metric input',
+    input: 'D 30 m (98.425 ft); fill 12 m (39.370 ft); G 0.9; A516 Gr 60 (Sd lower 25,600 psi); E 0.85 (API 650 Annex A spot RT).',
+    steps: ['t-min = 2.6 × (39.370 − 1) × 98.425 × 0.9 / (25,600 × 0.85) = 0.40612 in = 10.315 mm'],
+    expected: { tmin: 10.3155 }, tol: 0.01, unit: 'mm',
+    source: 'API 653 §4.3.3.1; Table 4.2 (E = 0.85 for API 650 7th ed.+ Annex A spot RT)',
+    run() {
+      const job = shellJob({ units: 'metric', D: 30000, fill: 12000, G: 0.9, matl: 'ASTM A516 Gr. 60', joint: 'w:650-7:1', courses: [{ h: 2400 }, { h: 2400 }] });
+      return { tmin: courseDesigns(job)[0].tmin };
+    }
+  },
+  {
+    id: 'V-21', area: 'Shell t-min', units: 'imperial', basis: 'equation',
+    title: 'Allowable stresses from Y and T for a material not in Table 4.1',
+    input: 'Y = 36,000 psi; T = 58,000 psi.',
+    steps: ['Sd lower = min(0.80 Y, 0.429 T) = min(28,800, 24,882) = 24,882', 'Sd upper = min(0.88 Y, 0.472 T) = 27,376', 'St lower = min(0.88 Y, 0.472 T) = 27,376', 'St upper = min(0.90 Y, 0.519 T) = 30,102'],
+    expected: { SdL: 24882, SdU: 27376, StL: 27376, StU: 30102 }, tol: 1, unit: 'psi',
+    source: 'API 653 Table 4.1 rules for materials not listed',
+    run() {
+      const lo = allowables('Other', 36000, 58000, true, false), up = allowables('Other', 36000, 58000, false, false);
+      return { SdL: lo.Sd, SdU: up.Sd, StL: lo.St, StU: up.St };
+    }
+  },
+  {
+    id: 'V-22', area: 'Shell t-min', units: 'imperial', basis: 'equation',
+    title: 'Hydrotest and product fill heights supported by a thickness',
+    input: 'D 100 ft; course 1 t = 0.500 in; A516 Gr 55 (Sd 23,600, St 26,000); E 1.0; G 1.0.',
+    steps: ['Ht = St E t / (2.6 D) + 1 = 26,000 × 0.5 / 260 + 1 = 51.0 ft', 'H fill = Sd E t / (2.6 D G) + 1 = 46.38 ft'],
+    expected: { Ht: 51.0, Hfill: 46.3846 }, tol: 0.01, unit: 'ft',
+    source: 'API 653 §4.3.3.2 (hydrotest height); inverse of §4.3.3.1',
+    run() {
+      const job = shellJob({ D: 100 * FT, fill: 40 * FT, G: 1, courses: [{ h: 8 * FT, tNom: 0.5 * IN }] });
+      const d = courseDesigns(job)[0], r = fillFromT(job, d, 0.5 * IN);
+      return { Ht: r.hydro / FT, Hfill: r.prod / FT };
+    }
+  },
+  {
+    id: 'V-23', area: 'Shell evaluation', units: 'imperial', basis: 'equation',
+    title: 'Course status from the minimum reading',
+    input: 'Course 1 t-min entered 0.430 in; readings 0.450, 0.432, 0.428 in.',
+    steps: ['Minimum 0.428 < 0.430 → "Below t-min" (single reading compared with the whole-course t-min)'],
+    expected: { status: 'Below t-min', min: 0.428 * IN }, tol: 0.0005 * IN, unit: 'mm',
+    source: 'API 653 §4.3.3.1 (whole course). §4.3.2 averaging over L for locally thinned areas is not applied — see report',
+    run() {
+      const job = shellJob({ D: 100 * FT, fill: 40 * FT, G: 1, courses: [{ h: 8 * FT, tNom: 0.5 * IN, tMin: 0.43 * IN }] });
+      job.shell.nLoc = 4; job.shell.zones = []; job.shell.rd = { '0.0': { [(12 * IN).toFixed(1)]: 0.45 * IN }, '90.0': { [(12 * IN).toFixed(1)]: 0.432 * IN }, '180.0': { [(12 * IN).toFixed(1)]: 0.428 * IN } };
+      const s = courseSummary(job)[0];
+      return { status: s.status, min: s.min };
+    }
+  },
+
+  /* ------------------------------------------------------------------------- nozzles --- */
+  {
+    id: 'V-24', area: 'Nozzles', units: 'imperial', basis: 'equation',
+    title: 'Neck minimum, % loss and status',
+    input: 'NPS 4 Sch 80: nominal 0.337 in; t-min entered 0.200 in; readings 0.301, 0.255, 0.290, 0.300 in.',
+    steps: ['Minimum = 0.255 in', 'Loss = (0.337 − 0.255) / 0.337 = 24.33 %', '0.255 ≥ 0.200 → OK'],
+    expected: { min: 0.255 * IN, lossPct: 24.3323, status: 'OK' }, tol: 0.01, unit: 'mm / %',
+    source: 'Arithmetic; the t-min itself is an engineering input (see report)',
+    run() {
+      const n = { size: 4 * IN, tNom: 0.337 * IN, tMin: 0.2 * IN, ut12: 0.301 * IN, ut3: 0.255 * IN, ut6: 0.29 * IN, ut9: 0.3 * IN };
+      const r = nozzleUT(n, newJob());
+      return { min: r.min, lossPct: r.lossPct, status: r.status };
+    }
+  },
+
+  /* ---------------------------------------------------------------------------- roofs --- */
+  {
+    id: 'V-25', area: 'Fixed roof', units: 'imperial', basis: 'equation',
+    title: 'Fixed roof point below the 0.09 in limit',
+    input: 'Roof t-min 0.09 in (default); point reading 0.085 in; nominal 0.1875 in.',
+    steps: ['0.085 < 0.090 → "Below t-min"; loss = (0.1875 − 0.085)/0.1875 = 54.7 %'],
+    expected: { status: 'Below t-min', lossPct: 54.6667 }, tol: 0.01, unit: '%',
+    source: 'API 653 §4.2.1.2 (0.09 in averaged over 100 in²) — the app compares single points (conservative)',
+    run() { const job = newJob(); job.roof.type = 'fixed'; job.roof.fixed.tNom = 0.1875 * IN; const r = pointStatus(job, { t: 0.085 * IN }); return { status: r.status, lossPct: r.lossPct }; }
+  },
+  {
+    id: 'V-26', area: 'Fixed roof', units: 'metric', basis: 'equation',
+    title: 'Metric default roof limit is not less than 0.09 in',
+    input: 'New metric job.',
+    steps: ['0.09 in = 2.286 mm; app default 2.3 mm (≥ 2.286 → conservative)'],
+    expected: { atLeast: true }, tol: null, unit: '',
+    source: 'Unit conversion check',
+    run() { const job = newJob('metric'); return { atLeast: job.roof.fixed.tMin >= 0.09 * IN - 1e-9 }; }
+  },
+  {
+    id: 'V-27', area: 'Floating roof', units: 'imperial', basis: 'equation',
+    title: 'Deck plate minimum of five readings',
+    input: 'Deck nominal 0.1875 in; t-min 0.09 in; readings 0.18, 0.17, 0.088, 0.16, 0.175 in.',
+    steps: ['Minimum 0.088 < 0.090 → "Below t-min"'],
+    expected: { status: 'Below t-min', min: 0.088 * IN }, tol: 0.0005 * IN, unit: 'mm',
+    source: 'Arithmetic; the 0.09 in deck limit has no code reference in the app (see report)',
+    run() {
+      const job = newJob(); job.roof.type = 'efr'; job.roof.floating.deckNom = 0.1875 * IN;
+      job.roof.floating.ut = { A1: { tl: 0.18 * IN, tr: 0.17 * IN, c: 0.088 * IN, bl: 0.16 * IN, br: 0.175 * IN } };
+      const r = plateUT(job, { key: 'A1', kind: 'floor' });
+      return { status: r.status, min: r.min };
+    }
+  },
+  {
+    id: 'V-28', area: 'Rim seal', units: 'metric', basis: 'equation',
+    title: 'Seal gap area per metre of diameter',
+    input: 'D 30 m; two gaps each 1,000 mm long × 10 mm average width.',
+    steps: ['Area = 2 × (100 cm × 1 cm) = 200 cm²', 'Per metre of diameter = 200 / 30 = 6.667 cm²/m'],
+    expected: { perM: 6.6667 }, tol: 0.001, unit: 'cm²/m',
+    source: '40 CFR 60.113b (gap area per metre of tank diameter)',
+    run() { return { perM: gapSummary([{ len: 1000, wAvg: 10 }, { len: 1000, wAvg: 10 }], 30000).perM }; }
+  },
+  {
+    id: 'V-29', area: 'Rim seal', units: 'imperial', basis: 'equation',
+    title: 'cm²/m ↔ in²/ft conversion',
+    input: '212 cm²/m.',
+    steps: ['1 in²/ft = 6.4516 cm² / 0.3048 m = 21.1667 cm²/m', '212 / 21.1667 = 10.016 in²/ft'],
+    expected: { inft: 10.0157 }, tol: 0.0002, unit: 'in²/ft',
+    source: 'Exact unit definitions (1 in = 2.54 cm)',
+    run() { return { inft: cm2mToIn2ft(212) }; }
+  },
+
+  /* ---------------------------------------------------------------------- settlement --- */
+  {
+    id: 'V-30', area: 'Settlement — cosine fit', units: 'imperial', basis: 'equation',
+    title: 'Exact cosine data: fit, tilt and high point',
+    input: 'D 100 ft; H 40 ft; 8 stations; z = 10 + 2 cos θ + 1 sin θ (in).',
+    steps: ['Least squares returns a = 10, b = 2, c = 1; R² = 1', 'Amplitude = √(2² + 1²) = 2.2361 in; tilt across the diameter = 4.4721 in', 'High side at atan2(1, 2) = 26.57°'],
+    expected: { b: 2 * IN, c: 1 * IN, R2: 1, tilt: 4.472136 * IN, hiDeg: 26.565051 }, tol: 0.001, unit: 'mm / °',
+    source: 'API 653 Annex B.2.2.4 (optimum cosine curve by least squares)',
+    run() {
+      const job = settleJob({ D: 100 * FT, H: 40 * FT, N: 8, z: cosZ(8, 10 * IN, 2 * IN, 1 * IN), Y: 206.843, E: 199948 });
+      const f = settleCalc(job).fit;
+      return { b: f.b, c: f.c, R2: f.R2, tilt: f.tilt, hiDeg: f.hiDeg };
+    }
+  },
+  {
+    id: 'V-31', area: 'Settlement — out-of-plane', units: 'imperial', basis: 'equation',
+    title: 'Out-of-plane deflection S and Smax',
+    input: 'D 100 ft; H 40 ft; 10 stations (L = 31.416 ft); z = 2 cos θ + 1 sin θ in, +0.5 in at station 3; Y 30,000 psi; E 29,000,000 psi.',
+    steps: ['Fit by least squares (independent numpy solve): R² = 0.99347', 'U = z − fit; S₃ = U₃ − ½(U₂ + U₄) = 0.4809 in', 'Smax = 11 L² Y / (2 E H) = 11 × 31.416² × 30,000 / (2 × 29e6 × 40) ft = 1.6846 in', '|S| ≤ Smax → acceptable'],
+    expected: { R2: 0.993469, S3: 0.480902 * IN, Smax: 1.684639 * IN, oopOk: true }, tol: 0.001 * IN, unit: 'mm',
+    source: 'API 653 B.3.2.1: S = U_i − ½(U_i−1 + U_i+1); Smax = L² Y 11 / (2 E H)',
+    run() {
+      const z = cosZ(10, 0, 2 * IN, 1 * IN); z[2] += 0.5 * IN;
+      const c = settleCalc(settleJob({ D: 100 * FT, H: 40 * FT, N: 10, z, Y: 30000 / 145.0377, E: 29e6 / 145.0377 }));
+      return { R2: c.fit.R2, S3: c.pts[2].S, Smax: c.Smax, oopOk: c.oopOk };
+    }
+  },
+  {
+    id: 'V-32', area: 'Settlement — out-of-plane', units: 'metric', basis: 'equation',
+    title: 'Out-of-plane deflection, metric',
+    input: 'D 30 m; H 12 m; 10 stations; z = 50 cos θ + 25 sin θ mm, +12 mm at station 3; Y 206.8 MPa; E 200,000 MPa.',
+    steps: ['S₃ = 11.5416 mm (independent solve)', 'Smax = 11 L² Y / (2 E H) with L = π × 30,000 / 10 mm = 42.096 mm'],
+    expected: { S3: 11.541641, Smax: 42.09633, R2: 0.993963 }, tol: 0.01, unit: 'mm',
+    source: 'API 653 B.3.2.1 (dimensionally consistent: L²/H is a length, Y/E is dimensionless)',
+    run() {
+      const z = cosZ(10, 0, 50, 25); z[2] += 12;
+      const c = settleCalc(settleJob({ units: 'metric', D: 30000, H: 12000, N: 10, z, Y: 206.8, E: 200000 }));
+      return { S3: c.pts[2].S, Smax: c.Smax, R2: c.fit.R2 };
+    }
+  },
+  {
+    id: 'V-33', area: 'Settlement — R²', units: 'imperial', basis: 'equation',
+    title: 'Poor cosine fit is not evaluated by B.3.2.1',
+    input: '8 stations; random-looking elevations (R² < 0.9).',
+    steps: ['R² < 0.90 → cosine fit not valid for out-of-plane check; result must not be "Acceptable" from B.3.2.1'],
+    expected: { valid: false, notAcceptableByB321: true }, tol: null, unit: '',
+    source: 'API 653 B.2.2.4 R² criterion as implemented (0.90) — confirm value and wording in the edition used',
+    run() {
+      const z = [0, 1.2, -0.9, 0.8, -1.1, 0.7, -0.6, 1.0].map((v) => v * IN);
+      const c = settleCalc(settleJob({ D: 100 * FT, H: 40 * FT, N: 8, z, Y: 206.843, E: 199948 }));
+      return { valid: c.valid, notAcceptableByB321: c.status !== 'Acceptable' || c.arcs.ok !== null };
+    }
+  },
+  {
+    id: 'V-34', area: 'Settlement — stations', units: 'imperial', basis: 'equation',
+    title: 'Number of settlement stations',
+    input: 'D = 40, 150, 330, 400 ft.',
+    steps: ['N = D/10 rounded up to even, at least 8, spacing ≤ 32 ft', '40 → 4 → 8; 150 → 15 → 16; 330 → 33 → 34; 400 → 40'],
+    expected: { D40: 8, D150: 16, D330: 34, D400: 40 }, tol: 0, unit: '',
+    source: 'API 653 B.2.2.1 / §12.5 as quoted in the app (even-number rounding to be confirmed)',
+    run() { const n = (d) => { const j = newJob(); j.tank.diameter = d * FT; return autoN(j); }; return { D40: n(40), D150: n(150), D330: n(330), D400: n(400) }; }
+  },
+  {
+    id: 'V-35', area: 'Settlement — edge', units: 'imperial', basis: 'equation',
+    title: 'Angled lap weld allowable',
+    input: 'Be = 4.0 in, Bew = 3.0 in, α = 45°.',
+    steps: ['B = Be − (Be − Bew) sin α = 4.0 − 1.0 × 0.7071 = 3.2929 in'],
+    expected: { allow: 3.292893 * IN }, tol: 0.0005 * IN, unit: 'mm',
+    source: 'API 653 B.3.4 (angled lap welds) — α definition (from the radius or from the shell) must be confirmed',
+    run() { return { allow: edgeEval({ B: 1 * IN, Be: 4 * IN, Bew: 3 * IN, weld: 'angle', alpha: 45 }).allow }; }
+  },
+  {
+    id: 'V-36', area: 'Settlement — edge', units: 'imperial', basis: 'review',
+    title: 'Angled weld allowable is continuous at α = 20° and 70°',
+    input: 'Be 4.0, Bew 3.0 in; α = 19.9°, 20.1°, 69.9°, 70.1°.',
+    steps: ['Formula gives 3.660 / 3.656 in near 20° but the ±20° rule gives Be = 4.0 at ≤ 20° → 0.34 in step', 'Near 70°: formula 3.061 vs rule Bew = 3.0', 'Required: confirm whether the ±20° rule and the sin α formula are alternatives or combined'],
+    expected: { jump20: 0, jump70: 0 }, tol: 0.01 * IN, unit: 'mm',
+    source: 'This review (proposed correction C-11)',
+    run() {
+      const a = (al) => edgeEval({ B: 1, Be: 4 * IN, Bew: 3 * IN, weld: 'angle', alpha: al }).allow;
+      return { jump20: a(19.9) - a(20.1), jump70: a(69.9) - a(70.1) };
+    }
+  },
+  {
+    id: 'V-37', area: 'Settlement — edge', units: 'imperial', basis: 'equation',
+    title: '75 % of allowable triggers NDE',
+    input: 'Allowable Bew 4.0 in (weld parallel); B = 3.0 in and 2.99 in.',
+    steps: ['3.00 / 4.00 = 75 % → "NDE required"', '2.99 / 4.00 = 74.75 % → "Acceptable"'],
+    expected: { at75: 'NDE required', below: 'Acceptable' }, tol: null, unit: '',
+    source: 'API 653 B.3.4.1 (as implemented) — confirm threshold in the edition used',
+    run() { return { at75: edgeEval({ B: 3 * IN, Bew: 4 * IN, Be: 5 * IN, weld: 'par' }).status, below: edgeEval({ B: 2.99 * IN, Bew: 4 * IN, Be: 5 * IN, weld: 'par' }).status }; }
+  },
+  {
+    id: 'V-38', area: 'Settlement — edge', units: 'imperial', basis: 'reference',
+    title: 'Fig. B.11 / B.12 allowables read from the built-in table',
+    input: 'D 100 ft; R 3 ft.',
+    steps: ['App table (digitised curves): Bew 3.48 in, Be 4.20 in', 'Expected value must be read from Fig. B.11 / B.12 of the edition in use — UNVERIFIED here'],
+    expected: { Bew: 3.48, Be: 4.2 }, tol: 0.05, unit: 'in',
+    source: 'API 653 Fig. B.11 / B.12 (not available to this review) — engineer to confirm',
+    run() { const r = edgeAllow(100, 3); return { Bew: r.Bew, Be: r.Be }; }
+  },
+  {
+    id: 'V-39', area: 'Settlement — edge', units: 'imperial', basis: 'review',
+    title: 'Diameters below the smallest tabulated curve are not extrapolated non-conservatively',
+    input: 'D 15 ft (below the 20 ft curve); R 3 ft.',
+    steps: ['Allowables grow with diameter, so using the 20 ft curve for a 15 ft tank overstates the allowable', 'Required: no value (engineering evaluation) or a conservative value below the tabulated range'],
+    expected: { Bew: null }, tol: null, unit: '',
+    source: 'This review (proposed correction C-12)',
+    run() { return { Bew: edgeAllow(15, 3).Bew }; }
+  },
+  {
+    id: 'V-40', area: 'Settlement — edge profile', units: 'imperial', basis: 'equation',
+    title: 'Breakover R and settlement B from a radial profile',
+    input: 'Readings from the shell inward: bottom flat at 0 beyond 36 in; linear drop to −2.0 in at the shell; tolerance 1/8 in.',
+    steps: ['Line through outer readings: z = 0', 'Walking inward, 36 in is within tolerance; 24 in is 0.667 in low → breakover R = 36 in = 3 ft', 'B = largest drop inside R = 2.0 in (at the shell)'],
+    expected: { R: 36 * IN, B: 2 * IN }, tol: 0.01 * IN, unit: 'mm',
+    source: 'API 653 Fig. B.6 (definitions of B and R); breakover tolerance is an engineering choice',
+    run() {
+      const job = newJob(); job.tank.diameter = 100 * FT;
+      const offs = epOffsets(job), m = {};
+      for (const x of offs) m[xKey(x)] = x >= 36 * IN ? 0 : -2 * IN * (1 - x / (36 * IN));
+      job.settle.ep.rd = { 1: m };
+      const p = profileEval(job, 1);
+      return { R: p.R, B: p.B };
+    }
+  },
+  {
+    id: 'V-41', area: 'Settlement — depressions', units: 'imperial', basis: 'equation',
+    title: 'Bottom depression limit BB = 0.37 R',
+    input: 'R = 10 ft; depth B = 3.5 in.',
+    steps: ['BB = 0.37 × 10 = 3.70 in', '3.5 ≤ 3.70 → acceptable'],
+    expected: { allow: 3.7 * IN, status: 'Acceptable' }, tol: 0.001 * IN, unit: 'mm',
+    source: 'API 653 B.3.3: BB = 0.37 R (BB in in, R in ft)',
+    run() { const r = depEval({ R: 10 * FT, B: 3.5 * IN }); return { allow: r.allow, status: r.status }; }
+  },
+  {
+    id: 'V-42', area: 'Settlement — depressions', units: 'metric', basis: 'equation',
+    title: 'Bottom depression limit, metric',
+    input: 'R = 3.0 m; depth 95 mm.',
+    steps: ['R = 9.8425 ft → BB = 0.37 × 9.8425 = 3.6417 in = 92.50 mm', '95 > 92.50 → exceeds'],
+    expected: { allow: 92.5, status: 'Exceeds' }, tol: 0.01, unit: 'mm',
+    source: 'API 653 B.3.3 with exact unit conversion',
+    run() { const r = depEval({ R: 3000, B: 95 }); return { allow: r.allow, status: r.status }; }
+  },
+
+  {
+    id: 'V-46', area: 'Settlement — B.3.2.2 arcs', units: 'imperial', basis: 'reference',
+    title: 'Arc method: deflection below the chord and the allowable',
+    input: 'D 100 ft; H 40 ft; 8 stations; elevations 2, 0, 1.5, 0, 2, 0, 1.5, 0 in (high points at stations 1, 3, 5, 7).',
+    steps: ['Arc 1→3: chord at station 2 = (2 + 1.5)/2 = 1.75 in; station 2 is at 0 → deflection 1.75 in', 'Allowable = min(K · Sarc · (D/H) · (Y/E), 4 in) as implemented — K table, units and formula could not be confirmed against B.3.2.2', 'UNVERIFIED: engineer to confirm the formula, K values and units'],
+    expected: { maxDef: 1.75 * IN }, tol: 0.001 * IN, unit: 'mm',
+    source: 'API 653 B.3.2.2 as implemented in settle.js arcEval — not confirmed (C-13)',
+    run() {
+      const z = [2, 0, 1.5, 0, 2, 0, 1.5, 0].map((v) => v * IN);
+      const c = settleCalc(settleJob({ D: 100 * FT, H: 40 * FT, N: 8, z, Y: 206.843, E: 199948 }));
+      const a = c.arcs.arcs.find((x) => x.from === 1);
+      return { maxDef: a?.maxDef, K: c.arcs.K, allowIn: a?.allow == null ? null : a.allow / IN };
+    }
+  },
+
+  /* ------------------------------------------------------------------- repair patches --- */
+  {
+    id: 'V-43', area: 'Patch plates', units: 'imperial', basis: 'equation',
+    title: 'Auto patch size extends 2 in past the recorded corrosion',
+    input: 'Repair location 14 in × 3 in; default patch 12 × 12 in; margin 2 in.',
+    steps: ['L = max(12, 14 + 2 × 2) = 18 in', 'W = max(12, 3 + 2 × 2) = 12 in'],
+    expected: { L: 18 * IN, W: 12 * IN }, tol: 0.01, unit: 'mm',
+    source: 'API 653 §9.10.1.1 (patch extends ≥ 2 in past the corroded area) — confirm paragraph',
+    run() {
+      const job = floorJob({ D: 100 * FT, tBottom: 0.25 * IN });
+      job.indications = [indAt(job, 10 * FT, 30, { id: 'A', result: 'ss', utMin: 0.05 * IN, len: 14 * IN, wid: 3 * IN })];
+      const { L, c } = evalFloor(job), p = patchList(job, L, c)[0];
+      return { L: p.L, W: p.W };
+    }
+  },
+  {
+    id: 'V-44', area: 'Patch plates', units: 'imperial', basis: 'review',
+    title: 'With no recorded corrosion size, the "2 in past the corrosion" check is not a pass',
+    input: 'Critical-zone repair location with no length / width entered.',
+    steps: ['Patch defaults to 12 × 12 in centred on the point', 'Coverage of the corrosion is unknown → the 9.10.1.1 check must be "Verify", not OK'],
+    expected: { marginCheck: null }, tol: null, unit: '',
+    source: 'This review (proposed correction C-10)',
+    run() {
+      const job = floorJob({ D: 100 * FT, tBottom: 0.25 * IN, courses: [{ id: 'c1', h: 8 * FT, tNom: 0.5 * IN }] });
+      job.indications = [indAt(job, 50 * FT - 2 * IN, 90, { id: 'A', result: 'ss', utMin: 0.05 * IN })];
+      const { L, c } = evalFloor(job), p = patchList(job, L, c)[0];
+      return { marginCheck: p.checks.find((k) => /2 in past/.test(k.item))?.ok ?? 'n/a' };
+    }
+  },
+
+  /* -------------------------------------------------------------------------- units --- */
+  {
+    id: 'V-45', area: 'Units', units: 'both', basis: 'equation',
+    title: 'Input conversion to the internal millimetre basis',
+    input: '0.25 in thickness; 120 ft diameter; 6.0 mm; 30 m.',
+    steps: ['0.25 × 25.4 = 6.35 mm', '120 × 304.8 = 36,576 mm', 'metric values unchanged (× 1 / × 1000)'],
+    expected: { t_in: 6.35, D_ft: 36576, t_mm: 6, D_m: 30000 }, tol: 1e-9, unit: 'mm',
+    source: 'Exact definitions: 1 in = 25.4 mm, 1 ft = 304.8 mm',
+    run() { const I = { units: 'imperial' }, M = { units: 'metric' }; return { t_in: toMm('0.25', 't', I), D_ft: toMm('120', 'big', I), t_mm: toMm('6.0', 't', M), D_m: toMm('30', 'big', M) }; }
+  }
+];
+
+/** Compare one case. Returns { pass, rows: [[key, expected, actual, ok]] }. */
+export function check(cs) {
+  let actual, error = null;
+  try { actual = cs.run(); } catch (e) { error = String(e && e.message || e); actual = {}; }
+  const rows = Object.entries(cs.expected).map(([k, exp]) => {
+    const act = actual[k];
+    let ok;
+    if (typeof exp === 'number' && typeof act === 'number') ok = Math.abs(act - exp) <= (cs.tol ?? 0) + 1e-12;
+    else ok = exp === act;
+    return [k, exp, act, ok];
+  });
+  return { pass: !error && rows.every((r) => r[3]), rows, actual, error };
+}
