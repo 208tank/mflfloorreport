@@ -65,4 +65,17 @@ r['V37']=dict(D150=autoN(150),D40=autoN(40),D330=autoN(330),D400=autoN(400))
 r['V35']=dict(L=max(12,14+4),W=max(12,3+4))
 # nozzle
 r['V20']=dict(min=0.301,loss=(0.337-0.255)/0.337*100)
+# ---- v3.6.0: cases changed by the approved corrections (keys use the library IDs) ----
+# V-03: repaired soil-side C keeps its rate (Note 1) -> K = 0.140/20 + 0.040/20; A projected = 0.180 - 10 K
+K=(0.25-0.11)/20+0.04/20; r['V-03']=dict(K=K, A_proj=0.18-10*K, A_ok=0.18-10*K>=0.10)
+# V-12 / V-47 / V-13: §4.4.5.4 limit = max(floor, min(cap, 0.5 x course-1 t-min))
+r['V-12']=dict(czLim_in=max(0.10,min(0.118,0.30/2))); r['V-47']=dict(czLim_in=max(0.10,min(0.118,0.40/2))); r['V-13']=dict(czLim_mm=max(2.5,min(3.0,5/2)))
+# V-48: UPr thickness = lesser of the MFL threshold (40 % -> 0.150 in) and the thinnest unrepaired area (0.200 in)
+r['V-48']=dict(UPr=(0.25-min(0.25*0.6,0.20))/20)
+# V-20: SI form, A516M-415 lower courses S = 177 MPa
+r['V-20']=dict(tmin_mm=max(4.9*30*(12-0.3)*0.9/(177*0.85),2.5))
+# V-42: SI form of B.3.3
+r['V-42']=dict(BB_mm=0.031*3000)
+# V-51: H 75 ft, G 1, t 1.00 in, D such that Sb = 30,000 psi
+D=30000/(2.6*74); r['V-51']=dict(D_ft=D, Sb=2.6*D*74*1.0/1.0, t=9/32)
 for k,v in r.items(): print(k, {kk:(round(float(vv),6) if isinstance(vv,(int,float,np.floating)) else vv) for kk,vv in v.items()})

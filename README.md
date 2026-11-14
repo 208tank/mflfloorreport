@@ -7,6 +7,36 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Calculation corrections (v3.6.0)
+
+v3.6.0 applies the 28 approved items of the November 2026 calculation review (C-01 to C-31), checked
+against API 653 5th ed. Addendum 4 (2025), API 650 (2021), Canada SOR/2025-88 and 40 CFR 60 Subpart Kb.
+The report footer names the corrections in force so reports issued before and after can be told apart.
+Results for existing jobs can change; opening an older job says what was updated.
+
+- **Floor (§4.4.5):** repaired soil-side areas keep their rate in UPr unless "cause of corrosion removed"
+  is ticked, and only welded repairs remove a location from RT; UPr includes the MFL threshold (default
+  20 % of nominal, Note 1); the critical-zone limit is the smaller of 0.118 in (3 mm) and ½ course 1
+  t-min, not less than 0.10 in (2.5 mm), with any entered limit needing a reason; a location is critical
+  when its recorded extent reaches the zone; results on MFL estimates are shown as provisional; no rate
+  basis gives "not evaluated"; recorded product-side pitting keeps StPr on a coated floor unless the
+  engineer confirms the coating basis; Oᵣ over 20 years (30 with an RPB) is flagged (§6.4.2.2.1); the
+  rate basis is the tank age, with an optional separate StPr basis; impossible inputs are refused.
+- **Annular plates (§4.4.6):** the limit defaults to the Table 4.5 / API 650 Table 5.1 value plus any
+  corrosion allowance; Table 5.1 is not used beyond H × G = 75 ft or a 1.75 in first course.
+- **Patches (§9.11.1):** added §9.11.1.2 h) spacing, i) 24 in along the shell and §9.11.1.2.2; g) applies
+  only to shells of unknown toughness; the "2 in past the corrosion" check needs the corrosion size.
+- **Settlement (Annex B):** B.3.2.2 arc results are for information only; with a valid fit the arc
+  deflection is measured from the tilt plane; fold-pattern option (B.2.2.5.3); Si / Smax use a subset
+  spaced ≤ 32 ft when extra stations are taken (B.2.2.4 NOTE); one documented Y and the material's E;
+  tanks under 20 ft use the 20 ft edge curve with a note for engineering review.
+- **Shell:** single readings are compared with the t-min at their elevation (§4.3.3.1 b) and evaluated
+  per §4.3.2 (below 60 % of t-min fails); CSA G40.21-13 grades added; metric jobs use the SI equations.
+- **Nozzles, roofs, seals:** nozzle necks pass only against an engineer-entered retirement thickness;
+  a roof reading of 0 records a hole through the plate (§4.2.1.2); SOR/2025-88 external-roof shoes need
+  60 cm above the liquid; the US check is labelled Subpart Kb (Subpart Kc not covered); citations follow
+  the 2025 numbering; bottom projection beyond the shell is checked (§4.4.5.7).
+
 ## Equipment (v3.4.2)
 
 - **Equipment** (side menu, under Tank setup) is the job's equipment list: type, make, model, serial no.,

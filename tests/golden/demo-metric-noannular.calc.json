@@ -1,16 +1,22 @@
 {
  "migrated": {
-  "schema": 2,
+  "schema": 3,
   "calc": {
    "years": 25,
+   "stprYears": null,
    "Or": 10,
    "mrtBottom": 2.54,
-   "mrtAnnular": 2.54,
+   "mrtAnnular": null,
+   "annCA": null,
    "czDist": 76.2,
    "czLimit": null,
+   "czLimitReason": "",
    "shellTmin": null,
+   "mflThresholdPct": 20,
    "coated": false,
+   "coatConfirmed": false,
    "cp": false,
+   "rbi": false,
    "includeUnverified": false,
    "stprOverride": null,
    "uprOverride": null,
@@ -5020,14 +5026,20 @@
  "calc": {
   "C": {
    "years": 25,
+   "stprYears": null,
    "Or": 10,
    "mrtBottom": 2.54,
-   "mrtAnnular": 2.54,
+   "mrtAnnular": null,
+   "annCA": null,
    "czDist": 76.2,
    "czLimit": null,
+   "czLimitReason": "",
    "shellTmin": null,
+   "mflThresholdPct": 20,
    "coated": false,
+   "coatConfirmed": false,
    "cp": false,
+   "rbi": false,
    "includeUnverified": false,
    "stprOverride": null,
    "uprOverride": null,
@@ -5038,49 +5050,62 @@
    "patchT": 6.35
   },
   "years": 25,
+  "stYears": 25,
   "Or": 10,
-  "czLim": 3.175,
-  "StPr": 0.08128,
-  "UPr": 0.083312,
+  "czLim": 3,
+  "ann": {
+   "t": 4.318,
+   "src": "API 653 Table 4.5",
+   "tbl": 4.318,
+   "req": {
+    "Sb": 20779.2,
+    "t": 0.17,
+    "table": "API 653 Table 4.5",
+    "over": false,
+    "tmm": 4.318
+   }
+  },
+  "mBot": 2.54,
+  "mAnn": 4.318,
+  "noBasis": false,
+  "thrRate": 0.0508,
+  "projection": null,
+  "StPr": 0.06096,
+  "UPr": 0.154432,
   "stSrc": {
-   "id": "mwgl0c2i3hf7es",
-   "no": "013",
-   "plate": "r-1c-1",
-   "x": 1041.4,
-   "y": 2222.5,
+   "id": "mwgl0c2i48669e",
+   "no": "002",
+   "plate": "r1c0",
+   "x": 6477,
+   "y": 520.7,
    "result": "ps",
    "repair": "auto",
    "created": 1794671391000,
-   "mflPct": 30,
-   "mflSignal": "49",
-   "len": 25.4,
+   "mflPct": 25,
+   "mflSignal": "41",
+   "len": 20.32,
    "wid": 20.32,
-   "vtDepth": 2.032,
+   "vtDepth": 1.524,
    "vtCond": "Isolated pit"
   },
   "upSrc": {
-   "id": "mwgl0c2h00oujx",
-   "no": "001",
-   "plate": "r1c0",
-   "x": 1955.8,
-   "y": 1117.6,
+   "id": "mwgl0c2ij3ao3h",
+   "no": "006",
+   "plate": "r1c-1",
+   "x": 5181.6,
+   "y": 1066.8,
    "result": "ss",
    "repair": "auto",
    "created": 1794671391000,
-   "mflPct": 35,
-   "mflSignal": "62",
-   "len": 38.1,
-   "wid": 30.48,
-   "utMin": 4.2672,
-   "utMethod": "A-scan",
-   "vtCond": "None visible",
-   "repairMethod": "Patch plate (lap welded)",
-   "repLen": 304.8,
-   "repWid": 304.8,
-   "repT": 6.35,
-   "repId": "P-1"
+   "mflPct": 55,
+   "mflSignal": "97",
+   "len": 101.6,
+   "wid": 76.2,
+   "utMin": 2.4892,
+   "utMethod": "B-scan",
+   "vtCond": "None visible"
   },
-  "K": 0.164592,
+  "K": 0.215392,
   "per": [
    [
     "mwgl0c2h00oujx",
@@ -5149,6 +5174,7 @@
      "tNom": 6.35,
      "rem": 4.2672,
      "src": "UT",
+     "est": false,
      "loss": 2.0828,
      "lossPct": 32.8,
      "top": 0,
@@ -5161,14 +5187,22 @@
      },
      "r": 3047.259077,
      "distShell": 15240.74092,
+     "distEdge": 15221.69092,
      "critical": false,
+     "nearCZ": false,
      "region": "bottom",
      "counts": true,
+     "issues": {
+      "bad": [],
+      "doubt": []
+     },
      "limit": 2.54,
-     "projected": 2.62128,
-     "status": "OK",
-     "repair": false,
-     "auto": false
+     "projected": 2.11328,
+     "status": "repair (calc)",
+     "repair": true,
+     "auto": true,
+     "rtRepaired": 10.6172,
+     "projectedRepaired": 8.46328
     }
    ],
    [
@@ -5238,6 +5272,7 @@
      "tNom": 6.35,
      "rem": 4.826,
      "src": "VT pit depth",
+     "est": false,
      "loss": 1.524,
      "lossPct": 24,
      "top": 1.524,
@@ -5250,11 +5285,17 @@
      },
      "r": 6706.622176,
      "distShell": 11581.37782,
+     "distEdge": 11571.21782,
      "critical": false,
+     "nearCZ": false,
      "region": "bottom",
      "counts": true,
+     "issues": {
+      "bad": [],
+      "doubt": []
+     },
      "limit": 2.54,
-     "projected": 3.18008,
+     "projected": 2.67208,
      "status": "OK",
      "repair": false,
      "auto": false
@@ -5327,6 +5368,7 @@
      "tNom": 6.35,
      "rem": 3.048,
      "src": "UT",
+     "est": false,
      "loss": 3.302,
      "lossPct": 52,
      "top": 0,
@@ -5339,14 +5381,22 @@
      },
      "r": 10663.83389,
      "distShell": 7624.166111,
+     "distEdge": 7586.066111,
      "critical": false,
+     "nearCZ": false,
      "region": "bottom",
      "counts": true,
+     "issues": {
+      "bad": [],
+      "doubt": []
+     },
      "limit": 2.54,
-     "projected": 1.40208,
+     "projected": 0.89408,
      "status": "repair (calc)",
      "repair": true,
-     "auto": true
+     "auto": true,
+     "rtRepaired": 9.398,
+     "projectedRepaired": 7.24408
     }
    ],
    [
@@ -5416,6 +5466,7 @@
      "tNom": 6.35,
      "rem": null,
      "src": "",
+     "est": false,
      "loss": null,
      "lossPct": null,
      "top": 0,
@@ -5428,9 +5479,15 @@
      },
      "r": 12502.85169,
      "distShell": 5785.148315,
+     "distEdge": 5785.148315,
      "critical": false,
+     "nearCZ": false,
      "region": "bottom",
      "counts": false,
+     "issues": {
+      "bad": [],
+      "doubt": []
+     },
      "limit": 2.54,
      "projected": null,
      "status": "no action",
@@ -5565,6 +5622,7 @@
      "tNom": 6.35,
      "rem": 4.699,
      "src": "UT",
+     "est": false,
      "loss": 1.651,
      "lossPct": 26,
      "top": 1.651,
@@ -5577,14 +5635,22 @@
      },
      "r": 15827.68001,
      "distShell": 2460.319986,
+     "distEdge": 2434.919986,
      "critical": false,
+     "nearCZ": false,
      "region": "bottom",
      "counts": true,
+     "issues": {
+      "bad": [],
+      "doubt": []
+     },
      "limit": 2.54,
-     "projected": 3.05308,
-     "status": "OK",
-     "repair": false,
-     "auto": false
+     "projected": 2.54508,
+     "status": "repair (calc)",
+     "repair": true,
+     "auto": true,
+     "rtRepaired": 11.049,
+     "projectedRepaired": 8.89508
     }
    ],
    [
@@ -5654,6 +5720,7 @@
      "tNom": 6.35,
      "rem": 2.4892,
      "src": "UT",
+     "est": false,
      "loss": 3.8608,
      "lossPct": 60.8,
      "top": 0,
@@ -5666,14 +5733,22 @@
      },
      "r": 4574.539295,
      "distShell": 13713.46071,
+     "distEdge": 13662.66071,
      "critical": false,
+     "nearCZ": false,
      "region": "bottom",
      "counts": true,
+     "issues": {
+      "bad": [],
+      "doubt": []
+     },
      "limit": 2.54,
-     "projected": 0.84328,
+     "projected": 0.33528,
      "status": "repair (calc)",
      "repair": true,
-     "auto": true
+     "auto": true,
+     "rtRepaired": 8.8392,
+     "projectedRepaired": 6.68528
     }
    ],
    [
@@ -5683,6 +5758,7 @@
      "tNom": 6.35,
      "rem": 5.207,
      "src": "UT",
+     "est": false,
      "loss": 1.143,
      "lossPct": 18,
      "top": 0,
@@ -5692,11 +5768,17 @@
      "floor": null,
      "r": null,
      "distShell": null,
+     "distEdge": null,
      "critical": false,
+     "nearCZ": false,
      "region": "bottom",
      "counts": true,
+     "issues": {
+      "bad": [],
+      "doubt": []
+     },
      "limit": 2.54,
-     "projected": 3.56108,
+     "projected": 3.05308,
      "status": "OK",
      "repair": false,
      "auto": false
@@ -5709,6 +5791,7 @@
      "tNom": 6.35,
      "rem": 5.969,
      "src": "UT",
+     "est": false,
      "loss": 0.381,
      "lossPct": 6,
      "top": 0,
@@ -5718,11 +5801,17 @@
      "floor": null,
      "r": null,
      "distShell": null,
+     "distEdge": null,
      "critical": false,
+     "nearCZ": false,
      "region": "bottom",
      "counts": true,
+     "issues": {
+      "bad": [],
+      "doubt": []
+     },
      "limit": 2.54,
-     "projected": 4.32308,
+     "projected": 3.81508,
      "status": "OK",
      "repair": false,
      "auto": false
@@ -5795,6 +5884,7 @@
      "tNom": 6.35,
      "rem": 4.7625,
      "src": "MFL estimate",
+     "est": true,
      "loss": 1.5875,
      "lossPct": 25,
      "top": 0,
@@ -5807,9 +5897,15 @@
      },
      "r": 9149.07859,
      "distShell": 9138.92141,
+     "distEdge": 9126.22141,
      "critical": false,
+     "nearCZ": false,
      "region": "bottom",
      "counts": false,
+     "issues": {
+      "bad": [],
+      "doubt": []
+     },
      "limit": 2.54,
      "projected": null,
      "status": "pending",
@@ -5884,6 +5980,7 @@
      "tNom": 6.35,
      "rem": 2.286,
      "src": "UT",
+     "est": false,
      "loss": 4.064,
      "lossPct": 64,
      "top": 1.016,
@@ -5896,14 +5993,22 @@
      },
      "r": 13722.11345,
      "distShell": 4565.886548,
+     "distEdge": 4502.386548,
      "critical": false,
+     "nearCZ": false,
      "region": "bottom",
      "counts": true,
+     "issues": {
+      "bad": [],
+      "doubt": []
+     },
      "limit": 2.54,
-     "projected": 0.64008,
+     "projected": 0.13208,
      "status": "repair (calc)",
      "repair": true,
-     "auto": true
+     "auto": true,
+     "rtRepaired": 8.636,
+     "projectedRepaired": 6.48208
     }
    ],
    [
@@ -5973,6 +6078,7 @@
      "tNom": 6.35,
      "rem": null,
      "src": "",
+     "est": false,
      "loss": null,
      "lossPct": null,
      "top": 0,
@@ -5985,9 +6091,15 @@
      },
      "r": 1523.629538,
      "distShell": 16764.37046,
+     "distEdge": 16764.37046,
      "critical": false,
+     "nearCZ": false,
      "region": "bottom",
      "counts": false,
+     "issues": {
+      "bad": [],
+      "doubt": []
+     },
      "limit": 2.54,
      "projected": null,
      "status": "no action",
@@ -6062,6 +6174,7 @@
      "tNom": 6.35,
      "rem": 3.81,
      "src": "UT",
+     "est": false,
      "loss": 2.54,
      "lossPct": 40,
      "top": 0,
@@ -6074,14 +6187,22 @@
      },
      "r": 11583.18676,
      "distShell": 6704.813239,
+     "distEdge": 6679.413239,
      "critical": false,
+     "nearCZ": false,
      "region": "bottom",
      "counts": true,
+     "issues": {
+      "bad": [],
+      "doubt": []
+     },
      "limit": 2.54,
-     "projected": 2.16408,
+     "projected": 1.65608,
      "status": "repair (calc)",
      "repair": true,
-     "auto": true
+     "auto": true,
+     "rtRepaired": 10.16,
+     "projectedRepaired": 8.00608
     }
    ],
    [
@@ -6151,6 +6272,7 @@
      "tNom": 6.35,
      "rem": 4.318,
      "src": "VT pit depth",
+     "est": false,
      "loss": 2.032,
      "lossPct": 32,
      "top": 2.032,
@@ -6163,14 +6285,22 @@
      },
      "r": 8228.708208,
      "distShell": 10059.29179,
+     "distEdge": 10046.59179,
      "critical": false,
+     "nearCZ": false,
      "region": "bottom",
      "counts": true,
+     "issues": {
+      "bad": [],
+      "doubt": []
+     },
      "limit": 2.54,
-     "projected": 2.67208,
-     "status": "OK",
-     "repair": false,
-     "auto": false
+     "projected": 2.16408,
+     "status": "repair (calc)",
+     "repair": true,
+     "auto": true,
+     "rtRepaired": 10.668,
+     "projectedRepaired": 8.51408
     }
    ],
    [
@@ -6308,6 +6438,7 @@
      "tNom": 6.35,
      "rem": 4.7625,
      "src": "MFL estimate",
+     "est": true,
      "loss": 1.5875,
      "lossPct": 25,
      "top": 0,
@@ -6320,9 +6451,15 @@
      },
      "r": 16411.96446,
      "distShell": 1876.035538,
+     "distEdge": 1863.335538,
      "critical": false,
+     "nearCZ": false,
      "region": "bottom",
      "counts": false,
+     "issues": {
+      "bad": [],
+      "doubt": []
+     },
      "limit": 2.54,
      "projected": null,
      "status": "pending",
@@ -6335,21 +6472,27 @@
    {
     "name": "bottom",
     "label": "Bottom plates",
-    "RTip": 4.318,
-    "RTbc": 4.2672,
-    "RT": 4.2672,
-    "MRT": 2.62128,
+    "RTip": 4.826,
+    "RTbc": 5.207,
+    "RT": 4.826,
+    "MRT": 2.67208,
     "limit": 2.54,
     "ok": true,
-    "OrMax": 10.49382716,
-    "tReq": 4.18592
+    "OrMax": 10.61320755,
+    "tReq": 4.69392,
+    "provisional": 0,
+    "notEvaluated": false
    }
   ],
   "warnings": [
    "2 indications are pending prove-up and not included in the calculation.",
-   "2 indications have no valid plate location."
+   "2 indications have no valid plate location.",
+   "5 repaired soil-side locations keep their corrosion rate in UPᵣ (API 653 §4.4.5.1 Note 1); tick \"cause of corrosion removed\" on a repair where that applies."
   ],
   "repairs": [
+   "mwgl0c2ix8vrhu",
+   "mwgl0c2i3hf7es",
+   "mwgl0c2h00oujx",
    "mwgl0c2iceeqzp",
    "mwgl0c2i5571y9",
    "mwgl0c2ij3ao3h",
@@ -6359,11 +6502,78 @@
    "mwgl0c2i7egul2",
    "mwgl0c2ij3ao3h",
    "mwgl0c2i5571y9",
-   "mwgl0c2iceeqzp"
+   "mwgl0c2iceeqzp",
+   "mwgl0c2h00oujx",
+   "mwgl0c2i3hf7es",
+   "mwgl0c2ix8vrhu"
   ]
  },
- "czLimit": 3.175,
+ "czLimit": 3,
  "patches": [
+  {
+   "x0": 1803.4,
+   "x1": 2108.2,
+   "y0": 2184.4,
+   "y1": 2489.2,
+   "inds": [
+    {
+     "id": "mwgl0c2h00oujx",
+     "no": "001",
+     "plate": "r1c0",
+     "x": 1955.8,
+     "y": 1117.6,
+     "result": "ss",
+     "repair": "auto",
+     "created": 1794671391000,
+     "mflPct": 35,
+     "mflSignal": "62",
+     "len": 38.1,
+     "wid": 30.48,
+     "utMin": 4.2672,
+     "utMethod": "A-scan",
+     "vtCond": "None visible",
+     "repairMethod": "Patch plate (lap welded)",
+     "repLen": 304.8,
+     "repWid": 304.8,
+     "repT": 6.35,
+     "repId": "P-1"
+    }
+   ],
+   "manual": true,
+   "group": "P-1",
+   "t": 6.35,
+   "kind": "rect",
+   "poly": [
+    [
+     1803.4,
+     2184.4
+    ],
+    [
+     2108.2,
+     2184.4
+    ],
+    [
+     2108.2,
+     2489.2
+    ],
+    [
+     1803.4,
+     2489.2
+    ]
+   ],
+   "L": 304.8,
+   "W": 304.8,
+   "th": null,
+   "id": "P-1",
+   "cx": 1955.8,
+   "cy": 2336.8,
+   "auto": false,
+   "cz": false,
+   "tAssumed": false,
+   "alongShell": 429.3643721,
+   "checks": [],
+   "status": "OK"
+  },
   {
    "x0": 8013.7,
    "x1": 8318.5,
@@ -6413,12 +6623,73 @@
    "L": 304.8,
    "W": 304.8,
    "th": null,
-   "id": "P-1",
+   "id": "P-2",
    "cx": 8166.1,
    "cy": -6858,
    "auto": true,
    "cz": false,
    "tAssumed": true,
+   "alongShell": 429.4277019,
+   "checks": [],
+   "status": "OK"
+  },
+  {
+   "x0": -15099.05868,
+   "x1": -14794.25868,
+   "y0": -5359.4,
+   "y1": -5054.6,
+   "inds": [
+    {
+     "id": "mwgl0c2ix8vrhu",
+     "no": "005",
+     "plate": "r-2c-2",
+     "x": 2971.8,
+     "y": 889,
+     "result": "ps",
+     "repair": "auto",
+     "created": 1794671391000,
+     "mflPct": 30,
+     "mflSignal": "51",
+     "len": 50.8,
+     "wid": 25.4,
+     "utMin": 4.699,
+     "vtDepth": 1.651,
+     "utMethod": "A-scan",
+     "vtCond": "Pitting cluster"
+    }
+   ],
+   "manual": false,
+   "group": null,
+   "t": 6.35,
+   "kind": "rect",
+   "poly": [
+    [
+     -15099.05868,
+     -5359.4
+    ],
+    [
+     -14794.25868,
+     -5359.4
+    ],
+    [
+     -14794.25868,
+     -5054.6
+    ],
+    [
+     -15099.05868,
+     -5054.6
+    ]
+   ],
+   "L": 304.8,
+   "W": 304.8,
+   "th": null,
+   "id": "P-3",
+   "cx": -14946.65868,
+   "cy": -5207,
+   "auto": true,
+   "cz": false,
+   "tAssumed": true,
+   "alongShell": 388.1071111,
    "checks": [],
    "status": "OK"
   },
@@ -6471,12 +6742,13 @@
    "L": 304.8,
    "W": 304.8,
    "th": null,
-   "id": "P-2",
+   "id": "P-4",
    "cx": -3962.4,
    "cy": 2286,
    "auto": true,
    "cz": false,
    "tAssumed": true,
+   "alongShell": 416.3287705,
    "checks": [],
    "status": "OK"
   },
@@ -6530,12 +6802,13 @@
    "L": 304.8,
    "W": 304.8,
    "th": null,
-   "id": "P-3",
+   "id": "P-5",
    "cx": 2387.6,
    "cy": -13512.8,
    "auto": true,
    "cz": false,
    "tAssumed": true,
+   "alongShell": 353.1848018,
    "checks": [],
    "status": "OK"
   },
@@ -6587,12 +6860,71 @@
    "L": 304.8,
    "W": 304.8,
    "th": null,
-   "id": "P-4",
+   "id": "P-6",
    "cx": 2997.2,
    "cy": 11188.7,
    "auto": true,
    "cz": false,
    "tAssumed": true,
+   "alongShell": 373.2878015,
+   "checks": [],
+   "status": "OK"
+  },
+  {
+   "x0": -8255,
+   "x1": -7950.2,
+   "y0": -1587.5,
+   "y1": -1282.7,
+   "inds": [
+    {
+     "id": "mwgl0c2i3hf7es",
+     "no": "013",
+     "plate": "r-1c-1",
+     "x": 1041.4,
+     "y": 2222.5,
+     "result": "ps",
+     "repair": "auto",
+     "created": 1794671391000,
+     "mflPct": 30,
+     "mflSignal": "49",
+     "len": 25.4,
+     "wid": 20.32,
+     "vtDepth": 2.032,
+     "vtCond": "Isolated pit"
+    }
+   ],
+   "manual": false,
+   "group": null,
+   "t": 6.35,
+   "kind": "rect",
+   "poly": [
+    [
+     -8255,
+     -1587.5
+    ],
+    [
+     -7950.2,
+     -1587.5
+    ],
+    [
+     -7950.2,
+     -1282.7
+    ],
+    [
+     -8255,
+     -1282.7
+    ]
+   ],
+   "L": 304.8,
+   "W": 304.8,
+   "th": null,
+   "id": "P-7",
+   "cx": -8102.6,
+   "cy": -1435.1,
+   "auto": true,
+   "cz": false,
+   "tAssumed": true,
+   "alongShell": 353.2864317,
    "checks": [],
    "status": "OK"
   }
@@ -6602,12 +6934,12 @@
    "status": "bad",
    "lines": [
     "14 MFL indications recorded, 10 proven corrosion, 2 awaiting prove-up.",
-    "Bottom plates: MRT 2.62 mm at O<sub>r</sub> = 10 yr (minimum 2.54 mm) — acceptable."
+    "Bottom plates: MRT 2.67 mm at O<sub>r</sub> = 10 yr (minimum 2.54 mm) — acceptable."
    ],
    "items": [
     {
      "key": "floor-repairs",
-     "finding": "4 floor locations require repair: 003 (K3), 006 (G2), 010 (N2), 012 (C3).",
+     "finding": "7 floor locations require repair: 001 (G3), 003 (K3), 005 (J1), 006 (G2), 010 (N2), 012 (C3), 013 (I2).",
      "loc": "See floor map",
      "action": "Repair by patch plate, weld build-up or plate replacement per API 653 Section 9 and re-test (vacuum box) before return to service.",
      "priority": "P2",
@@ -6627,28 +6959,28 @@
    "status": "bad",
    "lines": [
     "5 courses, 496 UT readings.",
-    "Course 1: minimum 9.45 mm vs t-min 10.01 mm — Below t-min.",
-    "Course 2: minimum 10.72 mm vs t-min 7.85 mm — OK.",
+    "Course 1: minimum 9.45 mm vs t-min 9.99 mm — Evaluate per §4.3.2.",
+    "Course 2: minimum 10.72 mm vs t-min 7.83 mm — OK.",
     "Course 3: minimum 9.12 mm vs t-min 5.16 mm — OK.",
     "Course 4: minimum 7.54 mm vs t-min 3.20 mm — OK.",
-    "Course 5: minimum 5.94 mm vs t-min 2.54 mm — OK."
+    "Course 5: minimum 5.94 mm vs t-min 2.50 mm — OK."
    ],
    "items": [
     {
      "key": "shell-c1",
-     "finding": "Shell course 1: minimum reading 9.45 mm is below the minimum required thickness 10.01 mm.",
+     "finding": "Shell course 1: 3 readings are below the t-min for their location (minimum 9.45 mm).",
      "loc": "Course 1",
-     "action": "Evaluate the thin area per API 653 4.3.2 (locally thinned areas / pitting); otherwise repair (insert or door sheet) or re-rate the maximum fill height.",
-     "priority": "P2",
-     "ref": "API 653 4.3.2 / 4.3.3"
+     "action": "Evaluate the corroded area per API 653 §4.3.2: the average thickness over the averaging length must be at least t-min, and the least thickness at least 60 % of t-min; otherwise repair or re-rate the fill height.",
+     "priority": "P3",
+     "ref": "API 653 §4.3.2 / §4.3.3.1 b"
     },
     {
      "key": "shell-fill",
-     "finding": "The minimum shell readings support a maximum product fill height of 10.951 m (course 1), below the 11.582 m maximum fill height.",
+     "finding": "The minimum shell readings support a maximum product fill height of 10.968 m (course 1), below the 11.582 m maximum fill height.",
      "loc": "Course 1",
-     "action": "Reduce the maximum fill height to 10.951 m or repair course 1.",
+     "action": "Reduce the maximum fill height to 10.968 m or repair course 1.",
      "priority": "P2",
-     "ref": "API 653 4.3.3.1"
+     "ref": "API 653 §4.3.3.1"
     }
    ]
   },
@@ -6663,9 +6995,9 @@
      "key": "froof-tmin",
      "finding": "1 fixed roof reading is below t-min (Q4-E 1.90 mm).",
      "loc": "See roof plan",
-     "action": "Repair or replace the thin roof plates (API 653 4.2.1.2: average thickness below 0.09 in over any 100 in² requires repair or replacement).",
+     "action": "Repair or replace the thin roof plates (API 653 §4.2.1.2: any hole through a plate, or an average below 0.09 in over any 100 in², requires repair or replacement).",
      "priority": "P3",
-     "ref": "API 653 4.2.1.2"
+     "ref": "API 653 §4.2.1.2"
     }
    ]
   },
@@ -6695,7 +7027,7 @@
     },
     {
      "key": "flroof-seal-kb",
-     "finding": "Rim seal does not meet US EPA 40 CFR 60 Subpart Kb / 40 CFR 63 Subpart WW: Visual inspection.",
+     "finding": "Rim seal does not meet US EPA 40 CFR 60 Subpart Kb (tanks built or modified 24 Jul 1984 – 4 Oct 2023) / 40 CFR 63 Subpart WW: Visual inspection.",
      "loc": "Rim seal",
      "action": "Repair or empty and remove from service within 45 days (§60.113b(a)(2)); defects found with the tank emptied must be repaired before refilling.",
      "priority": "P1",
@@ -6785,12 +7117,14 @@
     "Emod": 29400000,
     "Sd": 24900,
     "St": 27400,
+    "SdMPa": 172,
+    "StMPa": 189,
     "sSrc": "Table 4.1",
     "jKey": "w:650-7:0",
     "Ej": 1,
     "riveted": false,
     "Hc": 38,
-    "tmin": 10.00943614
+    "tmin": 9.99273247
    },
    {
     "id": "mwgl0c2j09jyav",
@@ -6804,12 +7138,14 @@
     "Emod": 29400000,
     "Sd": 24900,
     "St": 27400,
+    "SdMPa": 172,
+    "StMPa": 189,
     "sSrc": "Table 4.1",
     "jKey": "w:650-7:0",
     "Ej": 1,
     "riveted": false,
     "Hc": 30,
-    "tmin": 7.845233735
+    "tmin": 7.833060871
    },
    {
     "id": "mwgl0c2j4zooo2",
@@ -6823,12 +7159,14 @@
     "Emod": 29400000,
     "Sd": 27400,
     "St": 30100,
+    "SdMPa": 189,
+    "StMPa": 208,
     "sSrc": "Table 4.1",
     "jKey": "w:650-7:0",
     "Ej": 1,
     "riveted": false,
     "Hc": 22,
-    "tmin": 5.162689051
+    "tmin": 5.163084416
    },
    {
     "id": "mwgl0c2jkox9td",
@@ -6842,12 +7180,14 @@
     "Emod": 29400000,
     "Sd": 27400,
     "St": 30100,
+    "SdMPa": 189,
+    "StMPa": 208,
     "sSrc": "Table 4.1",
     "jKey": "w:650-7:0",
     "Ej": 1,
     "riveted": false,
     "Hc": 14,
-    "tmin": 3.195950365
+    "tmin": 3.197668992
    },
    {
     "id": "mwgl0c2jda09pb",
@@ -6861,12 +7201,14 @@
     "Emod": 29400000,
     "Sd": 27400,
     "St": 30100,
+    "SdMPa": 189,
+    "StMPa": 208,
     "sSrc": "Table 4.1",
     "jKey": "w:650-7:0",
     "Ej": 1,
     "riveted": false,
     "Hc": 6,
-    "tmin": 2.54
+    "tmin": 2.5
    }
   ],
   "annular": {
@@ -6899,21 +7241,31 @@
      "Emod": 29400000,
      "Sd": 24900,
      "St": 27400,
+     "SdMPa": 172,
+     "StMPa": 189,
      "sSrc": "Table 4.1",
      "jKey": "w:650-7:0",
      "Ej": 1,
      "riveted": false,
      "Hc": 38,
-     "tmin": 10.00943614
+     "tmin": 9.99273247
     },
     "tMinSet": null,
-    "tMinCalc": 10.00943614,
-    "tMin": 10.00943614,
+    "tMinCalc": 9.99273247,
+    "tMin": 9.99273247,
     "tMinSrc": "API 653 4.3.3.1",
     "count": 232,
     "min": 9.4488,
+    "below": 3,
+    "fail": 0,
+    "worst": {
+     "v": 9.4488,
+     "t": 10.19095036,
+     "z": 76.2,
+     "loc": "Q7"
+    },
     "lossPct": 25.6,
-    "status": "Below t-min"
+    "status": "Evaluate per §4.3.2"
    },
    {
     "id": "mwgl0c2j09jyav",
@@ -6935,19 +7287,24 @@
      "Emod": 29400000,
      "Sd": 24900,
      "St": 27400,
+     "SdMPa": 172,
+     "StMPa": 189,
      "sSrc": "Table 4.1",
      "jKey": "w:650-7:0",
      "Ej": 1,
      "riveted": false,
      "Hc": 30,
-     "tmin": 7.845233735
+     "tmin": 7.833060871
     },
     "tMinSet": null,
-    "tMinCalc": 7.845233735,
-    "tMin": 7.845233735,
+    "tMinCalc": 7.833060871,
+    "tMin": 7.833060871,
     "tMinSrc": "API 653 4.3.3.1",
     "count": 64,
     "min": 10.7188,
+    "below": 0,
+    "fail": 0,
+    "worst": null,
     "lossPct": 3.542857143,
     "status": "OK"
    },
@@ -6971,19 +7328,24 @@
      "Emod": 29400000,
      "Sd": 27400,
      "St": 30100,
+     "SdMPa": 189,
+     "StMPa": 208,
      "sSrc": "Table 4.1",
      "jKey": "w:650-7:0",
      "Ej": 1,
      "riveted": false,
      "Hc": 22,
-     "tmin": 5.162689051
+     "tmin": 5.163084416
     },
     "tMinSet": null,
-    "tMinCalc": 5.162689051,
-    "tMin": 5.162689051,
+    "tMinCalc": 5.163084416,
+    "tMin": 5.163084416,
     "tMinSrc": "API 653 4.3.3.1",
     "count": 64,
     "min": 9.1186,
+    "below": 0,
+    "fail": 0,
+    "worst": null,
     "lossPct": 4.266666667,
     "status": "OK"
    },
@@ -7007,19 +7369,24 @@
      "Emod": 29400000,
      "Sd": 27400,
      "St": 30100,
+     "SdMPa": 189,
+     "StMPa": 208,
      "sSrc": "Table 4.1",
      "jKey": "w:650-7:0",
      "Ej": 1,
      "riveted": false,
      "Hc": 14,
-     "tmin": 3.195950365
+     "tmin": 3.197668992
     },
     "tMinSet": null,
-    "tMinCalc": 3.195950365,
-    "tMin": 3.195950365,
+    "tMinCalc": 3.197668992,
+    "tMin": 3.197668992,
     "tMinSrc": "API 653 4.3.3.1",
     "count": 64,
     "min": 7.5438,
+    "below": 0,
+    "fail": 0,
+    "worst": null,
     "lossPct": 4.96,
     "status": "OK"
    },
@@ -7043,19 +7410,24 @@
      "Emod": 29400000,
      "Sd": 27400,
      "St": 30100,
+     "SdMPa": 189,
+     "StMPa": 208,
      "sSrc": "Table 4.1",
      "jKey": "w:650-7:0",
      "Ej": 1,
      "riveted": false,
      "Hc": 6,
-     "tmin": 2.54
+     "tmin": 2.5
     },
     "tMinSet": null,
-    "tMinCalc": 2.54,
-    "tMin": 2.54,
+    "tMinCalc": 2.5,
+    "tMin": 2.5,
     "tMinSrc": "API 653 4.3.3.1",
     "count": 72,
     "min": 5.9436,
+    "below": 0,
+    "fail": 0,
+    "worst": null,
     "lossPct": 6.4,
     "status": "OK"
    }
@@ -7190,7 +7562,8 @@
     "count": 4,
     "min": 12.2428,
     "lossPct": 3.6,
-    "status": "OK"
+    "status": "OK",
+    "construction": false
    },
    "wall": {
     "tNom": 12.7,
@@ -7220,7 +7593,8 @@
     "count": 4,
     "min": 8.6614,
     "lossPct": 9.066666667,
-    "status": "OK"
+    "status": "OK",
+    "construction": false
    },
    "wall": {
     "tNom": 9.525,
@@ -7234,7 +7608,8 @@
     "count": 4,
     "min": 8.382,
     "lossPct": 12,
-    "status": "OK"
+    "status": "OK",
+    "construction": false
    },
    "wall": {
     "tNom": 9.525,
@@ -7248,7 +7623,8 @@
     "count": 5,
     "min": 4.4704,
     "lossPct": 47.77448071,
-    "status": "Below t-min"
+    "status": "Below t-min",
+    "construction": false
    },
    "wall": {
     "tNom": 8.5598,
@@ -7284,6 +7660,7 @@
      "z": 632.7,
      "fit": 633.5587539,
      "U": -0.8587538935,
+     "inSub": true,
      "S": -0.1921471099,
      "ok": true
     },
@@ -7294,6 +7671,7 @@
      "z": 636.27,
      "fit": 636.434818,
      "U": -0.1648179581,
+     "inSub": true,
      "S": -0.7424666316,
      "ok": true
     },
@@ -7304,6 +7682,7 @@
      "z": 633.97,
      "fit": 631.9559488,
      "U": 2.014051241,
+     "inSub": true,
      "S": 1.292588061,
      "ok": true
     },
@@ -7314,6 +7693,7 @@
      "z": 622.93,
      "fit": 621.3222557,
      "U": 1.607744318,
+     "inSub": true,
      "S": -0.507767203,
      "ok": true
     },
@@ -7324,6 +7704,7 @@
      "z": 609.6,
      "fit": 607.3830282,
      "U": 2.216971801,
+     "inSub": true,
      "S": 5.549735171,
      "ok": true
     },
@@ -7334,6 +7715,7 @@
      "z": 585.6,
      "fit": 593.8732711,
      "U": -8.273271058,
+     "inSub": true,
      "S": -10.42530057,
      "ok": true
     },
@@ -7344,6 +7726,7 @@
      "z": 586.5,
      "fit": 584.4129128,
      "U": 2.087087227,
+     "inSub": true,
      "S": 5.52714711,
      "ok": true
     },
@@ -7354,6 +7737,7 @@
      "z": 582.93,
      "fit": 581.5368487,
      "U": 1.393151291,
+     "inSub": true,
      "S": -0.9125333684,
      "ok": true
     },
@@ -7364,6 +7748,7 @@
      "z": 588.54,
      "fit": 586.0157179,
      "U": 2.524282093,
+     "inSub": true,
      "S": 2.022411939,
      "ok": true
     },
@@ -7374,6 +7759,7 @@
      "z": 596.26,
      "fit": 596.649411,
      "U": -0.3894109843,
+     "inSub": true,
      "S": -1.157232797,
      "ok": true
     },
@@ -7384,6 +7770,7 @@
      "z": 609.6,
      "fit": 610.5886385,
      "U": -0.9886384674,
+     "inSub": true,
      "S": -0.2097351706,
      "ok": true
     },
@@ -7394,6 +7781,7 @@
      "z": 622.93,
      "fit": 624.0983956,
      "U": -1.168395609,
+     "inSub": true,
      "S": -0.2446994287,
      "ok": true
     }
@@ -7402,9 +7790,12 @@
    "D": 36576,
    "H": 12192,
    "L": 9575.574408,
+   "Lsub": 9575.574408,
+   "k": 1,
    "Y": 248.2113271,
    "E": 202705.9172,
    "Ysrc": "course 1 ASTM A36",
+   "Esrc": "course 1 ASTM A36 (carbon steel, 29.4 × 10⁶ psi)",
    "Smax": 50.64919842,
    "fit": {
     "a": 608.9858333,
@@ -7424,37 +7815,62 @@
     "diff": 53.34,
     "mean": 608.9858333
    },
-   "warnings": [],
+   "warnings": [
+    "B.3.2 scope: the permissible values do not consider ridges, low nozzles or other discontinuities near the bottom, fold lines through roof columns, or combined shell and edge settlement; B.3.2.2 applies to API 650 carbon and stainless steel tanks in its diameter range. Otherwise a rigorous engineering assessment is required (B.3.2.4)."
+   ],
    "valid": true,
    "oopOk": true,
    "tiltOk": true,
    "arcs": {
     "arcs": [
      {
-      "from": 2,
+      "from": 3,
+      "to": 5,
+      "n": 2,
+      "Sarc": 19151.14882,
+      "maxDef": 0.507767203,
+      "at": 4,
+      "allow": 22.86412665,
+      "ok": true
+     },
+     {
+      "from": 5,
       "to": 7,
-      "n": 5,
-      "Sarc": 47877.87204,
-      "maxDef": 10.854,
+      "n": 2,
+      "Sarc": 19151.14882,
+      "maxDef": 10.42530057,
       "at": 6,
-      "allow": 57.16031662,
+      "allow": 22.86412665,
       "ok": true
      },
      {
       "from": 7,
-      "to": 2,
-      "n": 7,
-      "Sarc": 67029.02086,
-      "maxDef": 12.18,
-      "at": 9,
-      "allow": 80.02444327,
+      "to": 9,
+      "n": 2,
+      "Sarc": 19151.14882,
+      "maxDef": 0.9125333684,
+      "at": 8,
+      "allow": 22.86412665,
+      "ok": true
+     },
+     {
+      "from": 9,
+      "to": 3,
+      "n": 6,
+      "Sarc": 57453.44645,
+      "maxDef": 3.437562276,
+      "at": 12,
+      "allow": 68.59237994,
       "ok": true
      }
     ],
     "K": 3.9,
     "ok": true,
     "fixed": true,
-    "manual": false
+    "info": true,
+    "fromTilt": true,
+    "manual": false,
+    "fold": false
    },
    "status": "Acceptable"
   },
@@ -7957,7 +8373,8 @@
      "pct": 35.92598954,
      "status": "Acceptable",
      "Bew": 50.8,
-     "Be": 50.8
+     "Be": 50.8,
+     "review": false
     },
     "status": "Acceptable",
     "dev": 18.25040268,
@@ -8039,7 +8456,8 @@
      "pct": 76.87196343,
      "status": "NDE required",
      "Bew": 96.012,
-     "Be": 117.602
+     "Be": 117.602,
+     "review": false
     },
     "status": "NDE required",
     "dev": 73.80630952,
@@ -34123,7 +34541,8 @@
      "L": {
       "key": "kb",
       "short": "US EPA",
-      "name": "US EPA 40 CFR 60 Subpart Kb / 40 CFR 63 Subpart WW",
+      "name": "US EPA 40 CFR 60 Subpart Kb (tanks built or modified 24 Jul 1984 – 4 Oct 2023) / 40 CFR 63 Subpart WW",
+      "note": "Tanks built, reconstructed or modified after 4 October 2023 fall under 40 CFR 60 Subpart Kc, which this check does not cover (Kc also does not allow a vapor-mounted primary seal).",
       "pArea": 212,
       "pWidth": 3.81,
       "sArea": 21.2,
@@ -34204,7 +34623,9 @@
        10
       ]
      ],
-     "warn": []
+     "warn": [
+      "Tanks built, reconstructed or modified after 4 October 2023 fall under 40 CFR 60 Subpart Kc, which this check does not cover (Kc also does not allow a vapor-mounted primary seal)."
+     ]
     }
    ],
    [
@@ -34225,6 +34646,11 @@
       "shoeBelow": 10,
       "shoeHeight": 30,
       "ifrGaps": true,
+      "shoeEFR": {
+       "shoeAbove": 60,
+       "shoeBelow": 10,
+       "shoeHeight": null
+      },
       "repairEFR": "Repair and confirm the repair, or remove the tank from service, within 60 days (s. 100(1)(a)); 90 days if the total seal gap area is under 1000 cm²/m and an API 653 inspector confirms within 30 days (s. 100(3)); remove from service within 45 days if the rim seal cannot be repaired in service (s. 100(4)).",
       "repairIFR": "Install a temporary vapour control system within 15 days and complete the repair within 180 days (s. 100(1)(b)).",
       "freqEFR": [
@@ -34351,11 +34777,11 @@
   ]
  },
  "csv": {
-  "ind": "﻿Indication,Plate,Plate type,X (mm),Y (mm),Radius (m),Angle (deg),Dist. to shell (mm),Critical zone,MFL signal,MFL est. loss (%),MFL scan ref,Length (mm),Width (mm),Prove-up result,Nominal t (mm),UT min remaining (mm),UT method,VT pit depth (mm),VT condition,Coating condition,Remaining t used (mm),Remaining t source,Wall loss (mm),Wall loss (%),Projected t at next insp. (mm),MRT limit (mm),API 653 status,Repair setting,Repair method,Repair length (mm),Repair width (mm),Patch t (mm),Repair ID,Comments\r\n001,G3,floor,1955.8,1117.6,3.047,39.9,15240.74,,62,35,,38.1,30.48,Soil side,6.35,4.267,A-scan,,None visible,,4.267,UT,2.083,32.8,2.621,2.54,OK,auto,Patch plate (lap welded),304.8,304.8,6.35,P-1,\r\n002,G3,floor,6477,520.7,6.707,75,11581.38,,41,25,,20.32,20.32,Product side,6.35,,,1.524,Isolated pit,,4.826,VT pit depth,1.524,24,3.18,2.54,OK,auto,,,,,,\r\n003,K3,floor,8166.1,1676.4,10.664,130,7624.17,,88,45,,76.2,50.8,Soil side,6.35,3.048,B-scan,,None visible,,3.048,UT,3.302,52,1.402,2.54,repair (calc),auto,,,,,,\r\n004,M2,floor,4864.1,1663.7,12.503,200,5785.15,,35,20,,,,No indication (false call),6.35,,,,,,,,,,,2.54,no action,auto,,,,,,Mill scale / debris\r\n005,J1,floor,2971.8,889,15.828,250.8,2460.32,,51,30,,50.8,25.4,Product side,6.35,4.699,A-scan,1.651,Pitting cluster,,4.699,UT,1.651,26,3.053,2.54,OK,auto,,,,,,\r\n006,G2,floor,5181.6,1066.8,4.575,300,13713.46,,97,55,,101.6,76.2,Soil side,6.35,2.489,B-scan,,None visible,,2.489,UT,3.861,60.8,0.843,2.54,repair (calc),auto,,,,,,\r\n007,,,2794,330.2,,,,,70,40,,50.8,38.1,Soil side,6.35,5.207,A-scan,,,,5.207,UT,1.143,18,3.561,2.54,OK,auto,,,,,,\r\n008,,,1600.2,50.8,,,,,55,30,,38.1,25.4,Soil side,6.35,5.969,A-scan,,,,5.969,UT,0.381,6,4.323,2.54,OK,auto,,,,,,Near shell weld\r\n009,E2,floor,4572,1828.8,9.149,330,9138.92,,44,25,,25.4,25.4,Pending prove-up,6.35,,,,,,4.762,MFL estimate,1.588,25,,2.54,pending,auto,,,,,,\r\n010,N2,floor,6959.6,2336.8,13.722,170,4565.89,,104,60,,127,101.6,Both sides,6.35,2.286,B-scan,1.016,General corrosion,,2.286,UT,4.064,64,0.64,2.54,repair (calc),auto,,,,,,\r\n011,H3,floor,3594.1,50.8,1.524,219.9,16764.37,,33,20,,,,Other / non-relevant,6.35,,,,,,,,,,,2.54,no action,auto,,,,,,Lamination\r\n012,C3,floor,2997.2,215.9,11.583,15,6704.81,,60,35,,50.8,50.8,Soil side,6.35,3.81,A-scan,,,,3.81,UT,2.54,40,2.164,2.54,repair (calc),auto,,,,,,\r\n013,I2,floor,1041.4,2222.5,8.229,260,10059.29,,49,30,,25.4,20.32,Product side,6.35,,,2.032,Isolated pit,,4.318,VT pit depth,2.032,32,2.672,2.54,OK,auto,,,,,,\r\n014,E1,floor,2870.2,1828.8,16.412,298.9,1876.04,,40,25,,25.4,25.4,Pending prove-up,6.35,,,,,,4.762,MFL estimate,1.588,25,,2.54,pending,auto,,,,,,",
+  "ind": "﻿Indication,Plate,Plate type,X (mm),Y (mm),Radius (m),Angle (deg),Dist. to shell (mm),Critical zone,MFL signal,MFL est. loss (%),MFL scan ref,Length (mm),Width (mm),Prove-up result,Nominal t (mm),UT min remaining (mm),UT method,VT pit depth (mm),VT condition,Coating condition,Remaining t used (mm),Remaining t source,Wall loss (mm),Wall loss (%),Projected t at next insp. (mm),MRT limit (mm),API 653 status,Repair setting,Repair method,Repair length (mm),Repair width (mm),Patch t (mm),Repair ID,Comments\r\n001,G3,floor,1955.8,1117.6,3.047,39.9,15240.74,,62,35,,38.1,30.48,Soil side,6.35,4.267,A-scan,,None visible,,4.267,UT,2.083,32.8,2.113,2.54,repair (calc),auto,Patch plate (lap welded),304.8,304.8,6.35,P-1,\r\n002,G3,floor,6477,520.7,6.707,75,11581.38,,41,25,,20.32,20.32,Product side,6.35,,,1.524,Isolated pit,,4.826,VT pit depth,1.524,24,2.672,2.54,OK,auto,,,,,,\r\n003,K3,floor,8166.1,1676.4,10.664,130,7624.17,,88,45,,76.2,50.8,Soil side,6.35,3.048,B-scan,,None visible,,3.048,UT,3.302,52,0.894,2.54,repair (calc),auto,,,,,,\r\n004,M2,floor,4864.1,1663.7,12.503,200,5785.15,,35,20,,,,No indication (false call),6.35,,,,,,,,,,,2.54,no action,auto,,,,,,Mill scale / debris\r\n005,J1,floor,2971.8,889,15.828,250.8,2460.32,,51,30,,50.8,25.4,Product side,6.35,4.699,A-scan,1.651,Pitting cluster,,4.699,UT,1.651,26,2.545,2.54,repair (calc),auto,,,,,,\r\n006,G2,floor,5181.6,1066.8,4.575,300,13713.46,,97,55,,101.6,76.2,Soil side,6.35,2.489,B-scan,,None visible,,2.489,UT,3.861,60.8,0.335,2.54,repair (calc),auto,,,,,,\r\n007,,,2794,330.2,,,,,70,40,,50.8,38.1,Soil side,6.35,5.207,A-scan,,,,5.207,UT,1.143,18,3.053,2.54,OK,auto,,,,,,\r\n008,,,1600.2,50.8,,,,,55,30,,38.1,25.4,Soil side,6.35,5.969,A-scan,,,,5.969,UT,0.381,6,3.815,2.54,OK,auto,,,,,,Near shell weld\r\n009,E2,floor,4572,1828.8,9.149,330,9138.92,,44,25,,25.4,25.4,Pending prove-up,6.35,,,,,,4.762,MFL estimate,1.588,25,,2.54,pending,auto,,,,,,\r\n010,N2,floor,6959.6,2336.8,13.722,170,4565.89,,104,60,,127,101.6,Both sides,6.35,2.286,B-scan,1.016,General corrosion,,2.286,UT,4.064,64,0.132,2.54,repair (calc),auto,,,,,,\r\n011,H3,floor,3594.1,50.8,1.524,219.9,16764.37,,33,20,,,,Other / non-relevant,6.35,,,,,,,,,,,2.54,no action,auto,,,,,,Lamination\r\n012,C3,floor,2997.2,215.9,11.583,15,6704.81,,60,35,,50.8,50.8,Soil side,6.35,3.81,A-scan,,,,3.81,UT,2.54,40,1.656,2.54,repair (calc),auto,,,,,,\r\n013,I2,floor,1041.4,2222.5,8.229,260,10059.29,,49,30,,25.4,20.32,Product side,6.35,,,2.032,Isolated pit,,4.318,VT pit depth,2.032,32,2.164,2.54,repair (calc),auto,,,,,,\r\n014,E1,floor,2870.2,1828.8,16.412,298.9,1876.04,,40,25,,25.4,25.4,Pending prove-up,6.35,,,,,,4.762,MFL estimate,1.588,25,,2.54,pending,auto,,,,,,",
   "plates": "﻿Plate,Type,Cut / sketch,Length (m),Width (m),Orientation,Measured size,Area (m²),Nominal t (mm),UT min (mm),MFL scan,Datum corner,Indications,Notes\r\nA1,floor,Yes,9.144,2.4384,Horizontal,,15.04,6.35,,scanned,bottom-left corner,0,\r\nA2,floor,Yes,9.144,2.4384,Horizontal,,15.04,6.35,,scanned,bottom-left corner,0,\r\nB1,floor,Yes,9.144,2.4384,Horizontal,,15.45,6.35,,scanned,bottom-left corner,0,\r\nB2,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nB3,floor,Yes,9.144,2.4384,Horizontal,,15.45,6.35,,scanned,bottom-left corner,0,\r\nC1,floor,Yes,9.144,2.4384,Horizontal,,10.86,6.35,,scanned,bottom-left corner,0,\r\nC2,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nC3,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,1,\r\nC4,floor,Yes,9.144,2.4384,Horizontal,,10.86,6.35,,scanned,bottom-left corner,0,\r\nD1,floor,Yes,9.144,2.4384,Horizontal,,4.22,6.35,,scanned,bottom-left corner,0,\r\nD2,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nD3,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nD4,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nD5,floor,Yes,9.144,2.4384,Horizontal,,4.22,6.35,,scanned,bottom-left corner,0,\r\nE1,floor,Yes,9.144,2.4384,Horizontal,,18.53,6.35,,scanned,bottom-left corner,1,\r\nE2,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,1,\r\nE3,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nE4,floor,Yes,9.144,2.4384,Horizontal,,18.53,6.35,,scanned,bottom-left corner,0,\r\nF1,floor,Yes,9.144,2.4384,Horizontal,,9.5,6.35,,scanned,bottom-left corner,0,\r\nF2,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nF3,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nF4,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nF5,floor,Yes,9.144,2.4384,Horizontal,,9.5,6.35,,scanned,bottom-left corner,0,\r\nG1,floor,Yes,9.144,2.4384,Horizontal,,21.86,6.35,,scanned,bottom-left corner,0,\r\nG2,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,1,\r\nG3,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,2,\r\nG4,floor,Yes,9.144,2.4384,Horizontal,,21.86,6.35,,scanned,bottom-left corner,0,\r\nH1,floor,Yes,9.144,2.4384,Horizontal,,11.12,6.35,,scanned,\"bottom-left (plate edges, corner cut by shell)\",0,\r\nH2,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nH3,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,1,\r\nH4,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nH5,floor,Yes,9.144,2.4384,Horizontal,,11.12,6.35,,scanned,bottom-left corner,0,\r\nI1,floor,Yes,9.144,2.4384,Horizontal,,21.86,6.35,,scanned,\"bottom-left (plate edges, corner cut by shell)\",0,\r\nI2,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,1,\r\nI3,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,partial,bottom-left corner,0,Patch plate\r\nI4,floor,Yes,9.144,2.4384,Horizontal,,21.86,6.35,,scanned,bottom-left corner,0,\r\nJ1,floor,Yes,9.144,2.4384,Horizontal,,9.5,6.35,,scanned,\"bottom-left (plate edges, corner cut by shell)\",1,\r\nJ2,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nJ3,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nJ4,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nJ5,floor,Yes,9.144,2.4384,Horizontal,,9.5,6.35,,scanned,bottom-left corner,0,\r\nK1,floor,Yes,9.144,2.4384,Horizontal,,18.53,6.35,,scanned,\"bottom-left (plate edges, corner cut by shell)\",0,\r\nK2,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nK3,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,1,\r\nK4,floor,Yes,9.144,2.4384,Horizontal,,18.53,6.35,,scanned,bottom-left corner,0,\r\nL1,floor,Yes,9.144,2.4384,Horizontal,,4.22,6.35,,scanned,\"bottom-left (plate edges, corner cut by shell)\",0,\r\nL2,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nL3,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nL4,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nL5,floor,Yes,9.144,2.4384,Horizontal,,4.22,6.35,,scanned,bottom-left corner,0,\r\nM1,floor,Yes,9.144,2.4384,Horizontal,,10.86,6.35,,scanned,\"bottom-left (plate edges, corner cut by shell)\",0,\r\nM2,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,1,\r\nM3,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,scanned,bottom-left corner,0,\r\nM4,floor,Yes,9.144,2.4384,Horizontal,,10.86,6.35,,scanned,bottom-left corner,0,\r\nN1,floor,Yes,9.144,2.4384,Horizontal,,15.45,6.35,,scanned,\"bottom-left (plate edges, corner cut by shell)\",0,\r\nN2,floor,,9.144,2.4384,Horizontal,,22.3,6.35,,partial,bottom-left corner,1,Around sump not scannable\r\nN3,floor,Yes,9.144,2.4384,Horizontal,,15.45,6.35,,scanned,bottom-left corner,0,\r\nO1,floor,Yes,9.144,2.4384,Horizontal,,15.04,6.35,,scanned,\"bottom-left (plate edges, corner cut by shell)\",0,\r\nO2,floor,Yes,9.144,2.4384,Horizontal,,15.04,6.35,,scanned,bottom-left corner,0,",
   "noz": "﻿Mark,Type,Connection,Service / description,Angle (deg),Size (mm),Elevation to centreline (mm),Schedule,Nominal wall (mm),t-min (mm),UT 12 o'clock (mm),UT 3 o'clock (mm),UT 6 o'clock (mm),UT 9 o'clock (mm),Other UT readings,Min UT (mm),Wall loss (%),Status,Notes\r\nMH1,Manway,RFWN,Shell manway,0,609.6,762,,12.7,9.525,12.446,12.395,12.243,12.446,,12.243,3.6,OK,\r\nN1,Inlet,RFWN,Product inlet,45,304.8,457.2,STD,9.525,6.35,9.195,9.093,8.661,9.017,,8.661,9.1,OK,\r\nN2,Outlet,RFWN,Product outlet,135,304.8,457.2,STD,9.525,6.35,9.296,9.144,8.382,9.169,,8.382,12,OK,\r\nMH2,Manway,,Shell manway,180,609.6,762,,,,,,,,,,,,\r\nN3,Water draw / drain,Threaded,Water draw to sump,182,101.6,152.4,Sch 80,8.56,5.08,7.645,6.477,4.775,6.655,6 o’clock at shell weld: 4.47,4.47,47.8,Below t-min,\r\nCO1,Clean-out door,,Flush clean-out,270,1219.2,609.6,,,,,,,,,,,,",
-  "shell": "﻿Elevation (mm),Elevation,Course,Course nominal t (mm),Course t-min (mm),Q1 0.0° (mm),Q2 45.0° (mm),Q3 90.0° (mm),Q4 135.0° (mm),Q5 180.0° (mm),Q6 225.0° (mm),Q7 270.0° (mm),Q8 315.0° (mm),Row min (mm)\r\n25.4,25 mm,1,12.7,10.009,11.887,11.709,11.836,11.659,11.786,11.786,10.846,11.659,10.846\r\n50.8,51 mm,1,12.7,10.009,11.684,11.887,11.659,11.862,11.862,11.76,10.211,11.963,10.211\r\n76.2,76 mm,1,12.7,10.009,11.938,11.76,11.862,11.786,12.014,11.76,9.449,11.735,9.449\r\n101.6,102 mm,1,12.7,10.009,12.014,11.963,11.887,12.09,12.09,12.065,10.109,12.04,10.109\r\n127,127 mm,1,12.7,10.009,11.938,11.887,12.065,12.065,12.04,12.065,11.024,11.963,11.024\r\n152.4,152 mm,1,12.7,10.009,12.065,12.014,12.141,12.04,12.192,11.938,12.192,12.09,11.938\r\n177.8,178 mm,1,12.7,10.009,12.192,12.09,12.217,12.217,12.217,12.268,12.268,12.268,12.09\r\n203.2,203 mm,1,12.7,10.009,12.116,12.192,12.167,12.116,12.065,12.294,12.268,12.294,12.065\r\n228.6,229 mm,1,12.7,10.009,12.167,12.243,12.395,12.319,12.167,12.294,12.116,12.167,12.116\r\n254,254 mm,1,12.7,10.009,12.294,12.268,12.243,12.395,12.243,12.471,12.217,12.243,12.217\r\n279.4,279 mm,1,12.7,10.009,12.319,12.243,12.319,12.344,12.395,12.319,12.243,12.471,12.243\r\n304.8,305 mm,1,12.7,10.009,12.395,12.471,12.37,12.471,12.344,12.319,12.522,12.344,12.319\r\n330.2,330 mm,1,12.7,10.009,12.344,12.395,12.446,12.573,12.294,12.548,12.548,12.344,12.294\r\n355.6,356 mm,1,12.7,10.009,12.522,12.522,12.598,12.37,12.344,12.522,12.598,12.497,12.344\r\n381,381 mm,1,12.7,10.009,12.497,12.421,12.573,12.344,12.395,12.319,12.446,12.446,12.319\r\n406.4,406 mm,1,12.7,10.009,12.395,12.497,12.319,12.319,12.421,12.395,12.421,12.497,12.319\r\n431.8,432 mm,1,12.7,10.009,12.395,12.497,12.548,12.319,12.497,12.548,12.548,12.522,12.319\r\n457.2,457 mm,1,12.7,10.009,12.573,12.471,12.395,12.395,12.471,12.573,12.497,12.319,12.319\r\n482.6,483 mm,1,12.7,10.009,12.395,12.344,12.319,12.294,12.446,12.395,12.446,12.344,12.294\r\n508,508 mm,1,12.7,10.009,12.446,12.319,12.598,12.598,12.446,12.598,12.522,12.395,12.319\r\n533.4,533 mm,1,12.7,10.009,12.319,12.573,12.319,12.37,12.421,12.344,12.573,12.446,12.319\r\n558.8,559 mm,1,12.7,10.009,12.344,12.344,12.344,12.421,12.37,12.421,12.573,12.344,12.344\r\n584.2,584 mm,1,12.7,10.009,12.573,12.573,12.294,12.37,12.395,12.37,12.573,12.344,12.294\r\n609.6,610 mm,1,12.7,10.009,12.446,12.471,12.319,12.319,12.395,12.548,12.395,12.344,12.319\r\n914.4,914 mm,1,12.7,10.009,12.319,12.548,12.37,12.598,12.37,12.497,12.446,12.37,12.319\r\n1219.2,1219 mm,1,12.7,10.009,12.395,12.573,12.471,12.548,12.319,12.37,12.344,12.294,12.294\r\n1524,1524 mm,1,12.7,10.009,12.395,12.294,12.522,12.573,12.344,12.319,12.37,12.395,12.294\r\n1828.8,1829 mm,1,12.7,10.009,12.421,12.522,12.37,12.573,12.294,12.421,12.446,12.522,12.294\r\n2133.6,2134 mm,1,12.7,10.009,12.319,12.395,12.319,12.573,12.471,12.421,12.395,12.37,12.319\r\n2438.4,2438 mm,2,11.112,7.845,12.319,12.548,12.471,12.598,12.446,12.37,12.471,12.497,12.319\r\n2743.2,2743 mm,2,11.112,7.845,10.897,10.871,10.947,10.82,10.719,10.795,10.82,10.744,10.719\r\n3048,3048 mm,2,11.112,7.845,10.897,10.82,10.897,10.719,10.719,10.795,10.719,10.973,10.719\r\n3352.8,3353 mm,2,11.112,7.845,10.744,10.973,10.744,10.947,10.897,10.82,10.77,10.744,10.744\r\n3657.6,3658 mm,2,11.112,7.845,10.922,10.719,10.846,10.973,10.998,10.973,10.719,10.82,10.719\r\n3962.4,3962 mm,2,11.112,7.845,10.973,10.744,10.897,10.947,10.897,10.998,10.795,10.77,10.744\r\n4267.2,4267 mm,2,11.112,7.845,10.922,10.744,10.82,10.795,10.744,10.82,10.82,10.871,10.744\r\n4572,4572 mm,2,11.112,7.845,10.871,10.744,10.795,10.947,10.795,10.947,10.77,10.77,10.744\r\n4876.8,4877 mm,3,9.525,5.163,10.922,10.744,10.897,10.871,10.795,10.846,10.947,10.77,10.744\r\n5181.6,5182 mm,3,9.525,5.163,9.144,9.195,9.195,9.119,9.144,9.347,9.398,9.398,9.119\r\n5486.4,5486 mm,3,9.525,5.163,9.246,9.347,9.296,9.296,9.195,9.347,9.195,9.347,9.195\r\n5791.2,5791 mm,3,9.525,5.163,9.195,9.423,9.373,9.22,9.373,9.246,9.22,9.373,9.195\r\n6096,6096 mm,3,9.525,5.163,9.144,9.347,9.322,9.195,9.347,9.22,9.296,9.423,9.144\r\n6400.8,6401 mm,3,9.525,5.163,9.398,9.398,9.119,9.296,9.169,9.169,9.246,9.246,9.119\r\n6705.6,6706 mm,3,9.525,5.163,9.347,9.423,9.119,9.296,9.398,9.347,9.296,9.169,9.119\r\n7010.4,7010 mm,3,9.525,5.163,9.246,9.246,9.22,9.398,9.144,9.144,9.271,9.22,9.144\r\n7315.2,7315 mm,4,7.938,3.196,9.271,9.347,9.169,9.347,9.169,9.398,9.398,9.169,9.169\r\n7620,7620 mm,4,7.938,3.196,7.696,7.62,7.544,7.595,7.645,7.62,7.823,7.569,7.544\r\n7924.8,7925 mm,4,7.938,3.196,7.772,7.696,7.772,7.544,7.62,7.722,7.823,7.595,7.544\r\n8229.6,8230 mm,4,7.938,3.196,7.569,7.62,7.645,7.798,7.671,7.595,7.722,7.772,7.569\r\n8534.4,8534 mm,4,7.938,3.196,7.823,7.772,7.798,7.544,7.696,7.645,7.722,7.671,7.544\r\n8839.2,8839 mm,4,7.938,3.196,7.722,7.569,7.696,7.671,7.569,7.595,7.772,7.696,7.569\r\n9144,9144 mm,4,7.938,3.196,7.722,7.772,7.671,7.798,7.671,7.798,7.645,7.722,7.645\r\n9448.8,9449 mm,4,7.938,3.196,7.645,7.722,7.595,7.772,7.569,7.544,7.798,7.671,7.544\r\n9753.6,9754 mm,5,6.35,2.54,7.544,7.569,7.544,7.645,7.747,7.671,7.823,7.595,7.544\r\n10058.4,10058 mm,5,6.35,2.54,6.096,6.223,6.096,6.198,6.045,5.994,6.248,6.096,5.994\r\n10363.2,10363 mm,5,6.35,2.54,6.198,6.096,6.198,6.223,6.121,6.121,5.994,6.121,5.994\r\n10668,10668 mm,5,6.35,2.54,6.121,6.248,6.121,6.172,6.121,5.994,5.994,6.096,5.994\r\n10972.8,10973 mm,5,6.35,2.54,6.172,5.969,6.198,6.045,6.198,6.02,6.223,6.172,5.969\r\n11277.6,11278 mm,5,6.35,2.54,6.147,6.045,6.045,6.071,6.071,6.02,6.02,6.045,6.02\r\n11582.4,11582 mm,5,6.35,2.54,6.121,5.969,6.096,6.096,6.172,5.969,6.147,6.02,5.969\r\n11887.2,11887 mm,5,6.35,2.54,6.147,6.248,6.071,5.944,5.969,5.994,6.121,6.147,5.944\r\n12192,12192 mm,5,6.35,2.54,6.096,5.969,6.096,6.223,5.994,6.198,5.969,6.172,5.969\r\n\r\nCourse summary\r\nCourse,Height (m),Nominal t (mm),t-min (mm),Readings,Min (mm),Wall loss (%),Status\r\n1,2.4384,12.7,10.009,232,9.449,25.6,Below t-min\r\n2,2.4384,11.112,7.845,64,10.719,3.5,OK\r\n3,2.4384,9.525,5.163,64,9.119,4.3,OK\r\n4,2.4384,7.938,3.196,64,7.544,5,OK\r\n5,2.4384,6.35,2.54,72,5.944,6.4,OK",
-  "roof": "﻿\"Fixed roof (Cone roof, Column supported)\"\r\nPoint,Angle (deg),From centre (m),Reading (mm),Nominal (mm),t-min (mm),Wall loss (%),Status\r\nCTR,0,0,4.597,4.762,2.286,3.5,OK\r\nQ1-E,0,17.6784,4.039,4.762,2.286,15.2,OK\r\nQ1-M,0,9.144,4.496,4.762,2.286,5.6,OK\r\nQ2-E,45,17.6784,3.785,4.762,2.286,20.5,OK\r\nQ2-M,45,9.144,4.496,4.762,2.286,5.6,OK\r\nQ3-E,90,17.6784,4.267,4.762,2.286,10.4,OK\r\nQ3-M,90,9.144,4.47,4.762,2.286,6.1,OK\r\nQ4-E,135,17.6784,1.905,4.762,2.286,60,Below t-min\r\nQ4-M,135,9.144,4.47,4.762,2.286,6.1,OK\r\nQ5-E,180,17.6784,4.064,4.762,2.286,14.7,OK\r\nQ5-M,180,9.144,4.623,4.762,2.286,2.9,OK\r\nQ6-E,225,17.6784,4.343,4.762,2.286,8.8,OK\r\nQ6-M,225,9.144,4.623,4.762,2.286,2.9,OK\r\nQ7-E,270,17.6784,4.242,4.762,2.286,10.9,OK\r\nQ7-M,270,9.144,4.47,4.762,2.286,6.1,OK\r\nQ8-E,315,17.6784,3.835,4.762,2.286,19.5,OK\r\nQ8-M,315,9.144,4.47,4.762,2.286,6.1,OK\r\n\r\nFloating roof (Internal – steel pontoon)\r\nDeck plate,Type,Top-left (mm),Top-right (mm),Centre (mm),Bottom-left (mm),Bottom-right (mm),Min (mm),Nominal (mm),t-min (mm),Wall loss (%),Status\r\nA1,Deck (cut),4.547,4.572,4.547,4.648,4.623,4.547,4.762,2.286,4.5,OK\r\nA2,Deck (cut),4.674,4.521,4.547,4.648,4.47,4.47,4.762,2.286,6.1,OK\r\nB1,Deck (cut),4.547,4.521,4.648,4.394,4.597,4.394,4.762,2.286,7.7,OK\r\nB2,Deck (cut),4.572,4.648,4.623,4.521,4.623,4.521,4.762,2.286,5.1,OK\r\nB3,Deck,4.47,4.47,4.42,4.42,4.521,4.42,4.762,2.286,7.2,OK\r\nB4,Deck (cut),4.369,4.445,4.648,4.47,4.42,4.369,4.762,2.286,8.3,OK\r\nB5,Deck (cut),4.369,4.47,4.343,4.572,4.343,4.343,4.762,2.286,8.8,OK\r\nC1,Deck (cut),4.674,4.648,4.572,4.394,4.369,4.369,4.762,2.286,8.3,OK\r\nC2,Deck,4.42,4.496,4.597,4.496,4.42,4.42,4.762,2.286,7.2,OK\r\nC3,Deck,4.623,4.394,4.445,4.47,4.343,4.343,4.762,2.286,8.8,OK\r\nC4,Deck (cut),4.572,4.674,4.42,4.496,4.47,4.42,4.762,2.286,7.2,OK\r\nD1,Deck (cut),4.445,4.445,4.674,4.445,4.343,4.343,4.762,2.286,8.8,OK\r\nD2,Deck,4.394,4.445,4.496,4.597,4.47,4.394,4.762,2.286,7.7,OK\r\nD3,Deck,4.496,4.521,4.674,4.369,4.445,4.369,4.762,2.286,8.3,OK\r\nD4,Deck,4.343,4.572,4.42,4.343,4.496,4.343,4.762,2.286,8.8,OK\r\nD5,Deck (cut),4.47,4.623,4.597,4.521,4.521,4.47,4.762,2.286,6.1,OK\r\nE1,Deck (cut),4.674,4.496,4.42,4.394,4.648,4.394,4.762,2.286,7.7,OK\r\nE2,Deck,4.572,4.47,4.547,4.572,4.572,4.47,4.762,2.286,6.1,OK\r\nE3,Deck,4.648,4.547,4.521,4.47,4.496,4.47,4.762,2.286,6.1,OK\r\nE4,Deck,4.496,4.521,4.47,4.369,4.343,4.343,4.762,2.286,8.8,OK\r\nE5,Deck,4.521,4.394,4.343,4.445,4.547,4.343,4.762,2.286,8.8,OK\r\nE6,Deck (cut),4.47,4.674,4.572,4.674,4.394,4.394,4.762,2.286,7.7,OK\r\nF1,Deck (cut),4.648,4.597,4.445,4.597,4.597,4.445,4.762,2.286,6.7,OK\r\nF2,Deck (cut),4.648,4.42,2.032,4.47,4.42,2.032,4.762,2.286,57.3,Below t-min\r\nF3,Deck,4.674,4.394,4.369,4.42,4.343,4.343,4.762,2.286,8.8,OK\r\nF4,Deck,4.648,4.623,4.674,4.343,4.521,4.343,4.762,2.286,8.8,OK\r\nF5,Deck,4.597,4.496,4.394,4.445,4.394,4.394,4.762,2.286,7.7,OK\r\nF6,Deck (cut),4.674,4.648,4.47,4.42,4.648,4.42,4.762,2.286,7.2,OK\r\nF7,Deck (cut),4.572,4.547,4.42,4.445,4.47,4.42,4.762,2.286,7.2,OK\r\nG1,Deck (cut),4.623,4.343,4.343,4.47,4.42,4.343,4.762,2.286,8.8,OK\r\nG2,Deck,4.623,4.369,4.623,4.572,4.445,4.369,4.762,2.286,8.3,OK\r\nG3,Deck,4.547,4.521,4.343,4.521,4.496,4.343,4.762,2.286,8.8,OK\r\nG4,Deck,4.445,4.648,4.623,4.623,4.394,4.394,4.762,2.286,7.7,OK\r\nG5,Deck,4.572,4.343,4.496,4.648,4.521,4.343,4.762,2.286,8.8,OK\r\nG6,Deck (cut),4.496,4.674,4.496,4.394,4.521,4.394,4.762,2.286,7.7,OK\r\nH1,Deck (cut),4.623,4.674,4.47,4.521,4.648,4.47,4.762,2.286,6.1,OK\r\nH2,Deck,4.394,4.674,4.369,4.42,4.369,4.369,4.762,2.286,8.3,OK\r\nH3,Deck,4.445,4.445,4.394,4.597,4.445,4.394,4.762,2.286,7.7,OK\r\nH4,Deck,4.521,4.674,4.648,4.648,4.674,4.521,4.762,2.286,5.1,OK\r\nH5,Deck,4.496,4.648,4.597,4.547,4.445,4.445,4.762,2.286,6.7,OK\r\nH6,Deck,4.597,4.597,4.42,4.42,4.445,4.42,4.762,2.286,7.2,OK\r\nH7,Deck (cut),4.369,4.623,4.597,4.496,4.547,4.369,4.762,2.286,8.3,OK\r\nI1,Deck (cut),4.47,4.547,4.496,4.369,4.394,4.369,4.762,2.286,8.3,OK\r\nI2,Deck,4.547,4.547,4.343,4.42,4.343,4.343,4.762,2.286,8.8,OK\r\nI3,Deck,4.597,4.343,4.369,4.445,4.496,4.343,4.762,2.286,8.8,OK\r\nI4,Deck,4.445,4.369,4.623,4.521,4.521,4.369,4.762,2.286,8.3,OK\r\nI5,Deck,4.42,4.42,4.445,4.47,4.674,4.42,4.762,2.286,7.2,OK\r\nI6,Deck (cut),4.572,4.42,4.496,4.674,4.496,4.42,4.762,2.286,7.2,OK\r\nJ1,Deck (cut),4.369,4.674,4.343,4.445,4.496,4.343,4.762,2.286,8.8,OK\r\nJ2,Deck,4.369,4.369,4.369,4.674,4.42,4.369,4.762,2.286,8.3,OK\r\nJ3,Deck,4.547,4.445,4.648,4.547,4.648,4.445,4.762,2.286,6.7,OK\r\nJ4,Deck,4.572,4.547,4.572,4.547,4.674,4.547,4.762,2.286,4.5,OK\r\nJ5,Deck,4.547,4.547,4.394,4.394,4.674,4.394,4.762,2.286,7.7,OK\r\nJ6,Deck,4.521,4.47,4.47,4.648,4.648,4.47,4.762,2.286,6.1,OK\r\nJ7,Deck (cut),4.547,4.674,4.597,4.445,4.623,4.445,4.762,2.286,6.7,OK\r\nK1,Deck (cut),4.343,4.369,4.496,4.623,4.547,4.343,4.762,2.286,8.8,OK\r\nK2,Deck,4.445,4.597,4.521,4.572,4.547,4.445,4.762,2.286,6.7,OK\r\nK3,Deck,4.623,4.674,4.597,4.47,4.445,4.445,4.762,2.286,6.7,OK\r\nK4,Deck,4.674,4.343,4.648,4.648,4.42,4.343,4.762,2.286,8.8,OK\r\nK5,Deck,4.445,4.445,4.47,4.343,4.674,4.343,4.762,2.286,8.8,OK\r\nK6,Deck (cut),4.597,4.623,4.547,4.572,4.623,4.547,4.762,2.286,4.5,OK\r\nL1,Deck (cut),4.674,4.623,4.496,4.343,4.623,4.343,4.762,2.286,8.8,OK\r\nL2,Deck,4.496,4.47,4.648,4.369,4.445,4.369,4.762,2.286,8.3,OK\r\nL3,Deck,4.42,4.343,4.445,4.623,4.547,4.343,4.762,2.286,8.8,OK\r\nL4,Deck,4.521,4.597,4.623,4.547,4.394,4.394,4.762,2.286,7.7,OK\r\nL5,Deck,4.47,4.445,4.394,4.394,4.496,4.394,4.762,2.286,7.7,OK\r\nL6,Deck,4.674,4.572,4.343,4.445,4.42,4.343,4.762,2.286,8.8,OK\r\nL7,Deck (cut),4.394,4.547,4.42,4.547,4.496,4.394,4.762,2.286,7.7,OK\r\nM1,Deck (cut),4.674,4.496,4.674,4.496,4.521,4.496,4.762,2.286,5.6,OK\r\nM2,Deck,4.547,4.623,4.521,4.623,4.496,4.496,4.762,2.286,5.6,OK\r\nM3,Deck,4.648,4.674,4.42,4.496,4.394,4.394,4.762,2.286,7.7,OK\r\nM4,Deck,4.369,4.445,4.42,4.394,4.547,4.369,4.762,2.286,8.3,OK\r\nM5,Deck,4.369,4.547,4.547,4.674,4.648,4.369,4.762,2.286,8.3,OK\r\nM6,Deck (cut),4.648,4.674,4.47,4.445,4.623,4.445,4.762,2.286,6.7,OK\r\nN1,Deck (cut),4.674,4.674,4.445,4.343,4.369,4.343,4.762,2.286,8.8,OK\r\nN2,Deck (cut),4.394,4.343,4.42,4.496,4.47,4.343,4.762,2.286,8.8,OK\r\nN3,Deck,4.674,4.547,4.521,4.496,4.496,4.496,4.762,2.286,5.6,OK\r\nN4,Deck,4.47,4.47,4.496,4.42,4.572,4.42,4.762,2.286,7.2,OK\r\nN5,Deck,4.394,4.674,4.674,4.445,4.343,4.343,4.762,2.286,8.8,OK\r\nN6,Deck (cut),4.623,4.674,4.597,4.674,4.521,4.521,4.762,2.286,5.1,OK\r\nN7,Deck (cut),4.445,4.47,4.547,4.394,4.674,4.394,4.762,2.286,7.7,OK\r\nO1,Deck (cut),4.394,4.369,4.521,4.572,4.623,4.369,4.762,2.286,8.3,OK\r\nO2,Deck,4.47,4.648,4.572,4.445,4.648,4.445,4.762,2.286,6.7,OK\r\nO3,Deck,4.496,4.369,4.674,4.369,4.597,4.369,4.762,2.286,8.3,OK\r\nO4,Deck,4.47,4.674,4.369,4.47,4.597,4.369,4.762,2.286,8.3,OK\r\nO5,Deck,4.47,4.572,4.496,4.547,4.343,4.343,4.762,2.286,8.8,OK\r\nO6,Deck (cut),4.394,4.343,4.369,4.674,4.597,4.343,4.762,2.286,8.8,OK\r\nP1,Deck (cut),4.496,4.496,4.648,4.47,4.597,4.47,4.762,2.286,6.1,OK\r\nP2,Deck,4.547,4.47,4.394,4.572,4.648,4.394,4.762,2.286,7.7,OK\r\nP3,Deck,4.623,4.597,4.674,4.369,4.42,4.369,4.762,2.286,8.3,OK\r\nP4,Deck,4.445,4.394,4.674,4.47,4.369,4.369,4.762,2.286,8.3,OK\r\nP5,Deck (cut),4.648,4.521,4.547,4.42,4.445,4.42,4.762,2.286,7.2,OK\r\nQ1,Deck (cut),4.343,4.674,4.648,4.369,4.394,4.343,4.762,2.286,8.8,OK\r\nQ2,Deck,4.47,4.648,4.496,4.521,4.42,4.42,4.762,2.286,7.2,OK\r\nQ3,Deck,4.445,4.597,4.648,4.648,4.547,4.445,4.762,2.286,6.7,OK\r\nQ4,Deck (cut),4.343,4.445,4.394,4.369,4.394,4.343,4.762,2.286,8.8,OK\r\nR1,Deck (cut),4.42,4.572,4.445,4.42,4.42,4.42,4.762,2.286,7.2,OK\r\nR2,Deck (cut),4.496,4.47,4.445,4.47,4.623,4.445,4.762,2.286,6.7,OK\r\nR3,Deck,4.369,4.42,4.623,4.547,4.648,4.369,4.762,2.286,8.3,OK\r\nR4,Deck (cut),4.394,4.597,4.547,4.369,4.445,4.369,4.762,2.286,8.3,OK\r\nR5,Deck (cut),4.42,4.648,4.445,4.394,4.674,4.394,4.762,2.286,7.7,OK\r\nS1,Deck (cut),4.42,4.547,4.623,4.674,4.597,4.42,4.762,2.286,7.2,OK\r\nS2,Deck (cut),4.521,4.343,4.47,4.47,4.674,4.343,4.762,2.286,8.8,OK\r\n\r\nPontoon,Condition,Notes\r\nP1,Dry,\r\nP2,Dry,\r\nP3,Dry,\r\nP4,Dry,\r\nP5,Dry,\r\nP6,Dry,\r\nP7,Liquid present,\r\nP8,Dry,\r\nP9,Dry,\r\nP10,Dry,\r\nP11,Dry,\r\nP12,Dry,\r\nP13,Dry,\r\nP14,Dry,\r\nP15,Dry,\r\nP16,Dry,\r\nP17,Dry,\r\nP18,Dry,\r\nP19,Dry,\r\nP20,Dry,\r\nP21,Dry,\r\nP22,Dry,\r\nP23,Dry,\r\nP24,Dry,\r\nP25,Dry,\r\nP26,Dry,\r\nP27,Dry,\r\nP28,Dry,\r\nP29,Dry,\r\nP30,Dry,\r\nP31,Dry,\r\nP32,Dry,\r\n\r\nRim seal inspection 2026-11-14,C. Inspector\r\nPrimary seal,Mechanical shoe\r\nGap,Start angle (deg),Length (mm),Max width (mm),Avg width (mm),Notes\r\n1,32,457.2,12.7,7.62,\r\n2,141,762,25.4,15.24,Shoe hanger bent\r\n3,268,304.8,6.35,,\r\nSecondary seal,Rim-mounted wiper\r\nGap,Start angle (deg),Length (mm),Max width (mm),Avg width (mm),Notes\r\n1,198,355.6,15.24,8.89,Worn wiper\r\n2,310,152.4,3.175,,\r\n\r\nUS EPA 40 CFR 60 Subpart Kb / 40 CFR 63 Subpart WW,Not compliant\r\nCheck,Result,Limit,Status\r\nSeal gap limits,Not set for internal floating roofs under this standard — visual inspection only,,\r\nVisual inspection,1 defect,,Fails\r\n\r\nCanada SOR/2025-88 — Reduction in the Release of VOCs (Storage and Loading of Volatile Petroleum Liquids) Regulations,Not compliant\r\nCheck,Result,Limit,Status\r\nPrimary seal — gap area,4.7 cm2/m,< 200 cm2/m,OK\r\nPrimary seal — widest gap,2.54 cm,< 4 cm,OK\r\nSecondary seal — gap area,1.0 cm2/m,< 20 cm2/m,OK\r\nSecondary seal — widest gap,1.52 cm,< 1.3 cm,Fails\r\nShoe — top above liquid,66.04 cm,≥ 10 cm,OK\r\nShoe — bottom below liquid,15.24 cm,≥ 10 cm,OK\r\nShoe — height,81.28 cm,≥ 30 cm,OK\r\nVisual inspection,1 defect,,Fails",
-  "settle": "﻿Settlement survey — API 653 Annex B\r\nDate,2026-11-14\r\nSurveyed by,D. Surveyor\r\nInstrument,Automatic level\r\nBenchmark,BM-1 pipe rack (assumed 100.00 ft)\r\nLiquid level,Empty\r\nTank diameter (m),36.576\r\nShell height H (m),12.192\r\nStations N,12\r\nArc spacing L (m),9.5756\r\nYield Y (MPa),248.2,course 1 ASTM A36\r\nE (MPa),202706\r\nReadings,Elevations\r\n\r\nStation,Angle (deg),Reading (mm),\"Cosine fit (mm, rel. mean)\",\"Measured (mm, rel. mean)\",U (mm),S (mm),Status\r\n1,0,632.7,24.6,23.7,-0.9,-0.2,OK\r\n2,30,636.3,27.4,27.3,-0.2,-0.7,OK\r\n3,60,634,23,25,2,1.3,OK\r\n4,90,622.9,12.3,13.9,1.6,-0.5,OK\r\n5,120,609.6,-1.6,0.6,2.2,5.5,OK\r\n6,150,585.6,-15.1,-23.4,-8.3,-10.4,OK\r\n7,180,586.5,-24.6,-22.5,2.1,5.5,OK\r\n8,210,582.9,-27.4,-26.1,1.4,-0.9,OK\r\n9,240,588.5,-23,-20.4,2.5,2,OK\r\n10,270,596.3,-12.3,-12.7,-0.4,-1.2,OK\r\n11,300,609.6,1.6,0.6,-1,-0.2,OK\r\n12,330,622.9,15.1,13.9,-1.2,-0.2,OK\r\n\r\nResult,Value,Limit,Status\r\nCosine fit R2,0.9793,>= 0.90,OK\r\nPlanar tilt across diameter (mm),55,,low side 206.7 deg\r\nOut-of-plumbness at top (mm),18.3,121.9,OK\r\nMax out-of-plane |S| (mm),10.4,50.6,OK\r\nShell settlement,Acceptable\r\n\r\nEdge settlement survey — readings (mm)\r\nFrom shell (mm),Stn 1 (0 deg),Stn 2 (30 deg),Stn 3 (60 deg),Stn 4 (90 deg),Stn 5 (120 deg),Stn 6 (150 deg),Stn 7 (180 deg),Stn 8 (210 deg),Stn 9 (240 deg),Stn 10 (270 deg),Stn 11 (300 deg),Stn 12 (330 deg)\r\n0,645.4,649.5,646.4,635.9,621.8,598.3,580.7,521.7,601.5,608.5,622.3,636.1\r\n152.4,646.2,650.2,648.5,636.6,623.8,599.1,589.8,546.3,602.3,610.5,623.1,636.9\r\n304.8,648.2,651,649.2,638.7,624.6,601.1,596.5,565.4,604.3,611.3,625.1,637.7\r\n457.2,649,653,650,639.4,626.6,601.9,602.1,580.5,605,613.3,625.9,639.7\r\n609.6,651,653.8,652,640.2,627.4,603.9,604,592.8,605.8,614,627.9,640.5\r\n914.4,653,657.1,654,643.5,629.4,605.9,607.3,603,609.1,616.1,629.9,643.8\r\n1219.2,655,659.1,657.3,645.5,632.7,608,609.4,606.3,611.1,619.4,632,645.8\r\n1524,658.4,661.2,659.4,648.8,634.8,611.3,611.4,608.3,614.5,621.4,635.3,647.8\r\n1828.8,660.4,664.5,661.4,650.9,638,613.3,614.7,610.4,616.5,624.7,637.3,651.1\r\n2133.6,663.7,666.5,664.7,652.9,640.1,616.6,616.7,613.7,618.5,626.7,640.6,653.2\r\n2438.4,665.7,669.8,666.7,656.2,642.1,618.6,620,615.7,621.8,628.8,642.6,656.5\r\n2743.2,667.8,671.8,670,658.2,645.4,620.6,622.1,619,623.9,632.1,644.6,658.5\r\n3048,671,673.9,672.1,661.5,647.5,624,624.1,621,627.1,634.1,648,660.5\r\n\r\nStation,Angle (deg),Breakover R (mm),B (mm),Weld,Alpha (deg),Bew (mm),Be (mm),Allowable (mm),B/allow (%),Status,Notes\r\n1,0,,0,par,,,,,,No edge settlement,\r\n2,30,,0,par,,,,,,No edge settlement,\r\n3,60,,0,par,,,,,,No edge settlement,\r\n4,90,,0,par,,,,,,No edge settlement,\r\n5,120,,0,par,,,,,,No edge settlement,\r\n6,150,,0,par,,,,,,No edge settlement,\r\n7,180,457.2,18.3,par,,50.8,50.8,50.8,36,Acceptable,\r\n8,210,914.4,73.8,par,,96,117.6,96,77,NDE required,Annular lap weld parallel to shell\r\n9,240,,0,par,,,,,,No edge settlement,\r\n10,270,,0,par,,,,,,No edge settlement,\r\n11,300,,0,par,,,,,,No edge settlement,\r\n12,330,,0,par,,,,,,No edge settlement,\r\n\r\nEdge settlement,Angle (deg),R (m),B (mm),Weld,Alpha (deg),Bew (mm),Be (mm),Allowable (mm),B/allow (%),Status,Notes\r\nE1,250,0.762,22.9,angle,30,40.6,81.3,61,37,Acceptable,Found between stations 9 and 10\r\n\r\nDepression,Angle (deg),From centre (m),R (m),Depth B (mm),Allowable 0.37R (mm),B/allow (%),Status,Notes\r\nD1,300,9.144,1.2192,27.9,37.6,74,Acceptable,\"Smooth dish, no creasing\""
+  "shell": "﻿Elevation (mm),Elevation,Course,Course nominal t (mm),Course t-min (mm),Q1 0.0° (mm),Q2 45.0° (mm),Q3 90.0° (mm),Q4 135.0° (mm),Q5 180.0° (mm),Q6 225.0° (mm),Q7 270.0° (mm),Q8 315.0° (mm),Row min (mm)\r\n25.4,25 mm,1,12.7,9.993,11.887,11.709,11.836,11.659,11.786,11.786,10.846,11.659,10.846\r\n50.8,51 mm,1,12.7,9.993,11.684,11.887,11.659,11.862,11.862,11.76,10.211,11.963,10.211\r\n76.2,76 mm,1,12.7,9.993,11.938,11.76,11.862,11.786,12.014,11.76,9.449,11.735,9.449\r\n101.6,102 mm,1,12.7,9.993,12.014,11.963,11.887,12.09,12.09,12.065,10.109,12.04,10.109\r\n127,127 mm,1,12.7,9.993,11.938,11.887,12.065,12.065,12.04,12.065,11.024,11.963,11.024\r\n152.4,152 mm,1,12.7,9.993,12.065,12.014,12.141,12.04,12.192,11.938,12.192,12.09,11.938\r\n177.8,178 mm,1,12.7,9.993,12.192,12.09,12.217,12.217,12.217,12.268,12.268,12.268,12.09\r\n203.2,203 mm,1,12.7,9.993,12.116,12.192,12.167,12.116,12.065,12.294,12.268,12.294,12.065\r\n228.6,229 mm,1,12.7,9.993,12.167,12.243,12.395,12.319,12.167,12.294,12.116,12.167,12.116\r\n254,254 mm,1,12.7,9.993,12.294,12.268,12.243,12.395,12.243,12.471,12.217,12.243,12.217\r\n279.4,279 mm,1,12.7,9.993,12.319,12.243,12.319,12.344,12.395,12.319,12.243,12.471,12.243\r\n304.8,305 mm,1,12.7,9.993,12.395,12.471,12.37,12.471,12.344,12.319,12.522,12.344,12.319\r\n330.2,330 mm,1,12.7,9.993,12.344,12.395,12.446,12.573,12.294,12.548,12.548,12.344,12.294\r\n355.6,356 mm,1,12.7,9.993,12.522,12.522,12.598,12.37,12.344,12.522,12.598,12.497,12.344\r\n381,381 mm,1,12.7,9.993,12.497,12.421,12.573,12.344,12.395,12.319,12.446,12.446,12.319\r\n406.4,406 mm,1,12.7,9.993,12.395,12.497,12.319,12.319,12.421,12.395,12.421,12.497,12.319\r\n431.8,432 mm,1,12.7,9.993,12.395,12.497,12.548,12.319,12.497,12.548,12.548,12.522,12.319\r\n457.2,457 mm,1,12.7,9.993,12.573,12.471,12.395,12.395,12.471,12.573,12.497,12.319,12.319\r\n482.6,483 mm,1,12.7,9.993,12.395,12.344,12.319,12.294,12.446,12.395,12.446,12.344,12.294\r\n508,508 mm,1,12.7,9.993,12.446,12.319,12.598,12.598,12.446,12.598,12.522,12.395,12.319\r\n533.4,533 mm,1,12.7,9.993,12.319,12.573,12.319,12.37,12.421,12.344,12.573,12.446,12.319\r\n558.8,559 mm,1,12.7,9.993,12.344,12.344,12.344,12.421,12.37,12.421,12.573,12.344,12.344\r\n584.2,584 mm,1,12.7,9.993,12.573,12.573,12.294,12.37,12.395,12.37,12.573,12.344,12.294\r\n609.6,610 mm,1,12.7,9.993,12.446,12.471,12.319,12.319,12.395,12.548,12.395,12.344,12.319\r\n914.4,914 mm,1,12.7,9.993,12.319,12.548,12.37,12.598,12.37,12.497,12.446,12.37,12.319\r\n1219.2,1219 mm,1,12.7,9.993,12.395,12.573,12.471,12.548,12.319,12.37,12.344,12.294,12.294\r\n1524,1524 mm,1,12.7,9.993,12.395,12.294,12.522,12.573,12.344,12.319,12.37,12.395,12.294\r\n1828.8,1829 mm,1,12.7,9.993,12.421,12.522,12.37,12.573,12.294,12.421,12.446,12.522,12.294\r\n2133.6,2134 mm,1,12.7,9.993,12.319,12.395,12.319,12.573,12.471,12.421,12.395,12.37,12.319\r\n2438.4,2438 mm,2,11.112,7.833,12.319,12.548,12.471,12.598,12.446,12.37,12.471,12.497,12.319\r\n2743.2,2743 mm,2,11.112,7.833,10.897,10.871,10.947,10.82,10.719,10.795,10.82,10.744,10.719\r\n3048,3048 mm,2,11.112,7.833,10.897,10.82,10.897,10.719,10.719,10.795,10.719,10.973,10.719\r\n3352.8,3353 mm,2,11.112,7.833,10.744,10.973,10.744,10.947,10.897,10.82,10.77,10.744,10.744\r\n3657.6,3658 mm,2,11.112,7.833,10.922,10.719,10.846,10.973,10.998,10.973,10.719,10.82,10.719\r\n3962.4,3962 mm,2,11.112,7.833,10.973,10.744,10.897,10.947,10.897,10.998,10.795,10.77,10.744\r\n4267.2,4267 mm,2,11.112,7.833,10.922,10.744,10.82,10.795,10.744,10.82,10.82,10.871,10.744\r\n4572,4572 mm,2,11.112,7.833,10.871,10.744,10.795,10.947,10.795,10.947,10.77,10.77,10.744\r\n4876.8,4877 mm,3,9.525,5.163,10.922,10.744,10.897,10.871,10.795,10.846,10.947,10.77,10.744\r\n5181.6,5182 mm,3,9.525,5.163,9.144,9.195,9.195,9.119,9.144,9.347,9.398,9.398,9.119\r\n5486.4,5486 mm,3,9.525,5.163,9.246,9.347,9.296,9.296,9.195,9.347,9.195,9.347,9.195\r\n5791.2,5791 mm,3,9.525,5.163,9.195,9.423,9.373,9.22,9.373,9.246,9.22,9.373,9.195\r\n6096,6096 mm,3,9.525,5.163,9.144,9.347,9.322,9.195,9.347,9.22,9.296,9.423,9.144\r\n6400.8,6401 mm,3,9.525,5.163,9.398,9.398,9.119,9.296,9.169,9.169,9.246,9.246,9.119\r\n6705.6,6706 mm,3,9.525,5.163,9.347,9.423,9.119,9.296,9.398,9.347,9.296,9.169,9.119\r\n7010.4,7010 mm,3,9.525,5.163,9.246,9.246,9.22,9.398,9.144,9.144,9.271,9.22,9.144\r\n7315.2,7315 mm,4,7.938,3.198,9.271,9.347,9.169,9.347,9.169,9.398,9.398,9.169,9.169\r\n7620,7620 mm,4,7.938,3.198,7.696,7.62,7.544,7.595,7.645,7.62,7.823,7.569,7.544\r\n7924.8,7925 mm,4,7.938,3.198,7.772,7.696,7.772,7.544,7.62,7.722,7.823,7.595,7.544\r\n8229.6,8230 mm,4,7.938,3.198,7.569,7.62,7.645,7.798,7.671,7.595,7.722,7.772,7.569\r\n8534.4,8534 mm,4,7.938,3.198,7.823,7.772,7.798,7.544,7.696,7.645,7.722,7.671,7.544\r\n8839.2,8839 mm,4,7.938,3.198,7.722,7.569,7.696,7.671,7.569,7.595,7.772,7.696,7.569\r\n9144,9144 mm,4,7.938,3.198,7.722,7.772,7.671,7.798,7.671,7.798,7.645,7.722,7.645\r\n9448.8,9449 mm,4,7.938,3.198,7.645,7.722,7.595,7.772,7.569,7.544,7.798,7.671,7.544\r\n9753.6,9754 mm,5,6.35,2.5,7.544,7.569,7.544,7.645,7.747,7.671,7.823,7.595,7.544\r\n10058.4,10058 mm,5,6.35,2.5,6.096,6.223,6.096,6.198,6.045,5.994,6.248,6.096,5.994\r\n10363.2,10363 mm,5,6.35,2.5,6.198,6.096,6.198,6.223,6.121,6.121,5.994,6.121,5.994\r\n10668,10668 mm,5,6.35,2.5,6.121,6.248,6.121,6.172,6.121,5.994,5.994,6.096,5.994\r\n10972.8,10973 mm,5,6.35,2.5,6.172,5.969,6.198,6.045,6.198,6.02,6.223,6.172,5.969\r\n11277.6,11278 mm,5,6.35,2.5,6.147,6.045,6.045,6.071,6.071,6.02,6.02,6.045,6.02\r\n11582.4,11582 mm,5,6.35,2.5,6.121,5.969,6.096,6.096,6.172,5.969,6.147,6.02,5.969\r\n11887.2,11887 mm,5,6.35,2.5,6.147,6.248,6.071,5.944,5.969,5.994,6.121,6.147,5.944\r\n12192,12192 mm,5,6.35,2.5,6.096,5.969,6.096,6.223,5.994,6.198,5.969,6.172,5.969\r\n\r\nCourse summary\r\nCourse,Height (m),Nominal t (mm),t-min (mm),Readings,Min (mm),Wall loss (%),Status\r\n1,2.4384,12.7,9.993,232,9.449,25.6,Evaluate per §4.3.2\r\n2,2.4384,11.112,7.833,64,10.719,3.5,OK\r\n3,2.4384,9.525,5.163,64,9.119,4.3,OK\r\n4,2.4384,7.938,3.198,64,7.544,5,OK\r\n5,2.4384,6.35,2.5,72,5.944,6.4,OK",
+  "roof": "﻿\"Fixed roof (Cone roof, Column supported)\"\r\nPoint,Angle (deg),From centre (m),Reading (mm),Nominal (mm),t-min (mm),Wall loss (%),Status\r\nCTR,0,0,4.597,4.762,2.286,3.5,OK\r\nQ1-E,0,17.6784,4.039,4.762,2.286,15.2,OK\r\nQ1-M,0,9.144,4.496,4.762,2.286,5.6,OK\r\nQ2-E,45,17.6784,3.785,4.762,2.286,20.5,OK\r\nQ2-M,45,9.144,4.496,4.762,2.286,5.6,OK\r\nQ3-E,90,17.6784,4.267,4.762,2.286,10.4,OK\r\nQ3-M,90,9.144,4.47,4.762,2.286,6.1,OK\r\nQ4-E,135,17.6784,1.905,4.762,2.286,60,Below t-min\r\nQ4-M,135,9.144,4.47,4.762,2.286,6.1,OK\r\nQ5-E,180,17.6784,4.064,4.762,2.286,14.7,OK\r\nQ5-M,180,9.144,4.623,4.762,2.286,2.9,OK\r\nQ6-E,225,17.6784,4.343,4.762,2.286,8.8,OK\r\nQ6-M,225,9.144,4.623,4.762,2.286,2.9,OK\r\nQ7-E,270,17.6784,4.242,4.762,2.286,10.9,OK\r\nQ7-M,270,9.144,4.47,4.762,2.286,6.1,OK\r\nQ8-E,315,17.6784,3.835,4.762,2.286,19.5,OK\r\nQ8-M,315,9.144,4.47,4.762,2.286,6.1,OK\r\n\r\nFloating roof (Internal – steel pontoon)\r\nDeck plate,Type,Top-left (mm),Top-right (mm),Centre (mm),Bottom-left (mm),Bottom-right (mm),Min (mm),Nominal (mm),t-min (mm),Wall loss (%),Status\r\nA1,Deck (cut),4.547,4.572,4.547,4.648,4.623,4.547,4.762,2.286,4.5,OK\r\nA2,Deck (cut),4.674,4.521,4.547,4.648,4.47,4.47,4.762,2.286,6.1,OK\r\nB1,Deck (cut),4.547,4.521,4.648,4.394,4.597,4.394,4.762,2.286,7.7,OK\r\nB2,Deck (cut),4.572,4.648,4.623,4.521,4.623,4.521,4.762,2.286,5.1,OK\r\nB3,Deck,4.47,4.47,4.42,4.42,4.521,4.42,4.762,2.286,7.2,OK\r\nB4,Deck (cut),4.369,4.445,4.648,4.47,4.42,4.369,4.762,2.286,8.3,OK\r\nB5,Deck (cut),4.369,4.47,4.343,4.572,4.343,4.343,4.762,2.286,8.8,OK\r\nC1,Deck (cut),4.674,4.648,4.572,4.394,4.369,4.369,4.762,2.286,8.3,OK\r\nC2,Deck,4.42,4.496,4.597,4.496,4.42,4.42,4.762,2.286,7.2,OK\r\nC3,Deck,4.623,4.394,4.445,4.47,4.343,4.343,4.762,2.286,8.8,OK\r\nC4,Deck (cut),4.572,4.674,4.42,4.496,4.47,4.42,4.762,2.286,7.2,OK\r\nD1,Deck (cut),4.445,4.445,4.674,4.445,4.343,4.343,4.762,2.286,8.8,OK\r\nD2,Deck,4.394,4.445,4.496,4.597,4.47,4.394,4.762,2.286,7.7,OK\r\nD3,Deck,4.496,4.521,4.674,4.369,4.445,4.369,4.762,2.286,8.3,OK\r\nD4,Deck,4.343,4.572,4.42,4.343,4.496,4.343,4.762,2.286,8.8,OK\r\nD5,Deck (cut),4.47,4.623,4.597,4.521,4.521,4.47,4.762,2.286,6.1,OK\r\nE1,Deck (cut),4.674,4.496,4.42,4.394,4.648,4.394,4.762,2.286,7.7,OK\r\nE2,Deck,4.572,4.47,4.547,4.572,4.572,4.47,4.762,2.286,6.1,OK\r\nE3,Deck,4.648,4.547,4.521,4.47,4.496,4.47,4.762,2.286,6.1,OK\r\nE4,Deck,4.496,4.521,4.47,4.369,4.343,4.343,4.762,2.286,8.8,OK\r\nE5,Deck,4.521,4.394,4.343,4.445,4.547,4.343,4.762,2.286,8.8,OK\r\nE6,Deck (cut),4.47,4.674,4.572,4.674,4.394,4.394,4.762,2.286,7.7,OK\r\nF1,Deck (cut),4.648,4.597,4.445,4.597,4.597,4.445,4.762,2.286,6.7,OK\r\nF2,Deck (cut),4.648,4.42,2.032,4.47,4.42,2.032,4.762,2.286,57.3,Below t-min\r\nF3,Deck,4.674,4.394,4.369,4.42,4.343,4.343,4.762,2.286,8.8,OK\r\nF4,Deck,4.648,4.623,4.674,4.343,4.521,4.343,4.762,2.286,8.8,OK\r\nF5,Deck,4.597,4.496,4.394,4.445,4.394,4.394,4.762,2.286,7.7,OK\r\nF6,Deck (cut),4.674,4.648,4.47,4.42,4.648,4.42,4.762,2.286,7.2,OK\r\nF7,Deck (cut),4.572,4.547,4.42,4.445,4.47,4.42,4.762,2.286,7.2,OK\r\nG1,Deck (cut),4.623,4.343,4.343,4.47,4.42,4.343,4.762,2.286,8.8,OK\r\nG2,Deck,4.623,4.369,4.623,4.572,4.445,4.369,4.762,2.286,8.3,OK\r\nG3,Deck,4.547,4.521,4.343,4.521,4.496,4.343,4.762,2.286,8.8,OK\r\nG4,Deck,4.445,4.648,4.623,4.623,4.394,4.394,4.762,2.286,7.7,OK\r\nG5,Deck,4.572,4.343,4.496,4.648,4.521,4.343,4.762,2.286,8.8,OK\r\nG6,Deck (cut),4.496,4.674,4.496,4.394,4.521,4.394,4.762,2.286,7.7,OK\r\nH1,Deck (cut),4.623,4.674,4.47,4.521,4.648,4.47,4.762,2.286,6.1,OK\r\nH2,Deck,4.394,4.674,4.369,4.42,4.369,4.369,4.762,2.286,8.3,OK\r\nH3,Deck,4.445,4.445,4.394,4.597,4.445,4.394,4.762,2.286,7.7,OK\r\nH4,Deck,4.521,4.674,4.648,4.648,4.674,4.521,4.762,2.286,5.1,OK\r\nH5,Deck,4.496,4.648,4.597,4.547,4.445,4.445,4.762,2.286,6.7,OK\r\nH6,Deck,4.597,4.597,4.42,4.42,4.445,4.42,4.762,2.286,7.2,OK\r\nH7,Deck (cut),4.369,4.623,4.597,4.496,4.547,4.369,4.762,2.286,8.3,OK\r\nI1,Deck (cut),4.47,4.547,4.496,4.369,4.394,4.369,4.762,2.286,8.3,OK\r\nI2,Deck,4.547,4.547,4.343,4.42,4.343,4.343,4.762,2.286,8.8,OK\r\nI3,Deck,4.597,4.343,4.369,4.445,4.496,4.343,4.762,2.286,8.8,OK\r\nI4,Deck,4.445,4.369,4.623,4.521,4.521,4.369,4.762,2.286,8.3,OK\r\nI5,Deck,4.42,4.42,4.445,4.47,4.674,4.42,4.762,2.286,7.2,OK\r\nI6,Deck (cut),4.572,4.42,4.496,4.674,4.496,4.42,4.762,2.286,7.2,OK\r\nJ1,Deck (cut),4.369,4.674,4.343,4.445,4.496,4.343,4.762,2.286,8.8,OK\r\nJ2,Deck,4.369,4.369,4.369,4.674,4.42,4.369,4.762,2.286,8.3,OK\r\nJ3,Deck,4.547,4.445,4.648,4.547,4.648,4.445,4.762,2.286,6.7,OK\r\nJ4,Deck,4.572,4.547,4.572,4.547,4.674,4.547,4.762,2.286,4.5,OK\r\nJ5,Deck,4.547,4.547,4.394,4.394,4.674,4.394,4.762,2.286,7.7,OK\r\nJ6,Deck,4.521,4.47,4.47,4.648,4.648,4.47,4.762,2.286,6.1,OK\r\nJ7,Deck (cut),4.547,4.674,4.597,4.445,4.623,4.445,4.762,2.286,6.7,OK\r\nK1,Deck (cut),4.343,4.369,4.496,4.623,4.547,4.343,4.762,2.286,8.8,OK\r\nK2,Deck,4.445,4.597,4.521,4.572,4.547,4.445,4.762,2.286,6.7,OK\r\nK3,Deck,4.623,4.674,4.597,4.47,4.445,4.445,4.762,2.286,6.7,OK\r\nK4,Deck,4.674,4.343,4.648,4.648,4.42,4.343,4.762,2.286,8.8,OK\r\nK5,Deck,4.445,4.445,4.47,4.343,4.674,4.343,4.762,2.286,8.8,OK\r\nK6,Deck (cut),4.597,4.623,4.547,4.572,4.623,4.547,4.762,2.286,4.5,OK\r\nL1,Deck (cut),4.674,4.623,4.496,4.343,4.623,4.343,4.762,2.286,8.8,OK\r\nL2,Deck,4.496,4.47,4.648,4.369,4.445,4.369,4.762,2.286,8.3,OK\r\nL3,Deck,4.42,4.343,4.445,4.623,4.547,4.343,4.762,2.286,8.8,OK\r\nL4,Deck,4.521,4.597,4.623,4.547,4.394,4.394,4.762,2.286,7.7,OK\r\nL5,Deck,4.47,4.445,4.394,4.394,4.496,4.394,4.762,2.286,7.7,OK\r\nL6,Deck,4.674,4.572,4.343,4.445,4.42,4.343,4.762,2.286,8.8,OK\r\nL7,Deck (cut),4.394,4.547,4.42,4.547,4.496,4.394,4.762,2.286,7.7,OK\r\nM1,Deck (cut),4.674,4.496,4.674,4.496,4.521,4.496,4.762,2.286,5.6,OK\r\nM2,Deck,4.547,4.623,4.521,4.623,4.496,4.496,4.762,2.286,5.6,OK\r\nM3,Deck,4.648,4.674,4.42,4.496,4.394,4.394,4.762,2.286,7.7,OK\r\nM4,Deck,4.369,4.445,4.42,4.394,4.547,4.369,4.762,2.286,8.3,OK\r\nM5,Deck,4.369,4.547,4.547,4.674,4.648,4.369,4.762,2.286,8.3,OK\r\nM6,Deck (cut),4.648,4.674,4.47,4.445,4.623,4.445,4.762,2.286,6.7,OK\r\nN1,Deck (cut),4.674,4.674,4.445,4.343,4.369,4.343,4.762,2.286,8.8,OK\r\nN2,Deck (cut),4.394,4.343,4.42,4.496,4.47,4.343,4.762,2.286,8.8,OK\r\nN3,Deck,4.674,4.547,4.521,4.496,4.496,4.496,4.762,2.286,5.6,OK\r\nN4,Deck,4.47,4.47,4.496,4.42,4.572,4.42,4.762,2.286,7.2,OK\r\nN5,Deck,4.394,4.674,4.674,4.445,4.343,4.343,4.762,2.286,8.8,OK\r\nN6,Deck (cut),4.623,4.674,4.597,4.674,4.521,4.521,4.762,2.286,5.1,OK\r\nN7,Deck (cut),4.445,4.47,4.547,4.394,4.674,4.394,4.762,2.286,7.7,OK\r\nO1,Deck (cut),4.394,4.369,4.521,4.572,4.623,4.369,4.762,2.286,8.3,OK\r\nO2,Deck,4.47,4.648,4.572,4.445,4.648,4.445,4.762,2.286,6.7,OK\r\nO3,Deck,4.496,4.369,4.674,4.369,4.597,4.369,4.762,2.286,8.3,OK\r\nO4,Deck,4.47,4.674,4.369,4.47,4.597,4.369,4.762,2.286,8.3,OK\r\nO5,Deck,4.47,4.572,4.496,4.547,4.343,4.343,4.762,2.286,8.8,OK\r\nO6,Deck (cut),4.394,4.343,4.369,4.674,4.597,4.343,4.762,2.286,8.8,OK\r\nP1,Deck (cut),4.496,4.496,4.648,4.47,4.597,4.47,4.762,2.286,6.1,OK\r\nP2,Deck,4.547,4.47,4.394,4.572,4.648,4.394,4.762,2.286,7.7,OK\r\nP3,Deck,4.623,4.597,4.674,4.369,4.42,4.369,4.762,2.286,8.3,OK\r\nP4,Deck,4.445,4.394,4.674,4.47,4.369,4.369,4.762,2.286,8.3,OK\r\nP5,Deck (cut),4.648,4.521,4.547,4.42,4.445,4.42,4.762,2.286,7.2,OK\r\nQ1,Deck (cut),4.343,4.674,4.648,4.369,4.394,4.343,4.762,2.286,8.8,OK\r\nQ2,Deck,4.47,4.648,4.496,4.521,4.42,4.42,4.762,2.286,7.2,OK\r\nQ3,Deck,4.445,4.597,4.648,4.648,4.547,4.445,4.762,2.286,6.7,OK\r\nQ4,Deck (cut),4.343,4.445,4.394,4.369,4.394,4.343,4.762,2.286,8.8,OK\r\nR1,Deck (cut),4.42,4.572,4.445,4.42,4.42,4.42,4.762,2.286,7.2,OK\r\nR2,Deck (cut),4.496,4.47,4.445,4.47,4.623,4.445,4.762,2.286,6.7,OK\r\nR3,Deck,4.369,4.42,4.623,4.547,4.648,4.369,4.762,2.286,8.3,OK\r\nR4,Deck (cut),4.394,4.597,4.547,4.369,4.445,4.369,4.762,2.286,8.3,OK\r\nR5,Deck (cut),4.42,4.648,4.445,4.394,4.674,4.394,4.762,2.286,7.7,OK\r\nS1,Deck (cut),4.42,4.547,4.623,4.674,4.597,4.42,4.762,2.286,7.2,OK\r\nS2,Deck (cut),4.521,4.343,4.47,4.47,4.674,4.343,4.762,2.286,8.8,OK\r\n\r\nPontoon,Condition,Notes\r\nP1,Dry,\r\nP2,Dry,\r\nP3,Dry,\r\nP4,Dry,\r\nP5,Dry,\r\nP6,Dry,\r\nP7,Liquid present,\r\nP8,Dry,\r\nP9,Dry,\r\nP10,Dry,\r\nP11,Dry,\r\nP12,Dry,\r\nP13,Dry,\r\nP14,Dry,\r\nP15,Dry,\r\nP16,Dry,\r\nP17,Dry,\r\nP18,Dry,\r\nP19,Dry,\r\nP20,Dry,\r\nP21,Dry,\r\nP22,Dry,\r\nP23,Dry,\r\nP24,Dry,\r\nP25,Dry,\r\nP26,Dry,\r\nP27,Dry,\r\nP28,Dry,\r\nP29,Dry,\r\nP30,Dry,\r\nP31,Dry,\r\nP32,Dry,\r\n\r\nRim seal inspection 2026-11-14,C. Inspector\r\nPrimary seal,Mechanical shoe\r\nGap,Start angle (deg),Length (mm),Max width (mm),Avg width (mm),Notes\r\n1,32,457.2,12.7,7.62,\r\n2,141,762,25.4,15.24,Shoe hanger bent\r\n3,268,304.8,6.35,,\r\nSecondary seal,Rim-mounted wiper\r\nGap,Start angle (deg),Length (mm),Max width (mm),Avg width (mm),Notes\r\n1,198,355.6,15.24,8.89,Worn wiper\r\n2,310,152.4,3.175,,\r\n\r\nUS EPA 40 CFR 60 Subpart Kb (tanks built or modified 24 Jul 1984 – 4 Oct 2023) / 40 CFR 63 Subpart WW,Not compliant\r\nCheck,Result,Limit,Status\r\nSeal gap limits,Not set for internal floating roofs under this standard — visual inspection only,,\r\nVisual inspection,1 defect,,Fails\r\n\r\nCanada SOR/2025-88 — Reduction in the Release of VOCs (Storage and Loading of Volatile Petroleum Liquids) Regulations,Not compliant\r\nCheck,Result,Limit,Status\r\nPrimary seal — gap area,4.7 cm2/m,< 200 cm2/m,OK\r\nPrimary seal — widest gap,2.54 cm,< 4 cm,OK\r\nSecondary seal — gap area,1.0 cm2/m,< 20 cm2/m,OK\r\nSecondary seal — widest gap,1.52 cm,< 1.3 cm,Fails\r\nShoe — top above liquid,66.04 cm,≥ 10 cm,OK\r\nShoe — bottom below liquid,15.24 cm,≥ 10 cm,OK\r\nShoe — height,81.28 cm,≥ 30 cm,OK\r\nVisual inspection,1 defect,,Fails",
+  "settle": "﻿Settlement survey — API 653 Annex B\r\nDate,2026-11-14\r\nSurveyed by,D. Surveyor\r\nInstrument,Automatic level\r\nBenchmark,BM-1 pipe rack (assumed 100.00 ft)\r\nLiquid level,Empty\r\nTank diameter (m),36.576\r\nShell height H (m),12.192\r\nStations N,12\r\nArc spacing L (m),9.5756\r\nYield Y (MPa),248.2,course 1 ASTM A36\r\nE (MPa),202706\r\nReadings,Elevations\r\n\r\nStation,Angle (deg),Reading (mm),\"Cosine fit (mm, rel. mean)\",\"Measured (mm, rel. mean)\",U (mm),S (mm),Status\r\n1,0,632.7,24.6,23.7,-0.9,-0.2,OK\r\n2,30,636.3,27.4,27.3,-0.2,-0.7,OK\r\n3,60,634,23,25,2,1.3,OK\r\n4,90,622.9,12.3,13.9,1.6,-0.5,OK\r\n5,120,609.6,-1.6,0.6,2.2,5.5,OK\r\n6,150,585.6,-15.1,-23.4,-8.3,-10.4,OK\r\n7,180,586.5,-24.6,-22.5,2.1,5.5,OK\r\n8,210,582.9,-27.4,-26.1,1.4,-0.9,OK\r\n9,240,588.5,-23,-20.4,2.5,2,OK\r\n10,270,596.3,-12.3,-12.7,-0.4,-1.2,OK\r\n11,300,609.6,1.6,0.6,-1,-0.2,OK\r\n12,330,622.9,15.1,13.9,-1.2,-0.2,OK\r\n\r\nResult,Value,Limit,Status\r\nCosine fit R2,0.9793,>= 0.90,OK\r\nPlanar tilt across diameter (mm),55,,low side 206.7 deg\r\nOut-of-plumbness at top (mm),18.3,121.9,OK\r\nMax out-of-plane |S| (mm),10.4,50.6,OK\r\nShell settlement,Acceptable\r\n\r\nEdge settlement survey — readings (mm)\r\nFrom shell (mm),Stn 1 (0 deg),Stn 2 (30 deg),Stn 3 (60 deg),Stn 4 (90 deg),Stn 5 (120 deg),Stn 6 (150 deg),Stn 7 (180 deg),Stn 8 (210 deg),Stn 9 (240 deg),Stn 10 (270 deg),Stn 11 (300 deg),Stn 12 (330 deg)\r\n0,645.4,649.5,646.4,635.9,621.8,598.3,580.7,521.7,601.5,608.5,622.3,636.1\r\n152.4,646.2,650.2,648.5,636.6,623.8,599.1,589.8,546.3,602.3,610.5,623.1,636.9\r\n304.8,648.2,651,649.2,638.7,624.6,601.1,596.5,565.4,604.3,611.3,625.1,637.7\r\n457.2,649,653,650,639.4,626.6,601.9,602.1,580.5,605,613.3,625.9,639.7\r\n609.6,651,653.8,652,640.2,627.4,603.9,604,592.8,605.8,614,627.9,640.5\r\n914.4,653,657.1,654,643.5,629.4,605.9,607.3,603,609.1,616.1,629.9,643.8\r\n1219.2,655,659.1,657.3,645.5,632.7,608,609.4,606.3,611.1,619.4,632,645.8\r\n1524,658.4,661.2,659.4,648.8,634.8,611.3,611.4,608.3,614.5,621.4,635.3,647.8\r\n1828.8,660.4,664.5,661.4,650.9,638,613.3,614.7,610.4,616.5,624.7,637.3,651.1\r\n2133.6,663.7,666.5,664.7,652.9,640.1,616.6,616.7,613.7,618.5,626.7,640.6,653.2\r\n2438.4,665.7,669.8,666.7,656.2,642.1,618.6,620,615.7,621.8,628.8,642.6,656.5\r\n2743.2,667.8,671.8,670,658.2,645.4,620.6,622.1,619,623.9,632.1,644.6,658.5\r\n3048,671,673.9,672.1,661.5,647.5,624,624.1,621,627.1,634.1,648,660.5\r\n\r\nStation,Angle (deg),Breakover R (mm),B (mm),Weld,Alpha (deg),Bew (mm),Be (mm),Allowable (mm),B/allow (%),Status,Notes\r\n1,0,,0,par,,,,,,No edge settlement,\r\n2,30,,0,par,,,,,,No edge settlement,\r\n3,60,,0,par,,,,,,No edge settlement,\r\n4,90,,0,par,,,,,,No edge settlement,\r\n5,120,,0,par,,,,,,No edge settlement,\r\n6,150,,0,par,,,,,,No edge settlement,\r\n7,180,457.2,18.3,par,,50.8,50.8,50.8,36,Acceptable,\r\n8,210,914.4,73.8,par,,96,117.6,96,77,NDE required,Annular lap weld parallel to shell\r\n9,240,,0,par,,,,,,No edge settlement,\r\n10,270,,0,par,,,,,,No edge settlement,\r\n11,300,,0,par,,,,,,No edge settlement,\r\n12,330,,0,par,,,,,,No edge settlement,\r\n\r\nEdge settlement,Angle (deg),R (m),B (mm),Weld,Alpha (deg),Bew (mm),Be (mm),Allowable (mm),B/allow (%),Status,Notes\r\nE1,250,0.762,22.9,angle,30,40.6,81.3,61,37,Acceptable,Found between stations 9 and 10\r\n\r\nDepression,Angle (deg),From centre (m),R (m),Depth B (mm),Allowable 0.031R (mm),B/allow (%),Status,Notes\r\nD1,300,9.144,1.2192,27.9,37.8,74,Acceptable,\"Smooth dish, no creasing\""
  }
 }

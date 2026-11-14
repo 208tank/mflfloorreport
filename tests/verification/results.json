@@ -105,20 +105,20 @@
   "tol": 0.0127,
   "unit": "mm (shown in in)",
   "source": "API 653 (2025) §4.4.5.1 Note 1, 2nd paragraph (corrosion rate of repaired areas) — proposed correction C-24",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "aOk",
     "expected": "false",
-    "actual": "true",
-    "ok": false
+    "actual": "false",
+    "ok": true
    },
    {
     "key": "K",
     "expected": 0.2286,
-    "actual": 0.1397,
-    "ok": false
+    "actual": 0.2286,
+    "ok": true
    }
   ]
  },
@@ -205,14 +205,14 @@
   "tol": null,
   "unit": "",
   "source": "This review (proposed correction C-03): an estimate must not be presented as an acceptance",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "estimateFlagInStatus",
     "expected": "true",
-    "actual": "false",
-    "ok": false
+    "actual": "true",
+    "ok": true
    }
   ]
  },
@@ -262,14 +262,14 @@
   "tol": null,
   "unit": "",
   "source": "This review (proposed correction C-09)",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "remNonNegative",
     "expected": "true",
-    "actual": "false",
-    "ok": false
+    "actual": "true",
+    "ok": true
    }
   ]
  },
@@ -287,14 +287,14 @@
   "tol": null,
   "unit": "",
   "source": "This review (proposed correction C-04)",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "regionOk",
     "expected": "null",
-    "actual": "true",
-    "ok": false
+    "actual": "null",
+    "ok": true
    }
   ]
  },
@@ -312,14 +312,14 @@
   "tol": null,
   "unit": "",
   "source": "API 653 (2025) §4.4.5.1: StPr = 0 only for coated areas with coating life ≥ Or — C-05",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "conflictWarned",
     "expected": "true",
-    "actual": "false",
-    "ok": false
+    "actual": "true",
+    "ok": true
    }
   ]
  },
@@ -369,14 +369,14 @@
   "tol": 0.0127,
   "unit": "mm (shown in in)",
   "source": "API 653 (2025) §4.4.5.4; critical zone defined in §3.11 — proposed correction C-21",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "czLim",
     "expected": 2.9972,
-    "actual": 3.175,
-    "ok": false
+    "actual": 2.9972,
+    "ok": true
    },
    {
     "key": "critical",
@@ -406,14 +406,14 @@
   "tol": 0.005,
   "unit": "mm",
   "source": "API 653 (2025) §4.4.5.4 (SI values 3 mm / 2.5 mm) — C-21",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "czLim",
     "expected": 2.5,
-    "actual": 2.54,
-    "ok": false
+    "actual": 2.5,
+    "ok": true
    }
   ]
  },
@@ -462,14 +462,14 @@
   "tol": null,
   "unit": "",
   "source": "This review (proposed correction C-06): the app tests only the location point",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "critical",
     "expected": "true",
-    "actual": "false",
-    "ok": false
+    "actual": "true",
+    "ok": true
    }
   ]
  },
@@ -543,14 +543,14 @@
   "tol": null,
   "unit": "",
   "source": "This review (proposed correction C-08)",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "defaultAtLeastTable",
     "expected": "true",
-    "actual": "false",
-    "ok": false
+    "actual": "true",
+    "ok": true
    }
   ]
  },
@@ -607,18 +607,20 @@
   "title": "Course 1 t-min, metric input",
   "input": "D 30 m (98.425 ft); fill 12 m (39.370 ft); G 0.9; A516 Gr 60 (Sd lower 25,600 psi); E 0.85 (API 650 Annex A spot RT).",
   "steps": [
-   "t-min = 2.6 × (39.370 − 1) × 98.425 × 0.9 / (25,600 × 0.85) = 0.40612 in = 10.315 mm"
+   "SI form for a metric job (C-27): t-min = 4.9 D (H − 0.3) G / (S E)",
+   "S = 177 MPa (Table 4.1a, A516M-415 lower courses)",
+   "t-min = 4.9 × 30 × (12 − 0.3) × 0.9 / (177 × 0.85) = 10.2885 mm (the USC form gives 10.315 mm)"
   ],
   "tol": 0.01,
   "unit": "mm",
-  "source": "API 653 (2025) §4.3.3.1 a) (USC form, as the app computes); Table 4.2b E = 0.85 — the SI form 4.9 (H − 0.3) D G / (S E) gives about 10.29 mm (C-27)",
+  "source": "API 653 (2025) §4.3.3.1 a) SI form; Table 4.1a; Table 4.2a E = 0.85",
   "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "tmin",
-    "expected": 10.3155,
-    "actual": 10.3155,
+    "expected": 10.2885,
+    "actual": 10.2885,
     "ok": true
    }
   ]
@@ -704,27 +706,34 @@
   "area": "Shell evaluation",
   "units": "imperial",
   "basis": "equation",
-  "title": "Course status from the minimum reading",
-  "input": "Course 1 t-min entered 0.430 in; readings 0.450, 0.432, 0.428 in.",
+  "title": "Course status from single readings (§4.3.2 corroded-area evaluation)",
+  "input": "Course 1 t-min entered 0.430 in; readings 0.450, 0.432, 0.428 in; then one reading of 0.250 in.",
   "steps": [
-   "Minimum 0.428 < 0.430 → \"Below t-min\" (single reading compared with the whole-course t-min)"
+   "0.428 < 0.430 but ≥ 0.6 × 0.430 = 0.258 → a corroded area to evaluate per §4.3.2 (average t1 over the averaging length ≥ t-min)",
+   "0.250 < 0.258 → fails §4.3.2.1 (t2 ≥ 60 % of t-min) → \"Below t-min\""
   ],
   "tol": 0.0127,
   "unit": "mm",
-  "source": "API 653 (2025) §4.3.3.1 a) (whole course). §4.3.2 averaging and §4.3.3.1 b) (H for a location) are not applied — C-18",
+  "source": "API 653 (2025) §4.3.2.1, §4.3.3.1 b) — C-18, C-01",
   "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "status",
-    "expected": "Below t-min",
-    "actual": "Below t-min",
+    "expected": "Evaluate per §4.3.2",
+    "actual": "Evaluate per §4.3.2",
     "ok": true
    },
    {
     "key": "min",
     "expected": 10.8712,
     "actual": 10.8712,
+    "ok": true
+   },
+   {
+    "key": "status2",
+    "expected": "Below t-min",
+    "actual": "Below t-min",
     "ok": true
    }
   ]
@@ -890,14 +899,14 @@
   "tol": 0.0002,
   "unit": "in²/ft",
   "source": "Exact unit definitions (1 in = 2.54 cm)",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "inft",
     "expected": 10.0157,
-    "actual": 10.0152,
-    "ok": false
+    "actual": 10.0157,
+    "ok": true
    }
   ]
  },
@@ -1259,24 +1268,31 @@
   "id": "V-39",
   "area": "Settlement — edge",
   "units": "imperial",
-  "basis": "equation",
-  "title": "Diameters below the smallest tabulated curve are not extrapolated non-conservatively",
+  "basis": "review",
+  "title": "Diameters below the smallest tabulated curve use the 20 ft curve and are flagged for engineering review",
   "input": "D 15 ft (below the 20 ft curve); R 3 ft.",
   "steps": [
-   "Allowables grow with diameter, so using the 20 ft curve for a 15 ft tank overstates the allowable",
-   "Required: no value (engineering evaluation) or a conservative value below the tabulated range"
+   "Figures B.11 / B.12 have no curve below 20 ft",
+   "Engineer's decision (C-12, 14 Nov 2026): use the 20 ft curve and note that the allowable must be reviewed by an engineer",
+   "Required: the 20 ft value (2.0 in at R = 3 ft) with the review flag set"
   ],
-  "tol": null,
-  "unit": "",
-  "source": "API 653 (2025) Figures B.11 / B.12 have no curve below 20 ft (6 m) — C-12",
-  "status": "FAIL",
+  "tol": 0.001,
+  "unit": "in",
+  "source": "API 653 (2025) Figures B.11 / B.12; engineer's decision on C-12",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "Bew",
-    "expected": "null",
+    "expected": 2,
     "actual": 2,
-    "ok": false
+    "ok": true
+   },
+   {
+    "key": "review",
+    "expected": "true",
+    "actual": "true",
+    "ok": true
    }
   ]
  },
@@ -1351,19 +1367,19 @@
   "title": "Bottom depression limit, metric",
   "input": "R = 3.0 m; depth 95 mm.",
   "steps": [
-   "R = 9.8425 ft → BB = 0.37 × 9.8425 = 3.6417 in = 92.50 mm",
-   "95 > 92.50 → exceeds"
+   "Metric job → SI form of B.3.3 (C-27): BB = 0.031 R = 0.031 × 3000 = 93.0 mm",
+   "95 > 93.0 → exceeds"
   ],
   "tol": 0.01,
   "unit": "mm",
-  "source": "API 653 (2025) B.3.3; SI form BB = 0.031 R gives 93.0 mm — the app’s 92.5 mm is 0.5 % stricter",
+  "source": "API 653 (2025) B.3.3 (SI form)",
   "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "allow",
-    "expected": 92.5,
-    "actual": 92.5,
+    "expected": 93,
+    "actual": 93,
     "ok": true
    },
    {
@@ -1427,14 +1443,14 @@
   "tol": 0.0127,
   "unit": "mm (shown in in)",
   "source": "API 653 (2025) §4.4.5.4 — C-21",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "czLim",
     "expected": 2.9972,
-    "actual": 2.54,
-    "ok": false
+    "actual": 2.9972,
+    "ok": true
    }
   ]
  },
@@ -1453,14 +1469,14 @@
   "tol": 0.00127,
   "unit": "mm/yr (shown in in/yr)",
   "source": "API 653 (2025) §4.4.5.1 Note 1 — C-22",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "UPr",
     "expected": 0.127,
-    "actual": 0.0635,
-    "ok": false
+    "actual": 0.127,
+    "ok": true
    }
   ]
  },
@@ -1479,14 +1495,14 @@
   "tol": null,
   "unit": "",
   "source": "API 653 (2025) §4.4.5.1, §6.4.2.2.1 — C-02",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "warned",
     "expected": "true",
-    "actual": "false",
-    "ok": false
+    "actual": "true",
+    "ok": true
    }
   ]
  },
@@ -1496,7 +1512,7 @@
   "units": "imperial",
   "basis": "equation",
   "title": "Critical-zone patch longer than 24 in along the shell is flagged",
-  "input": "Two repair locations in the critical zone 18 in apart along the shell; default 12 × 12 in patches merge into one tombstone ≈ 30 in wide.",
+  "input": "Two repair locations in the critical zone 18 in apart along the shell, corrosion 4 × 4 in each, one Repair ID (one tombstone patch): width = 18 + 4 + 2 × 2 = 26 in along the shell.",
   "steps": [
    "§9.11.1.2 i): maximum dimension along the shell for a critical-zone patch = 24 in (600 mm)",
    "Required: a failing check on the merged patch"
@@ -1504,14 +1520,14 @@
   "tol": null,
   "unit": "",
   "source": "API 653 (2025) §9.11.1.2 i) — C-29",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "flagged",
     "expected": "true",
-    "actual": "false",
-    "ok": false
+    "actual": "true",
+    "ok": true
    }
   ]
  },
@@ -1521,13 +1537,15 @@
   "units": "imperial",
   "basis": "equation",
   "title": "API 650 Table 5.1b for SG ≥ 1 (via API 653 §4.4.6.3)",
-  "input": "Course 1 t = 1.00 in; Sb = 30,000 psi (G 1.0).",
+  "input": "H 75 ft; G 1.0; course 1 t = 1.00 in; D chosen so that Sb = 30,000 psi (D = 30,000 / (2.6 × 74) = 155.9 ft).",
   "steps": [
+   "H × G = 75 ft ≤ 75 ft → Table 5.1 applies (API 650 §5.5.3)",
+   "Sb = 2.6 D (H − 1) G / t = 30,000 psi",
    "Row 0.75 < t ≤ 1.00, column ≤ 30,000 → 9/32 = 0.28125 in"
   ],
   "tol": 0.001,
   "unit": "in",
-  "source": "API 650 13th ed. Errata 1 (2021) Table 5.1b; API 653 (2025) §4.4.6.3",
+  "source": "API 650 13th ed. Errata 1 (2021) Table 5.1b, §5.5.3; API 653 (2025) §4.4.6.3",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -1554,14 +1572,14 @@
   "tol": null,
   "unit": "",
   "source": "API 650 (2021) §5.5.3 and Table 5.1b — C-08",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "t",
     "expected": "null",
-    "actual": 0.344,
-    "ok": false
+    "actual": "null",
+    "ok": true
    }
   ]
  },
@@ -1617,14 +1635,14 @@
   "tol": null,
   "unit": "",
   "source": "SOR/2025-88 s. 73(2)(b) (current to 19 Oct 2026) — C-30",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "aboveOk",
     "expected": "false",
-    "actual": "true",
-    "ok": false
+    "actual": "false",
+    "ok": true
    }
   ]
  },
@@ -1742,14 +1760,14 @@
   "tol": null,
   "unit": "",
   "source": "This review (C-10); coverage of the corroded area cannot be confirmed without its size — §9.11.1.1",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
    {
     "key": "marginCheck",
     "expected": "null",
-    "actual": "true",
-    "ok": false
+    "actual": "null",
+    "ok": true
    }
   ]
  },
