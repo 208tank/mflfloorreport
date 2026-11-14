@@ -7,6 +7,23 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Data integrity upgrade — stage 4: database integrity check (v3.11.0)
+
+`js/integrity.js` checks the device database and lists what it finds; it never changes anything itself.
+
+- **When:** a quick check runs in the background a moment after the app starts and only speaks up if it
+  finds something. A full check (which also opens every photo and verifies every revision's checksum)
+  runs from Settings → This device → **Check data on this device**.
+- **What:** jobs that can't be read or updated to the current version, values that aren't numbers,
+  duplicate indications, indications on plates missing from the layout, links to registry tanks that are
+  gone; job list entries that are missing, out of date or have no job; photos whose job is gone (and no
+  revision keeps them), damaged images, photos of deleted indications; revisions that no longer match their
+  checksum; remembered file links for deleted jobs.
+- **Repairs:** safe repairs (rebuild a job-list entry, remove a job-list entry or file link for a job that
+  is gone) are offered individually or all at once. Deleting an orphan photo is never automatic and always
+  asks first. Everything else, such as a revision that fails its checksum, is reported and left as it is.
+  Repairs are logged on the device.
+
 ## Data integrity upgrade — stage 3: recovery after an unexpected close (v3.10.0)
 
 On every change the app also keeps a recovery copy of the open job in the browser's local storage

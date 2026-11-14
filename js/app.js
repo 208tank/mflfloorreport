@@ -3,6 +3,8 @@ import { db, requestPersistence, dbConfig } from './db.js';
 import { pendingSteps } from './migrations.js';
 import { createSaver, saveErrorText } from './saver.js';
 import { createJournal, recoveryDiff } from './journal.js';
+import { checkIntegrity, SAFE_REPAIRS } from './integrity.js';
+import { lite } from './db.js';
 import { sha256 } from './util.js';
 import { u, toMm, inVal, fmt, fmtRate, unitLabel, num, UNITS } from './units.js';
 import { buildLayout, stackSections, suggestCount, halfChord, plateAt, toLocal, itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
@@ -30,7 +32,7 @@ import { esc as h } from './util.js';
 import { $, $$, toast, askConfirm, askChoice } from './ui.js';
 import { jobCard, indCount } from './cards.js';
 
-const APP_VERSION = '3.10.0';
+const APP_VERSION = '3.11.0';
 
 const S = {
   jobs: [], tanks: [], reg: { q: '', open: new Set() }, job: null, layout: null, calc: null, photos: [], company: {},
@@ -204,6 +206,47 @@ async function recoverAfterCrash() {
     if (choice === 'restore' || choice === 'discard') journal.remove(e.job.id); // no answer (dialog dismissed): ask again next time
   }
   if (restored) { await loadJobs(); toast(`Restored the changes to ${restored} job${restored > 1 ? 's' : ''}.`); }
+}
+
+/* ---------------------------------------------------------- integrity check (stage 4) --- */
+
+/** Check the device database. full = also open every photo and verify every revision checksum.
+ *  quiet = the background check at start-up: only speaks up if something is wrong. Never changes data. */
+async function runIntegrity(full = true, quiet = false) {
+  S.integrity = { ...(S.integrity || {}), running: true }; renderIntegrity();
+  try {
+    const [jobs, cards, photos, revisions, tanks, metaKeys] = await Promise.all([db.allJobs(), db.allCards(), db.photoIndex(full), full ? db.allRevisions() : db.revisionHeads(), db.allTanks(), db.metaKeys()]);
+    const problems = await checkIntegrity({ jobs, cards, photos, revisions, tanks, metaKeys }, { hash: full ? sha256 : null, lite, yieldEvery: 5 });
+    S.integrity = { at: Date.now(), full, problems, counts: { jobs: jobs.length, photos: photos.length, revisions: revisions.length } };
+    await db.setMeta('integrity:last', { at: S.integrity.at, full, n: problems.length, errors: problems.filter((p) => p.severity === 'error').length });
+    if (quiet && problems.length) toast(`The data check found ${problems.length} problem${problems.length > 1 ? 's' : ''} on this device.`, { label: 'Review', fn: () => { go('jobs'); setTimeout(() => $('#integrityRes')?.scrollIntoView(), 50); } });
+  } catch (e) { S.integrity = { at: Date.now(), error: String(e.message || e), problems: [] }; }
+  renderIntegrity();
+  return S.integrity;
+}
+function integrityHTML() {
+  const I = S.integrity; if (!I || I.running) return I?.running ? '<p class="muted small">Checking…</p>' : '';
+  if (I.error) return `<p class="bad small">The check could not run: ${h(I.error)}</p>`;
+  if (!I.problems.length) return `<p class="ok small">No problems found (${I.counts.jobs} jobs, ${I.counts.photos} photos, ${I.counts.revisions} revisions${I.full ? ', checksums verified' : ''}).</p>`;
+  const safe = I.problems.filter((p) => SAFE_REPAIRS.has(p.repair)).length;
+  return `<ul class="integrity-list">${I.problems.map((p, i) => `<li class="${p.severity}"><b>${p.severity === 'error' ? 'Problem' : 'Warning'}:</b> ${h(p.message)}${p.repair === 'delete-photo' ? ` <button class="btn sm ghost danger" data-act="integrity-fix" data-i="${i}">Delete photo…</button>` : p.repair ? ` <button class="btn sm" data-act="integrity-fix" data-i="${i}">Repair</button>` : ''}</li>`).join('')}</ul>
+    ${safe ? `<button class="btn sm primary" data-act="integrity-fix-safe">Repair the ${safe} safe problem${safe > 1 ? 's' : ''}</button>` : ''}<p class="muted small">Safe repairs only rebuild the job list or forget file links. Nothing else is changed or deleted without asking.</p>`;
+}
+function renderIntegrity() {
+  const el = $('#integrityRes'); if (el) el.innerHTML = integrityHTML();
+  const l = $('#integrityLast'); if (l && S.integrity?.at) l.textContent = `Last checked ${new Date(S.integrity.at).toLocaleString()}${S.integrity.full ? ' (full)' : ' (quick, at start-up)'}`;
+}
+async function repairProblem(p) {
+  if (p.repair === 'rebuild-card') { const j = await db.getJob(p.jobId); if (j) await db.putCard(j); }
+  else if (p.repair === 'remove-card') await db.deleteCard(p.id);
+  else if (p.repair === 'remove-meta') await db.deleteMeta(p.id);
+  else if (p.repair === 'delete-photo') {
+    if (!(await askConfirm('Delete this photo? It belongs to a job that is no longer on this device, and no revision refers to it. This cannot be undone.', { ok: 'Delete photo', danger: true }))) return false;
+    await db.deletePhoto(p.id);
+  } else return false;
+  const log = (await db.getMeta('integrity:log')) || [];
+  await db.setMeta('integrity:log', [...log, { at: Date.now(), code: p.code, repair: p.repair, id: p.id || p.jobId }].slice(-200));
+  return true;
 }
 
 function dbFailed(e) {
@@ -706,12 +749,14 @@ function viewJobs() {
         <label class="fld"><span class="lbl">Inspector name on this device</span><span class="ctl"><input data-cb="inspector" value="${h(c.inspector || '')}" placeholder="Recorded with each saved revision and change"></span></label>
         <p id="storageInfo" class="muted">Checking storage…</p>
         <p class="muted small" id="migInfo"></p>
+        <div class="integrity"><div class="acts"><button class="btn sm" data-act="integrity-run">Check data on this device</button><span class="muted small" id="integrityLast"></span></div><div id="integrityRes">${integrityHTML()}</div></div>
         <p class="muted">Install the app from the browser's address bar (or the Install button above) so it opens full-window and works without a connection.</p>
         <button class="btn sm" data-act="persist">Ask browser to keep data permanently</button>
       </section>
     </div></div>`;
 }
 after.jobs = async () => {
+  if (!S.integrity) { const last = await db.getMeta('integrity:last').catch(() => null); const l = $('#integrityLast'); if (l && last) l.textContent = `Last checked ${new Date(last.at).toLocaleString()}: ${last.n ? last.n + ' problem' + (last.n > 1 ? 's' : '') : 'no problems'}`; } else renderIntegrity();
   try {
     const log = await db.migrationLog(), mi = $('#migInfo');
     if (mi) { const last = log.filter((x) => x.kind === 'db').at(-1), errs = log.filter((x) => x.kind === 'job-error'); mi.textContent = `Database version ${last?.to ?? '—'}${last ? ` (upgraded ${new Date(last.at).toLocaleDateString()})` : ''} · ${log.filter((x) => x.kind === 'job').length} job updates logged${errs.length ? ` · ${errs.length} job update${errs.length > 1 ? 's' : ''} failed` : ''}.`; }
@@ -2451,6 +2496,9 @@ document.addEventListener('click', async (e) => {
     case 'file-save-as': return saveJobFile(S.job?.id, true);
     case 'logo-clear': S.company.logo = null; await db.setMeta('company', S.company); renderView(); return;
     case 'app-reload': return appReload();
+    case 'integrity-run': await runIntegrity(true); return;
+    case 'integrity-fix': { const p = S.integrity?.problems?.[+el.dataset.i]; if (p && (await repairProblem(p))) { await loadJobs(); await runIntegrity(true); } return; }
+    case 'integrity-fix-safe': { for (const p of (S.integrity?.problems || []).filter((x) => SAFE_REPAIRS.has(x.repair))) await repairProblem(p); await loadJobs(); await runIntegrity(true); toast('Safe repairs done.'); return; }
     case 'persist': { const ok = await requestPersistence(); toast(ok ? 'Storage is now persistent.' : 'The browser did not grant persistent storage (installing the app usually helps).'); after.jobs(); return; }
     case 'mode': setMode(el.dataset.mode); return;
     case 'datum-set': {
@@ -3435,7 +3483,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   catch (e) { dbFailed(e); return; }
   await loadJobs(); await loadTanks();
   await recoverAfterCrash().catch((e) => console.warn('Recovery check', e));
-  setTimeout(() => baselineRevisions().catch((e) => console.warn('Baseline revisions', e)), 1500);
+  setTimeout(() => baselineRevisions().catch((e) => console.warn('Baseline revisions', e)).then(() => runIntegrity(false, true)).catch((e) => console.warn('Integrity check', e)), 1500);
   const last = await db.getMeta('lastJob');
   if (last && S.jobs.some((j) => j.id === last)) await openJob(last, 'dash');
   else go('dash');

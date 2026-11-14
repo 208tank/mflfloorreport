@@ -125,6 +125,27 @@ export const db = {
     if (!entries?.length) return;
     return txMany(['meta'], (M) => { const r = M.get('migrations'); r.onsuccess = () => M.put({ key: 'migrations', value: [...(r.result?.value || []), ...entries].slice(-500) }); });
   },
+  /* ---- integrity check (stage 4) ---- */
+  /** Every photo's id, job and indication. full = also open each image to check its data (slower). */
+  async photoIndex(full = false) {
+    const db_ = await open();
+    return new Promise((resolve, reject) => {
+      const out = [], t = db_.transaction('photos'), s = t.objectStore('photos');
+      if (!full) {
+        // a key cursor on the jobId index reads ownership without loading the images
+        s.index('jobId').openKeyCursor().onsuccess = (e) => { const c = e.target.result; if (c) { out.push({ id: c.primaryKey, jobId: c.key }); c.continue(); } };
+      } else {
+        s.openCursor().onsuccess = (e) => { const c = e.target.result; if (c) { const p = c.value; out.push({ id: p.id, jobId: p.jobId, indId: p.indId || null, ok: typeof p.dataUrl === 'string' && /^data:image\/[a-z+.-]+;base64,/i.test(p.dataUrl) }); c.continue(); } };
+      }
+      t.oncomplete = () => resolve(out); t.onerror = () => reject(t.error);
+    });
+  },
+  async allRevisions() { return tx('revisions', 'readonly', (s) => reqP(s.getAll())); },
+  async revisionHeads() { return (await this.allRevisions()).map(({ job, ...r }) => r); },
+  async metaKeys() { return tx('meta', 'readonly', (s) => reqP(s.getAllKeys())); },
+  async putCard(job) { return tx('cards', 'readwrite', (s) => reqP(s.put(lite(job)))); },
+  async deleteCard(id) { return tx('cards', 'readwrite', (s) => reqP(s.delete(id))); },
+  async deleteMeta(key) { return tx('meta', 'readwrite', (s) => reqP(s.delete(key))); },
   async getMeta(key) { const r = await tx('meta', 'readonly', (s) => reqP(s.get(key))); return r?.value; },
   async setMeta(key, value) { return tx('meta', 'readwrite', (s) => reqP(s.put({ key, value }))); }
 };

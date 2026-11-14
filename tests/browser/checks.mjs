@@ -359,6 +359,67 @@ export default {
     await ctx.close();
   },
 
+  async 'integrity: a damaged database is reported without changes; safe repairs fix it; photos are deleted only on request'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const id = await page.evaluate(() => window.tfi.job().id);
+    await page.waitForFunction(() => document.querySelector('#saveState').textContent === 'Saved locally', null, { timeout: 10000 }).catch(() => {});
+    // damage: a job missing from the list, a list entry with no job, an orphan photo, a file link to a deleted job, a tampered revision
+    await page.evaluate(async (jid) => {
+      const { db } = await import('./js/db.js'), { sha256 } = await import('./js/util.js');
+      const raw = await new Promise((res) => { const q = indexedDB.open('tank-floor-inspector'); q.onsuccess = () => res(q.result); });
+      const put = (store, v) => new Promise((res, rej) => { const t = raw.transaction(store, 'readwrite'); t.objectStore(store).put(v); t.oncomplete = res; t.onerror = () => rej(t.error); });
+      await db.deleteCard(jid);
+      await put('cards', { id: 'ghost', info: { tankId: 'Ghost tank' } });
+      await put('photos', { id: 'orphan-photo', jobId: 'deleted-job', dataUrl: 'data:image/png;base64,AA==' });
+      await db.setMeta('fh:deleted-job', { name: 'old.json' });
+      const job = await db.getJob(jid);
+      await put('revisions', { id: jid + ':99', jobId: jid, n: 99, rev: 0, at: Date.now(), reason: 'checkpoint', hash: await sha256(job), job: { ...job, info: { ...job.info, client: 'Tampered later' } }, photoIds: [] });
+    }, id);
+    const dump = () => page.evaluate(async () => { const raw = await new Promise((res) => { const q = indexedDB.open('tank-floor-inspector'); q.onsuccess = () => res(q.result); }); const all = (n) => new Promise((res) => { const r = raw.transaction(n).objectStore(n).getAll(); r.onsuccess = () => res(JSON.stringify(r.result)); }); return { jobs: await all('jobs'), cards: await all('cards'), photos: await all('photos'), revisions: await all('revisions') }; });
+    const before = await dump();
+    await page.evaluate(() => window.tfi.go('jobs'));
+    await page.click('[data-act="integrity-run"]');
+    await page.waitForSelector('.integrity-list');
+    const text = await page.textContent('#integrityRes');
+    assert.match(text, /missing from the job list/);
+    assert.match(text, /Ghost tank/);
+    assert.match(text, /photo belongs to a job that is no longer on this device/);
+    assert.match(text, /remembered file link/);
+    assert.match(text, /does not match its checksum/);
+    assert.deepEqual(await dump(), before, 'checking changes nothing');
+    // safe repairs: the list entries and the file link; the photo and the revision are left alone
+    await page.click('[data-act="integrity-fix-safe"]');
+    await page.waitForFunction(() => { const t = document.querySelector('#integrityRes').textContent; return !/Checking/.test(t) && !/missing from the job list/.test(t); });
+    const t2 = await page.textContent('#integrityRes');
+    assert.doesNotMatch(t2, /Ghost tank|remembered file link/);
+    assert.match(t2, /does not match its checksum/);
+    assert.match(t2, /photo belongs to a job/);
+    assert.equal(await page.evaluate(async (jid) => !!(await (await import('./js/db.js')).db.allCards()).find((c) => c.id === jid), id), true);
+    // the orphan photo goes only after an explicit confirmation
+    await page.click('#integrityRes [data-act="integrity-fix"]:has-text("Delete photo")');
+    await page.click('#confirmDlg [data-cf="no"]');
+    await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(async () => !!(await (await import('./js/db.js')).db.getPhoto('orphan-photo'))), true);
+    await page.click('#integrityRes [data-act="integrity-fix"]:has-text("Delete photo")');
+    await page.click('#confirmDlg [data-cf="yes"]');
+    await page.waitForFunction(() => { const t = document.querySelector('#integrityRes').textContent; return !/Checking/.test(t) && !/photo belongs to a job/.test(t); });
+    assert.equal(await page.evaluate(async () => !!(await (await import('./js/db.js')).db.getPhoto('orphan-photo'))), false);
+    // the tampered revision is still reported; it is never changed
+    assert.match(await page.textContent('#integrityRes'), /does not match its checksum/);
+    assert.equal(await page.evaluate(async (jid) => (await (await import('./js/db.js')).db.getRevision(jid + ':99')).job.info.client, id), 'Tampered later');
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'integrity: a clean device reports no problems'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => window.tfi.go('jobs'));
+    await page.click('[data-act="integrity-run"]');
+    await page.waitForFunction(() => /No problems found/.test(document.querySelector('#integrityRes').textContent));
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
   async 'offline: an update never caches stale files from the browser HTTP cache'({ browser, serve }) {
     const { readFile } = await import('node:fs/promises');
     const root = new URL('../../', import.meta.url);

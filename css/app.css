@@ -789,3 +789,10 @@ dialog.wide-dlg { max-width: 96vw; }
 .eqpop label.chk { display: flex; justify-content: flex-start; align-items: flex-start; gap: 8px; text-align: left; width: 100%; }
 .eqpop label.chk input { width: 16px; height: 16px; min-width: 16px; flex: 0 0 16px; margin: 2px 0 0; }
 .eqpop label.chk span { flex: 1; }
+
+/* integrity check (stage 4) */
+.integrity { margin-top: 10px; }
+.integrity-list { margin: 8px 0; padding-left: 18px; font-size: 13px; }
+.integrity-list li { margin: 4px 0; }
+.integrity-list li.error b { color: #b91c1c; }
+.integrity-list li.warning b { color: #a16207; }
