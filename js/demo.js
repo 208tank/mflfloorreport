@@ -1,5 +1,6 @@
 // Demo job so the app can be tried without field data.
 import { newJob, uid } from './model.js';
+import { equipFromLegacy, suggestEquip } from './equipment.js';
 import { defaultZones, utLocations } from './shell.js';
 import { defaultRoof, floatingLayout, PT5 } from './roof.js';
 import * as SECT from './sections.js';
@@ -133,6 +134,8 @@ export function makeDemo() {
   {
     const { typicalNDE, typicalObs } = SECT;
     for (const k of Object.keys(job.secs)) job.secs[k].nde = typicalNDE(k).map((m) => ({ ...m, tech: k === 'settle' ? 'D. Surveyor' : 'B. Technician', date: job.info.inspDate, result: 'Satisfactory' }));
+    job.equipment = equipFromLegacy(job.equip);
+    for (const k of Object.keys(job.secs)) for (const n of job.secs[k].nde) n.equip = suggestEquip(job.equipment, n.method);
     job.secs.floor.nde[0].result = 'Indications found'; job.secs.floor.nde[1].result = 'Repairs required';
     const o = (k, item, cond, text, loc = '') => ({ ...typicalObs(k)[0], id: uid(), item, cond, text, loc });
     job.secs.found.obs = [o('found', 'Ringwall / foundation cracking or spalling', 'fair', 'Hairline cracks in the concrete ringwall, no spalling.', '90°–150°'), o('found', 'Drainage away from the tank', 'poor', 'Ponding against the chime on the low side; grade slopes toward the tank.', '200°–240°'), o('found', 'Grout / sealant at the chime', 'fair', 'Chime sealant cracked and debonded in places.')];

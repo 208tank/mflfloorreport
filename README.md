@@ -7,6 +7,20 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Equipment (v3.4.2)
+
+- **Equipment** (side menu, under Tank setup) is the job's equipment list: type, make, model, serial no.,
+  calibration date, calibration due, settings / details (and the reporting threshold for an MFL scanner).
+  Calibration due before the inspection date shows **Expired**; within 30 days shows *Due ≤ 30 days*.
+  Items can be duplicated (e.g. a second probe) or copied from another job.
+- On each section's **NDE** page every method has an **Equipment** picker. Choosing a method picks matching
+  items automatically (MFL floor scan → MFL scanner + reference plate; UT thickness → gauge, probe and block;
+  VT → visual tools; level survey → level), one per type; adjust as needed.
+- The report's *Equipment and personnel* lists the equipment picked under the NDE methods with serials,
+  calibration and what each was used for, and each section's *NDE performed* table shows the equipment per method.
+- Older jobs: the old MFL / UT equipment form is converted into list items and matched to the NDE methods.
+  The UT loader sheet reads and writes the UT instrument and probe from the list.
+
 ## Tank registry (v3.4)
 
 Enter each tank once, then start every inspection from it.

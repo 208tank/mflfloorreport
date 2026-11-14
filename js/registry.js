@@ -95,7 +95,7 @@ export function jobFromTank(t, { scope, floorSrc = 'registry', last = null, copy
   }
   applyTank(j, t, { floor });
   if (last) {
-    if (copyEquip) j.equip = clone(last.equip || {});
+    if (copyEquip) { j.equip = clone(last.equip || {}); j.equipment = clone(last.equipment || []); }
     j.info.product = last.info?.product || '';
     for (const k of TANK_PER_INSP) if (last.tank?.[k] != null) j.tank[k] = last.tank[k];
     j.tank.lastInternal = last.info?.inspDate || j.tank.lastInternal;

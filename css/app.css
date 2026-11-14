@@ -757,3 +757,32 @@ dialog.wide-dlg { max-width: 96vw; }
 .sp-key { margin: 8px 0 0; display: flex; align-items: center; gap: 6px; }
 .sp-key .k-seam { display: inline-block; width: 3px; height: 12px; background: #c2410c; border-radius: 2px; }
 #nozzleCard[data-design] .grid.nozzles select { min-width: 110px; }
+
+/* equipment (v3.4.2) */
+.eq-t input, .eq-t select { width: 100%; min-width: 90px; }
+.eq-t input.sn { min-width: 100px; } .eq-t input.xs { width: 56px; min-width: 56px; }
+.eq-t td:nth-child(7) { min-width: 200px; }
+.eq-thr { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin-top: 4px; white-space: nowrap; }
+.eq-t .st { display: inline-block; margin-top: 4px; }
+.st-warn { background: #fef3c7; color: #92400e; }
+.eq-add { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+.eq-sec { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line2); font-size: 13px; }
+.eq-sec .eq-m { color: var(--ink2); }
+.eqpick { position: relative; min-width: 150px; }
+.eqpick > summary { list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; gap: 4px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); min-height: 32px; align-items: center; font-size: 12.5px; }
+.eqpick > summary::-webkit-details-marker { display: none; }
+.eqpick[open] > summary { border-color: var(--accent); }
+.eqpop { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 280px; max-height: 340px; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 8px 10px; }
+.eqpop .chk { display: flex; gap: 8px; padding: 4px 0; font-size: 13px; }
+.eq-grp { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 8px 0 2px; }
+.eq-grp:first-child { margin-top: 0; }
+.eq-pop-foot { border-top: 1px solid var(--line2); margin-top: 6px; padding-top: 6px; }
+.eq-chip { background: var(--accent-soft); border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
+.eq-chip small { color: var(--muted); }
+.eq-chip.expired { background: #fee2e2; color: #991b1b; }
+.eq-chip.soon { background: #fef3c7; }
+.eq-t td.eq-use { min-width: 230px; }
+.eqpop { max-width: 340px; }
+.eqpop label.chk { display: flex; justify-content: flex-start; align-items: flex-start; gap: 8px; text-align: left; width: 100%; }
+.eqpop label.chk input { width: 16px; height: 16px; min-width: 16px; flex: 0 0 16px; margin: 2px 0 0; }
+.eqpop label.chk span { flex: 1; }

@@ -19,10 +19,11 @@ import { WELDS, ELEV_UNITS, PSI_PER_MPA, DEP_K, newEdge, newDep, epOffsets, xKey
 import { MATERIALS, MAT, CODES, editionsFor, supplementsFor, jointOptions, jointLabel, JE_42, JE_43, JE_NOTES, EDGE_D, EDGE_BEW, EDGE_BE, K_TABLE, T45, T51B, NOZZLE_PIPE, NOZZLE_WALL_BY_SHELL, CODE_SCHED, E_DEFAULT, PSI_MPA, TABLES_SOURCE } from './tables.js';
 import { designBasis, courseDesigns, fillFromT, annularReq, defaultJoint, shellYE } from './design.js';
 import { SECTIONS, SEC, CHILDREN, viewPlace, childView, findings, allDefs, numberDefs, STATUS_TEXT, NDE_METHODS, NDE_RESULTS, CONDITIONS, PRIORITIES, PRIORITY_LABEL, STATUSES, typicalNDE, typicalObs, newObs, newNDE, newRec, defaultSummary } from './sections.js';
+import { EQ_TYPES, EQ_LABEL, EQ_DETAIL_PH, newEquip, suggestEquip, equipName, equipLine, calState, equipUse, useByMethod } from './equipment.js';
 import { SCOPE, SCOPE_HINT, inScope, scopeText, tankFromJob, newTank, jobFromTank, editJobFor, diffFromTank, tankKeyOf, normKey } from './registry.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 
-const APP_VERSION = '3.4.1';
+const APP_VERSION = '3.4.2';
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -42,6 +43,7 @@ const VIEWS = [
   ['reg', 'Tank registry', 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3v12c0 1.7-3.6 3-8 3s-8-1.3-8-3zM4 6c0 1.7 3.6 3 8 3s8-1.3 8-3M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3'],
   ['jobs', 'Jobs', 'M4 5h16M4 12h16M4 19h10'],
   ['setup', 'Tank setup', 'M12 3v3m0 12v3M3 12h3m12 0h3M6 6l2 2m8 8 2 2M6 18l2-2m8-8 2-2M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z'],
+  ['equip', 'Equipment', 'M14 6l4 4-8 8H6v-4zM12 8l4 4M4 20h16'],
   ['summary', 'Executive summary', 'M5 4h14v16H5zM8 8h8M8 12h8M8 16h5']
 ];
 const VIEWS_END = [
@@ -191,7 +193,7 @@ function renderView() {
   main.className = 'main view-' + S.view;
   const pl = viewPlace(S.view);
   if (pl?.child === 'nde') S.ndeTab[pl.sec] = S.view;
-  const fn = { dash: viewDash, reg: viewReg, jobs: viewJobs, setup: viewSetup, summary: viewSummary, defs: viewDefs, defrep: viewDefRep, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, shell: viewShell, roofF: viewRoof, roofL: viewRoof, seal: viewRoof, nozzles: viewNozzles, settle: viewSettle, ref: viewRef, report: viewReport }[S.view]
+  const fn = { dash: viewDash, reg: viewReg, jobs: viewJobs, equip: viewEquip, setup: viewSetup, summary: viewSummary, defs: viewDefs, defrep: viewDefRep, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, shell: viewShell, roofF: viewRoof, roofL: viewRoof, seal: viewRoof, nozzles: viewNozzles, settle: viewSettle, ref: viewRef, report: viewReport }[S.view]
     || (pl ? { nde: viewNDE, obs: viewObs, photos: viewPhotos, an: viewAnalysis, recs: viewRecs }[pl.child] : null) || viewJobs;
   main.innerHTML = (pl ? crumbHTML(pl) : '') + fn();
   (after[S.view] || (pl ? after['sec:' + pl.child] : null))?.();
@@ -670,15 +672,7 @@ function viewSetup() {
       <section class="card" id="shellBuild">${shellBuildHTML()}</section>
       <section class="card" id="nozzleCard" data-design="1">${nozzleTableHTML(true)}</section>
 
-      ${reg ? '' : `<section class="card"><h2>Equipment</h2><div class="fgrid">
-        ${field('MFL scanner make', 'equip.mflMake')}${field('MFL model', 'equip.mflModel')}
-        ${field('MFL serial no.', 'equip.mflSerial')}${field('MFL calibration date', 'equip.mflCal')}
-        ${field('MFL reference plate', 'equip.mflRef')}${field('MFL reporting threshold', 'equip.mflThreshold', 'text', { unit: '%' })}
-        ${field('MFL sensitivity / settings', 'equip.mflSettings', 'text', { cls: 'span2' })}
-        ${field('UT instrument make', 'equip.utMake')}${field('UT model', 'equip.utModel')}
-        ${field('UT serial no.', 'equip.utSerial')}${field('UT probe', 'equip.utProbe')}
-        ${field('UT calibration block', 'equip.utBlock')}${field('VT tools', 'equip.vtTools')}
-      </div></section>
+      ${reg ? '' : `<section class="card eq-moved"><div class="sp-head"><h2>Equipment</h2><button class="btn sm" data-go="equip">Equipment list →</button></div><p class="muted small">${(S.job.equipment || []).length ? `${S.job.equipment.length} item${S.job.equipment.length === 1 ? '' : 's'} listed: ${h(S.job.equipment.slice(0, 4).map(equipName).join(', '))}${S.job.equipment.length > 4 ? '…' : ''}.` : 'No equipment listed yet.'} Equipment now has its own page; pick the items used under each section's NDE methods.</p></section>
       <section class="card"><h2>Notes</h2>${field('General notes for the report', 'info.notes', 'area', { rows: 4 })}</section>`}
     </div>
     <aside class="setup-preview card"><div class="sp-head"><h2>Layout preview</h2><span id="spStats" class="muted small"></span></div><div id="spMap" class="sp-map"></div>
@@ -1912,13 +1906,58 @@ function secHead(sec, title, sub, acts = '') {
 /* NDE scope */
 function viewNDE() {
   const k = viewPlace(S.view).sec, sec = SEC.get(k), d = secData(k), F = findings(S.job, S.layout, S.calc)[k];
-  const rows = d.nde.map((it) => `<tr><td>${sxSel('nde', k, it, 'method', NDE_METHODS)}</td><td>${sxIn('nde', k, it, 'extent', 'text', 'placeholder="Extent / coverage"')}</td><td>${sxIn('nde', k, it, 'proc', 'text', 'placeholder="Procedure / technique"')}</td><td>${sxIn('nde', k, it, 'tech', 'text', 'placeholder="Technician, level"')}</td><td>${sxIn('nde', k, it, 'date', 'date')}</td><td>${sxSel('nde', k, it, 'result', NDE_RESULTS)}</td><td>${sxIn('nde', k, it, 'notes', 'text', 'placeholder="Results / notes"')}</td><td><button class="btn sm icon ghost danger" data-act="sx-del" data-kind="nde" data-sec="${k}" data-iid="${it.id}" title="Remove">✕</button></td></tr>`).join('') || '<tr><td colspan="8" class="empty">No NDE methods set up yet.</td></tr>';
+  const rows = d.nde.map((it) => `<tr><td>${sxSel('nde', k, it, 'method', NDE_METHODS)}</td><td>${sxIn('nde', k, it, 'extent', 'text', 'placeholder="Extent / coverage"')}</td><td>${sxIn('nde', k, it, 'proc', 'text', 'placeholder="Procedure / technique"')}</td><td>${sxIn('nde', k, it, 'tech', 'text', 'placeholder="Technician, level"')}</td><td>${sxIn('nde', k, it, 'date', 'date')}</td><td>${eqPicker(k, it)}</td><td>${sxSel('nde', k, it, 'result', NDE_RESULTS)}</td><td>${sxIn('nde', k, it, 'notes', 'text', 'placeholder="Results / notes"')}</td><td><button class="btn sm icon ghost danger" data-act="sx-del" data-kind="nde" data-sec="${k}" data-iid="${it.id}" title="Remove">✕</button></td></tr>`).join('') || '<tr><td colspan="8" class="empty">No NDE methods set up yet.</td></tr>';
   return `<div class="page wide">${secHead(k, 'NDE', 'Set up the NDE methods for this part of the tank and record their results. Enter the readings on the data pages (tabs above).')}
     <section class="card"><div class="sp-head"><h2>NDE methods and results</h2><span class="muted small">${d.nde.length} method${d.nde.length === 1 ? '' : 's'}</span></div>
-      <div class="tblwrap"><table class="grid sxt nde-t"><thead><tr><th>Method</th><th>Extent / coverage</th><th>Procedure / technique</th><th>Technician</th><th>Date</th><th>Result</th><th>Notes</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="tblwrap"><table class="grid sxt nde-t"><thead><tr><th>Method</th><th>Extent / coverage</th><th>Procedure / technique</th><th>Technician</th><th>Date</th><th>Equipment</th><th>Result</th><th>Notes</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
       <div class="acts row-acts"><button class="btn sm" data-act="sx-add" data-kind="nde" data-sec="${k}">+ Method</button><button class="btn sm" data-act="sx-typ" data-kind="nde" data-sec="${k}">Add typical methods</button></div></section>
     ${sec.nde.length ? `<section class="card"><h2>Data entry</h2><div class="nde-links">${sec.nde.map(([v, l]) => `<button class="btn" data-go="${v}">${l} →</button>`).join('')}</div>
       ${F.lines.length ? `<h3>Results so far</h3><ul class="flist">${F.lines.map((x) => `<li>${x}</li>`).join('')}</ul>` : '<p class="muted small">No results entered yet.</p>'}</section>` : `<section class="card"><p class="muted">No instrument data pages for this section — record the inspection under NDE methods, Observations and Photos.</p></section>`}
+  </div>`;
+}
+
+
+/* ---------------------------------------------------------------- equipment */
+// One list per job. NDE methods (per section) pick the items they used; the report pulls the details.
+
+function eqChips(it) {
+  const by = new Map((S.job.equipment || []).map((e) => [e.id, e]));
+  const sel = (it.equip || []).map((id) => by.get(id)).filter(Boolean);
+  const d = S.job.info.inspDate;
+  return sel.length ? sel.map((e) => `<span class="eq-chip ${calState(e, d)}" title="${h(EQ_LABEL[e.type] + ' — ' + equipLine(e))}">${h(equipName(e))}${e.serial ? `<small> ${h(e.serial)}</small>` : ''}</span>`).join('') : '<span class="muted">Select…</span>';
+}
+function eqPicker(sec, it) {
+  const list = S.job.equipment || [], have = new Set(it.equip || []);
+  const groups = EQ_TYPES.filter(([t]) => list.some((e) => e.type === t));
+  return `<details class="eqpick" data-iid="${it.id}"><summary>${eqChips(it)}</summary><div class="eqpop">
+    ${list.length ? groups.map(([t, l]) => `<div class="eq-grp">${h(l)}</div>${list.filter((e) => e.type === t).map((e) => `<label class="chk"><input type="checkbox" data-eqpick="${e.id}" data-sec="${sec}" data-iid="${it.id}" ${have.has(e.id) ? 'checked' : ''}><span>${h(equipName(e))}${e.serial ? ` <small class="muted">S/N ${h(e.serial)}</small>` : ''}${calState(e, S.job.info.inspDate) === 'expired' ? ' <small class="bad">cal. expired</small>' : ''}</span></label>`).join('')}`).join('')
+      : '<p class="muted small">No equipment listed for this job yet.</p>'}
+    <div class="eq-pop-foot"><button class="btn sm ghost" data-go="equip">Edit equipment list →</button></div></div></details>`;
+}
+
+function viewEquip() {
+  const j = S.job, list = j.equipment || [], use = equipUse(j, SECTIONS, inScope), d = j.info.inspDate;
+  const typeSel = (e) => `<select data-eq="type" data-id="${e.id}">${EQ_TYPES.map(([k, l]) => `<option value="${k}" ${e.type === k ? 'selected' : ''}>${h(l)}</option>`).join('')}</select>`;
+  const inp = (e, f, ph = '', type = 'text', cls = '') => `<input data-eq="${f}" data-id="${e.id}" ${type === 'date' ? 'type="date"' : ''} value="${h(e[f] ?? '')}" placeholder="${h(ph)}" class="${cls}">`;
+  const cs = (e) => { const c = calState(e, d); return c === 'expired' ? '<span class="st st-below-MRT">Expired</span>' : c === 'soon' ? '<span class="st st-warn">Due ≤ 30 days</span>' : ''; };
+  const rows = list.map((e) => `<tr class="${calState(e, d) === 'expired' ? 'is-bad' : ''}">
+      <td>${typeSel(e)}</td><td>${inp(e, 'make', 'Make')}</td><td>${inp(e, 'model', 'Model / description')}</td><td>${inp(e, 'serial', 'Serial / ID', 'text', 'sn')}</td>
+      <td>${inp(e, 'calDate', '', 'date')}</td><td>${inp(e, 'calDue', '', 'date')}${cs(e)}</td>
+      <td>${inp(e, 'details', EQ_DETAIL_PH[e.type] || 'Settings / details')}${e.type === 'mfl' ? `<label class="eq-thr">Reporting threshold ${inp(e, 'threshold', '%', 'text', 'xs')} %</label>` : ''}</td>
+      <td class="small eq-use">${useByMethod(use.get(e.id)).map((u) => `<div>${h(u)}</div>`).join('') || '<span class="muted">Not picked yet</span>'}</td>
+      <td><button class="btn sm icon ghost" data-act="eq-dup" data-id="${e.id}" title="Duplicate (e.g. a second probe)">⧉</button><button class="btn sm icon ghost danger" data-act="eq-del" data-id="${e.id}" title="Remove">✕</button></td></tr>`).join('');
+  const others = S.jobs.filter((x) => x.id !== j.id && (x.equipment || []).length);
+  const unassigned = list.filter((e) => !use.has(e.id)).length;
+  return `<div class="page wide eq-page"><div class="page-head"><div><h1>Equipment</h1><p class="muted">List every instrument, probe, block and tool on this job once. Under each section's <b>NDE</b> page, pick the items each method used — the report lists the equipment with serials and calibration, and shows it against each method.</p></div>
+    <div class="acts">${others.length ? `<select id="eqCopyFrom"><option value="">Copy from another job…</option>${others.map((x) => `<option value="${x.id}">${h([x.info?.tankId, x.info?.reportNo, x.info?.inspDate].filter(Boolean).join(' · ') || 'Job')} (${x.equipment.length})</option>`).join('')}</select>` : ''}</div></div>
+    <section class="card"><div class="sp-head"><h2>Equipment list</h2><span class="muted small">${list.length} item${list.length === 1 ? '' : 's'}${unassigned && list.length ? ` · ${unassigned} not picked under any NDE method` : ''}</span></div>
+      <div class="tblwrap"><table class="grid eq-t"><thead><tr><th>Type</th><th>Make</th><th>Model / description</th><th>Serial no.</th><th>Calibrated</th><th>Cal. due</th><th>Settings / details</th><th>Used for</th><th></th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="9" class="empty">No equipment yet — add it with the buttons below.</td></tr>'}</tbody></table></div>
+      <div class="eq-add"><span class="muted small">Add:</span>${EQ_TYPES.filter(([k]) => k !== 'other').slice(0, 10).map(([k, l]) => `<button class="btn sm" data-act="eq-add" data-type="${k}">+ ${h(l.replace(/ \\(.*\\)$/, ''))}</button>`).join('')}<button class="btn sm" data-act="eq-add" data-type="other">+ Other</button></div>
+    </section>
+    <section class="card"><h2>Picked by section</h2>
+      ${SECTIONS.filter((s) => inScope(j, s.key)).map((s) => { const nde = secData(s.key).nde; return `<div class="eq-sec"><b>${h(s.label)}</b> ${nde.length ? nde.map((n) => `<span class="eq-m">${h(n.method)}: ${(n.equip || []).length ? (n.equip || []).map((id) => list.find((e) => e.id === id)).filter(Boolean).map((e) => h(equipName(e))).join(', ') : '<span class="muted">none picked</span>'}</span>`).join('') : '<span class="muted small">no NDE methods yet</span>'} <button class="btn sm ghost" data-go="nde:${s.key}">NDE →</button></div>`; }).join('')}
+      <p class="muted small">When you choose a method on an NDE page, matching equipment from this list is picked automatically (e.g. MFL floor scan → MFL scanner and reference plate; UT thickness → gauge, probe and block). Adjust it there.</p></section>
   </div>`;
 }
 
@@ -2467,6 +2506,25 @@ document.addEventListener('click', async (e) => {
       if ((sh.courses || []).length && !(await askConfirm('Replace the current courses?', { ok: 'Replace' }))) return;
       sh.courses = Array.from({ length: n }, () => ({ id: uid(), h: ch, tNom: null, tMin: null })); commit(); refreshShell(); return;
     }
+    case 'eq-add': {
+      const e = newEquip(el.dataset.type || 'other'); (S.job.equipment = S.job.equipment || []).push(e);
+      // pick it for existing methods that use this type and have nothing of that type yet
+      for (const sx of SECTIONS) for (const n of secData(sx.key).nde) if (suggestEquip([e], n.method).length && !(n.equip || []).some((id) => S.job.equipment.find((x) => x.id === id)?.type === e.type)) n.equip = [...(n.equip || []), e.id];
+      commit(); renderView(); setTimeout(() => $(`[data-eq="make"][data-id="${e.id}"]`)?.focus(), 30); return;
+    }
+    case 'eq-dup': {
+      const src = (S.job.equipment || []).find((x) => x.id === id); if (!src) return;
+      const e = newEquip(src.type, { ...src, id: undefined, serial: '' }); e.id = newEquip().id;
+      S.job.equipment.splice(S.job.equipment.indexOf(src) + 1, 0, e); commit(); renderView(); setTimeout(() => $(`[data-eq="serial"][data-id="${e.id}"]`)?.focus(), 30); return;
+    }
+    case 'eq-del': {
+      const e = (S.job.equipment || []).find((x) => x.id === id); if (!e) return;
+      const used = equipUse(S.job, SECTIONS).get(id) || [];
+      if (!(await askConfirm(`Remove ${equipName(e)}${e.serial ? ' (S/N ' + e.serial + ')' : ''} from the equipment list?${used.length ? `\n\nIt is picked for: ${used.join('; ')}.` : ''}`, { ok: 'Remove', danger: true }))) return;
+      S.job.equipment = S.job.equipment.filter((x) => x.id !== id);
+      for (const sx of SECTIONS) for (const n of secData(sx.key).nde) if (n.equip) n.equip = n.equip.filter((x) => x !== id);
+      commit(); renderView(); return;
+    }
     case 'courses-fill': {
       const cs = S.job.shell?.courses || [], c1 = cs[0]; if (!c1) return;
       for (const c of cs.slice(1)) { for (const k of ['pn', 'plen']) if ((c[k] === null || c[k] === undefined || c[k] === '') && c1[k] != null) c[k] = c1[k]; }
@@ -2503,6 +2561,7 @@ document.addEventListener('click', async (e) => {
       const k = el.dataset.sec, kind = el.dataset.kind, d = secData(k);
       const have = new Set(d[kind].map((x) => (kind === 'nde' ? x.method : x.item)));
       const add = (kind === 'nde' ? typicalNDE(k) : typicalObs(k)).filter((x) => !have.has(kind === 'nde' ? x.method : x.item));
+      if (kind === 'nde') for (const x of add) x.equip = suggestEquip(S.job.equipment, x.method);
       d[kind].push(...add); commit(); renderView(); renderNav(); toast(add.length ? `Added ${add.length} item${add.length > 1 ? 's' : ''}.` : 'The typical items are already there.'); return;
     }
     case 'rec-from': case 'rec-all': {
@@ -2800,9 +2859,32 @@ document.addEventListener('change', async (e) => {
     const f = el.dataset.f; p[f] = el.type === 'checkbox' ? el.checked : el.value;
     await db.putPhoto(p); S.job.updated = Date.now(); scheduleSave(); if (f === 'obs') renderView(); return;
   }
+  if (el.matches('[data-eq]')) {
+    const e = (S.job.equipment || []).find((x) => x.id === el.dataset.id); if (!e) return;
+    e[el.dataset.eq] = el.value.trim(); commit();
+    if (el.tagName === 'SELECT' || el.type === 'date') renderView();
+    return;
+  }
+  if (el.matches('[data-eqpick]')) {
+    const it = secData(el.dataset.sec).nde.find((x) => x.id === el.dataset.iid); if (!it) return;
+    const set = new Set(it.equip || []); el.checked ? set.add(el.dataset.eqpick) : set.delete(el.dataset.eqpick);
+    it.equip = (S.job.equipment || []).map((e) => e.id).filter((x) => set.has(x)); commit();
+    const sm = el.closest('details')?.querySelector('summary'); if (sm) sm.innerHTML = eqChips(it);
+    return;
+  }
+  if (el.id === 'eqCopyFrom' && el.value) {
+    const src = await db.getJob(el.value); el.value = '';
+    if (!src?.equipment?.length) return;
+    const have = new Set((S.job.equipment || []).map((e) => [e.type, e.serial, e.model].join('|')));
+    const add = src.equipment.filter((e) => !have.has([e.type, e.serial, e.model].join('|'))).map((e) => ({ ...JSON.parse(JSON.stringify(e)), id: newEquip().id }));
+    S.job.equipment = [...(S.job.equipment || []), ...add];
+    for (const sx of SECTIONS) for (const n of secData(sx.key).nde) if (!(n.equip || []).length) n.equip = suggestEquip(S.job.equipment, n.method);
+    commit(); renderView(); toast(add.length ? `${add.length} item${add.length === 1 ? '' : 's'} copied — check the calibration dates.` : 'Those items are already on the list.'); return;
+  }
   if (el.matches('[data-sx]')) {
     const list = secData(el.dataset.sec)[el.dataset.sx] || [], it = list.find((x) => x.id === el.dataset.iid); if (!it) return;
     const f = el.dataset.f, v = el.type === 'checkbox' ? el.checked : el.value;
+    if (el.dataset.sx === 'nde' && f === 'method' && !(it.equip || []).length) it.equip = suggestEquip(S.job.equipment, v);
     if (f === 'status' && it.status !== v) { it.history = it.history || []; const d = new Date().toISOString().slice(0, 10); it.history.push({ date: d, status: v }); if (v === 'Closed') it.closedOn = d; else delete it.closedOn; }
     it[f] = v;
     if (f === 'def' && v) numberDefs(S.job);
@@ -3118,3 +3200,14 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 })();
 
 window.__app = S; // handy for debugging in the console
+
+// equipment picker: float the list above the table (tables scroll and would clip it); close on outside click / scroll
+document.addEventListener('click', (e) => { for (const d of document.querySelectorAll('details.eqpick[open]')) if (!d.contains(e.target)) d.open = false; });
+document.addEventListener('toggle', (e) => {
+  const d = e.target; if (!d.matches?.('details.eqpick') || !d.open) return;
+  const pop = d.querySelector('.eqpop'), r = d.querySelector('summary').getBoundingClientRect();
+  pop.style.position = 'fixed'; pop.style.left = Math.min(r.left, innerWidth - 300) + 'px';
+  const below = innerHeight - r.bottom;
+  if (below < 260 && r.top > below) { pop.style.top = ''; pop.style.bottom = (innerHeight - r.top + 4) + 'px'; } else { pop.style.bottom = ''; pop.style.top = (r.bottom + 4) + 'px'; }
+}, true);
+document.addEventListener('scroll', (e) => { if (e.target.closest?.('.eqpop')) return; for (const d of document.querySelectorAll('details.eqpick[open]')) d.open = false; }, true);

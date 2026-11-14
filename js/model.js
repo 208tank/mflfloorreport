@@ -1,4 +1,5 @@
 // Job model helpers.
+import { equipFromLegacy, suggestEquip } from './equipment.js';
 import { defaultLayout, buildLayout, toFloor, toLocal } from './geometry.js';
 import { defaultCalc } from './calc.js';
 import { defaultShell, migrateShell } from './shell.js';
@@ -19,7 +20,7 @@ export function newJob(units = 'imperial') {
     info: { client: '', site: '', tankId: '', product: '', reportNo: '', workOrder: '', inspDate: today, zeroRef: 'N', mflTech: '', utTech: '', inspector: '', notes: '' },
     tank: { diameter: null, tBottom: units === 'metric' ? 6 : 6.35, tAnnular: null, bottomType: 'Lap welded', coating: 'None', cp: false, rpb: false, yearBuilt: '', lastInternal: '', code: 'API 650', edition: '', supp: '', sg: null, fillH: null, opTemp: null },
     layout: units === 'metric' ? { ...defaultLayout(), plateW: 2400, plateL: 9000, annW: 600 } : defaultLayout(),
-    equip: {},
+    equip: {}, equipment: [],
     calc: units === 'metric' ? { ...defaultCalc(), czDist: 75 } : defaultCalc(),
     plates: {}, indications: [], features: [], nozzles: [], shell: defaultShell(units), roof: defaultRoof(units), settle: defaultSettle(units),
     secs: defaultSecs(), summary: defaultSummary(), defSeq: 0, status: { ...defaultStatus(), history: [{ stage: 'upcoming', at: Date.now() }] }
@@ -43,6 +44,11 @@ export function migrate(job) {
     secs: migrateSecs(job.secs), summary: { ...defaultSummary(), ...(job.summary || {}) }, defSeq: job.defSeq || 0,
     status: job.status ? { ...defaultStatus(), ...job.status } : { ...defaultStatus(), stage: (job.indications || []).length || job.rev ? 'inspection' : 'upcoming' }
   };
+  // v3.4.2: equipment is a list; NDE methods reference the items they used.
+  if (!Array.isArray(job.equipment)) {
+    out.equipment = equipFromLegacy(job.equip);
+    for (const sec of Object.values(out.secs || {})) for (const n of sec.nde || []) if (!Array.isArray(n.equip)) n.equip = suggestEquip(out.equipment, n.method);
+  } else out.equipment = job.equipment;
   if (out.calc.patchMargin === 25.4) out.calc.patchMargin = 50.8; // v3.1 default was 1 in; API 653 9.10.1.1 b asks for 2 in
   // schema 2: X/Y on shell-cut plates are measured from the plate edges, not the seam/shell point.
   // Convert older jobs so their indications stay where they were on the floor.

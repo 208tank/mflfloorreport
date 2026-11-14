@@ -1,4 +1,5 @@
 // Printable report (browser print → Save as PDF).
+import { EQ_LABEL, EQ_TYPES, equipName, equipLine, calState, equipUse, useByMethod } from './equipment.js';
 import { fmt, fmtRate, u } from './units.js';
 import { RESULTS, RESULT_SHORT, nozzleUT, nozzleWall, NZ_CONN_SHORT, UT_CLOCK } from './calc.js';
 import { renderMapSVG, COLORS } from './map.js';
@@ -152,10 +153,15 @@ ${patches.some((pp) => pp.checks.length) ? `<h3 class="rp-h3">Critical zone patc
 
   <section class="pb-avoid">
     <h2>Equipment and personnel</h2>
-    <div class="cols">
-      ${kv([['MFL scanner', h([E.mflMake, E.mflModel].filter(Boolean).join(' '))], ['Serial no.', h(E.mflSerial)], ['Calibration / reference', h([E.mflRef, E.mflCal].filter(Boolean).join(' · '))], ['Reporting threshold', E.mflThreshold ? h(E.mflThreshold) + ' %' : '—'], ['Sensitivity / settings', h(E.mflSettings)]])}
-      ${kv([['UT instrument', h([E.utMake, E.utModel].filter(Boolean).join(' '))], ['Serial no.', h(E.utSerial)], ['Probe', h(E.utProbe)], ['Calibration block', h(E.utBlock)], ['VT tools', h(E.vtTools), ['Date of UT readings', h(I.utDate)]]])}
-    </div>
+    ${(() => {
+      const use = equipUse(job, SECTIONS, inScope), all = job.equipment || [];
+      // only what the NDE methods used; if nothing has been picked yet, list everything on the job
+      const picked = all.filter((e) => use.has(e.id));
+      const list = (picked.length ? picked : all).slice().sort((a, b) => EQ_TYPES.findIndex(([k]) => k === a.type) - EQ_TYPES.findIndex(([k]) => k === b.type));
+      if (!list.length) return '<p class="muted">No equipment listed.</p>';
+      return `<table class="grid small eq-rt"><thead><tr><th>Equipment</th><th>Make / model</th><th>Serial no.</th><th>Calibrated</th><th>Cal. due</th><th>Settings / details</th><th>Used for</th></tr></thead><tbody>${list.map((e) => `<tr class="${calState(e, I.inspDate) === 'expired' ? 'is-bad' : ''}"><td>${h(EQ_LABEL[e.type] || e.type)}</td><td>${h([e.make, e.model].filter(Boolean).join(' '))}</td><td>${h(e.serial)}</td><td>${h(e.calDate)}</td><td>${h(e.calDue)}${calState(e, I.inspDate) === 'expired' ? ' <b>(expired)</b>' : ''}</td><td>${h([e.details, e.type === 'mfl' && e.threshold ? 'reporting threshold ' + e.threshold + ' %' : ''].filter(Boolean).join(' · '))}</td><td>${useByMethod(use.get(e.id)).map(h).join('<br>')}</td></tr>`).join('')}</tbody></table>`;
+    })()}
+    ${I.utDate ? `<p class="small">Date of UT readings: ${h(I.utDate)}</p>` : ''}
     ${I.notes ? `<p><b>Notes:</b> ${h(I.notes).replace(/\n/g, '<br>')}</p>` : ''}
     <table class="sig"><tr>${[['MFL operator', I.mflTech], ['UT technician', I.utTech], ['API 653 inspector', I.inspector]].map(([r, n]) => `<td><div class="line"></div><b>${h(n || '')}</b><br>${r} · Date</td>`).join('')}</tr></table>
   </section>
@@ -347,7 +353,7 @@ export function sectionChaptersHTML(job, photos, opts = {}) {
     const d = job.secs?.[s.key] || {}, ph = (photos || []).filter((p) => p.sec === s.key && p.inReport !== false).sort((a, b) => (a.n || 0) - (b.n || 0));
     if (!d.nde?.length && !d.obs?.length && !d.recs?.length && !ph.length) continue;
     out.push(`<section class="pb chap"><h2>${h(s.label)} — inspection findings</h2>
-      ${d.nde?.length ? `<h3 class="rp-h3">NDE performed</h3><table class="grid small"><thead><tr><th>Method</th><th>Extent</th><th>Procedure</th><th>Technician</th><th>Date</th><th>Result</th><th>Notes</th></tr></thead><tbody>${d.nde.map((n) => `<tr><td>${h(n.method)}</td><td>${h(n.extent)}</td><td>${h(n.proc)}</td><td>${h(n.tech)}</td><td>${h(n.date)}</td><td>${h(n.result)}</td><td>${h(n.notes)}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${d.nde?.length ? `<h3 class="rp-h3">NDE performed</h3><table class="grid small"><thead><tr><th>Method</th><th>Extent</th><th>Procedure</th><th>Technician</th><th>Date</th><th>Equipment</th><th>Result</th><th>Notes</th></tr></thead><tbody>${d.nde.map((n) => `<tr><td>${h(n.method)}</td><td>${h(n.extent)}</td><td>${h(n.proc)}</td><td>${h(n.tech)}</td><td>${h(n.date)}</td><td>${(n.equip || []).map((id) => (job.equipment || []).find((e) => e.id === id)).filter(Boolean).map((e) => h(equipLine(e))).join('<br>')}</td><td>${h(n.result)}</td><td>${h(n.notes)}</td></tr>`).join('')}</tbody></table>` : ''}
       ${d.obs?.length ? `<h3 class="rp-h3">Observations</h3><table class="grid small"><thead><tr><th>#</th><th>Item</th><th>Location</th><th>Condition</th><th>Observation</th><th>Photos</th></tr></thead><tbody>${d.obs.map((o, i) => `<tr class="${o.cond === 'poor' ? 'is-bad' : ''}"><td>${i + 1}</td><td>${h(o.item)}</td><td>${h(o.loc)}</td><td>${condText(o.cond)}</td><td>${h(o.text)}</td><td>${ph.filter((p) => p.obs === o.id).map(photoNo).join(', ')}</td></tr>`).join('')}</tbody></table>` : ''}
       ${d.recs?.length ? `<h3 class="rp-h3">Recommendations</h3><table class="grid small"><thead><tr><th>No.</th><th>Finding</th><th>Recommended action</th><th>Priority</th><th>Due</th><th>Status</th></tr></thead><tbody>${d.recs.map((r) => `<tr><td>${h(r.def ? r.no || '' : '—')}</td><td>${h(r.finding)}${r.loc ? `<br><small>${h(r.loc)}</small>` : ''}</td><td>${h(r.action)}</td><td>${h(r.priority)}</td><td>${h(r.due || '')}</td><td>${h(r.status)}</td></tr>`).join('')}</tbody></table>` : ''}
       ${ph.length && opts.photos !== false ? `<h3 class="rp-h3">Photographs</h3><div class="photos sec-ph">${ph.map((p) => fig(p)).join('')}</div>` : ''}

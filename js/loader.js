@@ -1,5 +1,6 @@
 // UT loader sheet: an Excel workbook built from the job for the UT technician to fill in, and the
 // matching import that writes the readings back into the job.
+import { utKit } from './equipment.js';
 import { writeXlsx, readXlsx, ref, ST } from './xlsx.js';
 import { u, fromMm, toMm } from './units.js';
 import { buildLayout } from './geometry.js';
@@ -40,6 +41,7 @@ export async function buildLoader(job) {
   const title = (t, note) => [[null, { v: `${t} — ${tankName}`, s: ST.title }], [null, { v: note, s: ST.note }]];
 
   /* Info */
+  const kit = utKit(job);
   const info = [
     [null, { v: 'UT loader sheet', s: ST.title }],
     [null, { v: 'Fill in the yellow cells, save, and return this file to the inspector.', s: ST.note }],
@@ -54,9 +56,9 @@ export async function buildLoader(job) {
     [],
     [null, { v: 'Completed by the UT technician', s: ST.sub }],
     [K('tech'), LB('UT technician'), { v: job.info.utTech || '', s: ST.inTxt }],
-    [K('instr'), LB('UT instrument'), { v: [job.equip?.utMake, job.equip?.utModel].filter(Boolean).join(' '), s: ST.inTxt }],
-    [K('serial'), LB('Serial no.'), { v: job.equip?.utSerial || '', s: ST.inTxt }],
-    [K('probe'), LB('Probe'), { v: job.equip?.utProbe || '', s: ST.inTxt }],
+    [K('instr'), LB('UT instrument'), { v: [kit.ut?.make, kit.ut?.model].filter(Boolean).join(' '), s: ST.inTxt }],
+    [K('serial'), LB('Serial no.'), { v: kit.ut?.serial || '', s: ST.inTxt }],
+    [K('probe'), LB('Probe'), { v: [kit.probe?.make, kit.probe?.model, kit.probe?.details].filter(Boolean).join(' ') || '', s: ST.inTxt }],
     [K('date'), LB('Date of readings'), { v: job.info.utDate || '', s: ST.inTxt }],
     [],
     [null, { v: 'Instructions', s: ST.sub }],
@@ -271,16 +273,18 @@ export async function readLoader(job, buf) {
   const infoOps = [];
   if (txt(info.tech) && txt(info.tech) !== (job.info.utTech || '')) infoOps.push(() => { job.info.utTech = txt(info.tech); });
   if (txt(info.date) && txt(info.date) !== (job.info.utDate || '')) infoOps.push(() => { job.info.utDate = txt(info.date); });
-  if (txt(info.serial) && txt(info.serial) !== (job.equip?.utSerial || '')) infoOps.push(() => { job.equip.utSerial = txt(info.serial); });
-  if (txt(info.probe) && txt(info.probe) !== (job.equip?.utProbe || '')) infoOps.push(() => { job.equip.utProbe = txt(info.probe); });
-  const instr = txt(info.instr), cur = [job.equip?.utMake, job.equip?.utModel].filter(Boolean).join(' ');
-  if (instr && instr !== cur) infoOps.push(() => { job.equip.utMake = ''; job.equip.utModel = instr; });
+  const kit0 = utKit(job);
+  if (txt(info.serial) && txt(info.serial) !== (kit0.ut?.serial || '')) infoOps.push(() => { utKit(job, true).ut.serial = txt(info.serial); });
+  const pcur = [kit0.probe?.make, kit0.probe?.model, kit0.probe?.details].filter(Boolean).join(' ');
+  if (txt(info.probe) && txt(info.probe) !== pcur) infoOps.push(() => { const p = utKit(job, true).probe; p.make = ''; p.model = txt(info.probe); p.details = ''; });
+  const instr = txt(info.instr), cur = [kit0.ut?.make, kit0.ut?.model].filter(Boolean).join(' ');
+  if (instr && instr !== cur) infoOps.push(() => { const u = utKit(job, true).ut; u.make = ''; u.model = instr; });
 
   const list = [...summary.values()];
   return {
     info, jobMatch: info.job === job.id, units,
     summary: list, total: list.reduce((a, s) => a + s.added + s.changed, 0), errors, unmatched, infoChanges: infoOps.length,
-    apply() { job.equip = job.equip || {}; ops.forEach((f) => f()); infoOps.forEach((f) => f()); }
+    apply() { ops.forEach((f) => f()); infoOps.forEach((f) => f()); }
   };
 }
 
