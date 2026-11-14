@@ -508,4 +508,110 @@ export default {
     await page.waitForFunction(() => window.tfi && document.querySelector('#main').children.length, null, { timeout: 10000 });
     await ctx.close();
   }
+  ,
+  async 'migrations: upgrading a v3.6.0 database keeps every record, logs the step and adds baseline revisions'({ browser, url, appPage }) {
+    const { readFileSync } = await import('node:fs');
+    const demo = JSON.parse(readFileSync(new URL('../fixtures/demo.json', import.meta.url), 'utf8'));
+    const ctx = await browser.newContext({ serviceWorkers: 'block' });
+    const pre = await ctx.newPage();
+    await pre.goto(url + 'icons/icon.svg');
+    await pre.evaluate(seedV3, { ...demo, schema: 3 }); const before = await pre.evaluate(dumpStores);
+    await pre.close();
+    const page = await appPage(browser, url, { demo: false, ctx });
+    await page.evaluate(async () => { const { db } = await import('./js/db.js'); for (let i = 0; i < 150 && !(await db.getMeta('baseline:v4')); i++) await new Promise((r) => setTimeout(r, 100)); });
+    const after = await page.evaluate(dumpStores);
+    assert.equal(after.version, 4);
+    for (const s of ['jobs', 'photos', 'tanks', 'cards']) assert.deepEqual(after[s], before[s], `${s} changed during the upgrade`);
+    assert.deepEqual(after.newStores, ['audit', 'imports', 'revisions']);
+    const dbLog = after.migrations.filter((m) => m.kind === 'db');
+    assert.deepEqual(dbLog.map((m) => [m.from, m.to]), [[3, 4]]);
+    assert.ok(dbLog[0].app, 'the log records the app version');
+    // one baseline revision per job, holding the stored job exactly, with a matching checksum
+    const revs = await page.evaluate(async () => { const { db } = await import('./js/db.js'), { sha256 } = await import('./js/util.js'); const out = []; for (const id of ['demo-a', 'demo-b']) for (const r of await db.jobRevisions(id)) out.push({ id: r.id, reason: r.reason, ok: r.hash === (await sha256(r.job)), job: r.job, photos: r.photoIds }); return out; });
+    assert.deepEqual(revs.map((r) => [r.id, r.reason, r.ok]), [['demo-a:1', 'migration', true], ['demo-b:1', 'migration', true]]);
+    assert.deepEqual(revs[0].job, before.jobs.find((j) => j.id === 'demo-a'));
+    assert.deepEqual(revs[0].photos, ['p1']);
+    // the baseline runs once: reloading adds nothing
+    await page.reload(); await page.waitForFunction(() => window.tfi && document.querySelector('#main').children.length);
+    await page.waitForTimeout(2500);
+    assert.equal(await page.evaluate(async () => (await (await import('./js/db.js')).db.jobRevisions('demo-a')).length), 1);
+    assert.deepEqual(page.errors, []);
+    await ctx.close();
+  },
+
+  async 'migrations: opening an older job keeps a copy of it as it was, then migrates and logs it'({ browser, url, appPage }) {
+    const { readFileSync } = await import('node:fs');
+    const demo = JSON.parse(readFileSync(new URL('../fixtures/legacy-schema1.json', import.meta.url), 'utf8'));
+    const ctx = await browser.newContext({ serviceWorkers: 'block' });
+    const pre = await ctx.newPage(); await pre.goto(url + 'icons/icon.svg');
+    await pre.evaluate(seedV3, { ...demo, schema: 1 }); const before = await pre.evaluate(dumpStores);
+    await pre.close();
+    const page = await appPage(browser, url, { demo: false, ctx });
+    await page.evaluate(async () => { const { db } = await import('./js/db.js'); for (let i = 0; i < 150 && !(await db.getMeta('baseline:v4')); i++) await new Promise((r) => setTimeout(r, 100)); });
+    await page.evaluate(() => window.tfi.go('jobs'));
+    await page.click('[data-act="job-open"][data-id="demo-a"]');
+    await page.waitForFunction(() => window.tfi.job()?.id === 'demo-a' && window.tfi.job().schema === 4);
+    await page.waitForTimeout(800); // let the migrated job save
+    const r = await page.evaluate(async () => {
+      const { db } = await import('./js/db.js');
+      const revs = await db.jobRevisions('demo-a'), log = await db.migrationLog(), stored = await db.getJob('demo-a');
+      return { revs: revs.map((x) => [x.n, x.reason, x.note, x.schema, x.job]), jobLog: log.filter((m) => m.kind === 'job' && m.jobId === 'demo-a').map((m) => [m.from, m.to]), storedSchema: stored.schema };
+    });
+    assert.deepEqual(r.revs.map((x) => x.slice(0, 4)), [[1, 'migration', 'Baseline at upgrade to the data integrity version', 1], [2, 'migration', 'Before migration from schema 1 to 4', 1]]);
+    assert.deepEqual(r.revs[1][4], before.jobs.find((j) => j.id === 'demo-a'), 'the revision holds the job exactly as stored before the migration');
+    assert.deepEqual(r.jobLog, [[1, 2], [2, 3], [3, 4]]);
+    assert.equal(r.storedSchema, 4);
+    // opening it again adds no revision and no log entry
+    const openVia = (id) => page.evaluate((i) => { window.tfi.go('jobs'); document.querySelector(`[data-act="job-open"][data-id="${i}"]`).click(); }, id);
+    await openVia('demo-b');
+    await page.waitForFunction(() => window.tfi.job()?.id === 'demo-b');
+    await page.waitForTimeout(300);
+    await openVia('demo-a');
+    await page.waitForFunction(() => window.tfi.job()?.id === 'demo-a');
+    assert.equal(await page.evaluate(async () => (await (await import('./js/db.js')).db.jobRevisions('demo-a')).length), 2);
+    assert.deepEqual(page.errors, []);
+    await ctx.close();
+  },
+
+  async 'migrations: a database step that fails leaves the old database and its data untouched'({ browser, url }) {
+    const { readFileSync } = await import('node:fs');
+    const demo = JSON.parse(readFileSync(new URL('../fixtures/demo.json', import.meta.url), 'utf8'));
+    const ctx = await browser.newContext({ serviceWorkers: 'block' });
+    const pre = await ctx.newPage(); await pre.goto(url + 'icons/icon.svg');
+    await pre.evaluate(seedV3, { ...demo, schema: 3 }); const before = await pre.evaluate(dumpStores);
+    await pre.close();
+    await ctx.addInitScript(() => { window.__tfiFailDbStep = 4; });
+    const page = await ctx.newPage();
+    const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
+    await page.goto(url);
+    await page.waitForFunction(() => /could not be opened/.test(document.querySelector('#main')?.textContent || ''), null, { timeout: 10000 });
+    await page.close();
+    const chk = await ctx.newPage(); await chk.goto(url + 'icons/icon.svg');
+    const after = await chk.evaluate(dumpStores);
+    assert.equal(after.version, 3);
+    assert.deepEqual(after.newStores, []);
+    for (const s of ['jobs', 'photos', 'tanks', 'cards']) assert.deepEqual(after[s], before[s]);
+    assert.deepEqual(after.migrations, []);
+    assert.deepEqual(errors, []);
+    await ctx.close();
+  }
 };
+
+/** In the page: create the v3.6.0 database (version 3) with two jobs, a photo, a tank and their cards. Returns the stores. */
+async function seedV3(job) {
+  const lite = (j) => { const { indications, plates, features, shell, roof, settle, ...rest } = j; return { ...rest, nInds: (indications || []).length }; };
+  const db = await new Promise((res) => { const q = indexedDB.open('tank-floor-inspector', 3); q.onupgradeneeded = () => { const d = q.result; d.createObjectStore('jobs', { keyPath: 'id' }); d.createObjectStore('photos', { keyPath: 'id' }).createIndex('jobId', 'jobId'); d.createObjectStore('meta', { keyPath: 'key' }); d.createObjectStore('tanks', { keyPath: 'id' }); d.createObjectStore('cards', { keyPath: 'id' }); }; q.onsuccess = () => res(q.result); });
+  const a = { ...job, id: 'demo-a' }, b = { ...job, id: 'demo-b', info: { ...job.info, tankId: 'TK-202' } };
+  await new Promise((res) => { const t = db.transaction(['jobs', 'photos', 'tanks', 'cards'], 'readwrite'); for (const j of [a, b]) { t.objectStore('jobs').put(j); t.objectStore('cards').put(lite(j)); } t.objectStore('photos').put({ id: 'p1', jobId: 'demo-a', indId: null, caption: 'x', dataUrl: 'data:image/png;base64,AA==' }); t.objectStore('tanks').put({ id: 't1', kind: 'tank', info: { tankId: 'TK-101' } }); t.oncomplete = res; });
+  db.close();
+}
+/** In the page: every record of the main stores, the version, new stores and the migration log. */
+async function dumpStores() {
+  const db = await new Promise((res) => { const q = indexedDB.open('tank-floor-inspector'); q.onsuccess = () => res(q.result); });
+  const all = (n) => new Promise((res) => { const r = db.transaction(n).objectStore(n).getAll(); r.onsuccess = () => res(r.result.sort((x, y) => String(x.id).localeCompare(String(y.id)))); });
+  const out = { version: db.version, newStores: [...db.objectStoreNames].filter((n) => ['revisions', 'audit', 'imports'].includes(n)).sort() };
+  for (const n of ['jobs', 'photos', 'tanks', 'cards']) out[n] = await all(n);
+  const m = await new Promise((res) => { const r = db.transaction('meta').objectStore('meta').get('migrations'); r.onsuccess = () => res(r.result?.value || []); });
+  out.migrations = m; db.close();
+  return out;
+}

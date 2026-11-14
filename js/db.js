@@ -1,7 +1,10 @@
 // Minimal IndexedDB wrapper. Stores: jobs, photos, meta, tanks (the tank registry) and cards
 // (a light copy of each job, without readings, for the job lists and the Dashboard).
+import { DB_VERSION, upgradeDb } from './migrations.js';
 const DB_NAME = 'tank-floor-inspector';
-const DB_VER = 3;
+const DB_VER = DB_VERSION;
+/** App version recorded in the migration log (set by the app at start-up). */
+export const dbConfig = { appVersion: '', failStep: null };
 
 /** The job without its bulky readings: what the Jobs list, Dashboard and registry need. */
 export function lite(job) {
@@ -14,19 +17,11 @@ function open() {
   if (dbp) return dbp;
   dbp = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VER);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains('jobs')) db.createObjectStore('jobs', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('photos')) {
-        const s = db.createObjectStore('photos', { keyPath: 'id' });
-        s.createIndex('jobId', 'jobId');
-      }
-      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
-      if (!db.objectStoreNames.contains('tanks')) db.createObjectStore('tanks', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('cards')) {
-        const cards = db.createObjectStore('cards', { keyPath: 'id' });
-        req.transaction.objectStore('jobs').openCursor().onsuccess = (e) => { const c = e.target.result; if (c) { cards.put(lite(c.value)); c.continue(); } };
-      }
+    // migrations.js: every step from the stored version up runs in this one transaction; a step that
+    // throws aborts it, and the browser keeps the old database exactly as it was.
+    req.onupgradeneeded = (e) => {
+      try { upgradeDb(req.result, req.transaction, e.oldVersion, { lite, appVersion: dbConfig.appVersion, fail: dbConfig.failStep ?? globalThis.__tfiFailDbStep }); }
+      catch (err) { console.error('Database upgrade failed; nothing was changed', err); req.transaction.abort(); }
     };
     req.onsuccess = () => {
       const db = req.result;
@@ -34,7 +29,7 @@ function open() {
       db.onversionchange = () => { db.close(); dbp = null; };
       resolve(db);
     };
-    req.onerror = () => reject(req.error);
+    req.onerror = () => { dbp = null; reject(req.error); };
     // an older version of the app is open in another window and hasn't let go of the database yet
     req.onblocked = () => globalThis.dispatchEvent?.(new Event('tfi-db-blocked'));
   });
@@ -106,6 +101,28 @@ export const db = {
   async getTank(id) { return tx('tanks', 'readonly', (s) => reqP(s.get(id))); },
   async putTank(t) { return tx('tanks', 'readwrite', (s) => reqP(s.put(t))); },
   async deleteTank(id) { return tx('tanks', 'readwrite', (s) => reqP(s.delete(id))); },
+  /* ---- revisions (append-only; migrations.js step 4) ---- */
+  /** Add a revision. n = the next number for the job; the record is never updated afterwards. */
+  async addRevision(rec) {
+    const db_ = await open();
+    return new Promise((resolve, reject) => {
+      const t = db_.transaction('revisions', 'readwrite'), s = t.objectStore('revisions');
+      const r = s.index('jobN').openCursor(IDBKeyRange.bound([rec.jobId, -Infinity], [rec.jobId, Infinity]), 'prev');
+      let out;
+      r.onsuccess = () => { const n = (r.result?.value.n || 0) + 1; out = { ...rec, n, id: `${rec.jobId}:${n}` }; s.add(out); };
+      t.oncomplete = () => resolve(out);
+      t.onerror = () => reject(t.error);
+      t.onabort = () => reject(t.error || new Error('Revision not saved'));
+    });
+  },
+  async jobRevisions(jobId) { return tx('revisions', 'readonly', (s) => reqP(s.index('jobId').getAll(jobId))).then((a) => a.sort((x, y) => x.n - y.n)); },
+  async revisionCount(jobId) { return tx('revisions', 'readonly', (s) => reqP(s.index('jobId').count(jobId))); },
+  async getRevision(id) { return tx('revisions', 'readonly', (s) => reqP(s.get(id))); },
+  async migrationLog() { return (await this.getMeta('migrations')) || []; },
+  async logMigrations(entries) {
+    if (!entries?.length) return;
+    return txMany(['meta'], (M) => { const r = M.get('migrations'); r.onsuccess = () => M.put({ key: 'migrations', value: [...(r.result?.value || []), ...entries].slice(-500) }); });
+  },
   async getMeta(key) { const r = await tx('meta', 'readonly', (s) => reqP(s.get(key))); return r?.value; },
   async setMeta(key, value) { return tx('meta', 'readwrite', (s) => reqP(s.put({ key, value }))); }
 };

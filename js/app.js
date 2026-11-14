@@ -1,5 +1,7 @@
 // Tank Floor Inspector — main application.
-import { db, requestPersistence } from './db.js';
+import { db, requestPersistence, dbConfig } from './db.js';
+import { pendingSteps } from './migrations.js';
+import { sha256 } from './util.js';
 import { u, toMm, inVal, fmt, fmtRate, unitLabel, num, UNITS } from './units.js';
 import { buildLayout, stackSections, suggestCount, halfChord, plateAt, toLocal, itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
 import { api653, RESULTS, RESULT_SHORT, czLimitAuto, plateNominal, NZ_CONN, NZ_CONN_SHORT, UT_CLOCK, nozzleUT, nozzleWall, statusText } from './calc.js';
@@ -26,7 +28,7 @@ import { esc as h } from './util.js';
 import { $, $$, toast, askConfirm, askChoice } from './ui.js';
 import { jobCard, indCount } from './cards.js';
 
-const APP_VERSION = '3.6.0';
+const APP_VERSION = '3.7.0';
 
 const S = {
   jobs: [], tanks: [], reg: { q: '', open: new Set() }, job: null, layout: null, calc: null, photos: [], company: {},
@@ -116,12 +118,53 @@ function commit() { recompute(); scheduleSave(); }
 async function loadJobs() { S.jobs = (await db.allCards()).sort((a, b) => (b.updated || 0) - (a.updated || 0)); }
 async function loadTanks() { S.tanks = (await db.allTanks()).sort((a, b) => tankKeyOf(a).localeCompare(tankKeyOf(b), undefined, { numeric: true })); }
 
+/* ---------------------------------------------------------- history (data integrity upgrade) --- */
+
+/** Who is making changes on this device: the inspector name from Settings and a per-install id.
+ *  Shaped so a signed-in identity (Microsoft Entra ID) can replace it later. */
+async function whoAmI() {
+  let id = await db.getMeta('installId').catch(() => null);
+  if (!id) { id = 'dev-' + uid(); await db.setMeta('installId', id).catch(() => {}); }
+  return { name: S.company?.inspector || '', id, method: 'device' };
+}
+
+/** Add an immutable revision of a stored job (the job as given, without photos). */
+async function addRevision(job, reason, note = '') {
+  const keys = await db.jobPhotoKeys(job.id).catch(() => []);
+  return db.addRevision({ jobId: job.id, rev: job.rev || 0, at: Date.now(), by: await whoAmI(), reason, note, appVersion: APP_VERSION, schema: job.schema || 1, hash: await sha256(job), job, photoIds: keys });
+}
+
+/** After the history stores are added, give every existing job one baseline revision (once). */
+async function baselineRevisions() {
+  if (await db.getMeta('baseline:v4')) return;
+  for (const c of S.jobs) {
+    if (await db.revisionCount(c.id)) continue;
+    const j = await db.getJob(c.id); if (!j) continue;
+    await addRevision(j, 'migration', 'Baseline at upgrade to the data integrity version');
+  }
+  await db.setMeta('baseline:v4', Date.now());
+}
+
+function dbFailed(e) {
+  document.querySelector('#main')?.insertAdjacentHTML('afterbegin', `<section class="card"><h2>The device database could not be opened</h2><p>${h(String(e?.message || e))}</p><p class="muted">If the app was being updated, the update was stopped and your data is unchanged. Close other Tank Floor Inspector windows and reload. If this keeps happening, do not clear the browser data — contact support with this message.</p></section>`);
+}
+
 async function openJob(id, view = 'map') {
   await flushSave();
   const j = await db.getJob(id);
   if (!j) return toast('Job not found');
-  const notes = migrationNotes(j);
-  S.job = migrate(j);
+  const notes = migrationNotes(j), steps = pendingSteps(j).length, log = [];
+  let mj;
+  try {
+    if (steps) await addRevision(j, 'migration', `Before migration from schema ${j.schema || 1} to ${SCHEMA}`);
+    mj = migrate(j, { log, appVersion: APP_VERSION });
+  } catch (e) {
+    // the stored job is untouched (migrate works on a copy); record the failure and don't open it
+    await db.logMigrations([{ kind: 'job-error', jobId: id, from: j.schema || 1, to: SCHEMA, at: Date.now(), app: APP_VERSION, error: String(e.message || e) }]).catch(() => {});
+    return toast(`This job could not be updated to the current version (${e.message}). It has not been changed; save a backup and report the problem.`);
+  }
+  if (log.length) db.logMigrations(log).catch(() => {});
+  S.job = mj;
   S.photos = await db.jobPhotos(id);
   const fh = await db.getMeta('fh:' + id).catch(() => null);
   S.fileName = fh?.name || null;
@@ -592,13 +635,19 @@ function viewJobs() {
           <label class="btn sm">Choose logo<input type="file" accept="image/*" data-act="logo" hidden></label>${c.logo ? '<button class="btn sm ghost" data-act="logo-clear">Remove</button>' : ''}</div>
       </section>
       <section class="card"><h2>This device</h2>
+        <label class="fld"><span class="lbl">Inspector name on this device</span><span class="ctl"><input data-cb="inspector" value="${h(c.inspector || '')}" placeholder="Recorded with each saved revision and change"></span></label>
         <p id="storageInfo" class="muted">Checking storage…</p>
+        <p class="muted small" id="migInfo"></p>
         <p class="muted">Install the app from the browser's address bar (or the Install button above) so it opens full-window and works without a connection.</p>
         <button class="btn sm" data-act="persist">Ask browser to keep data permanently</button>
       </section>
     </div></div>`;
 }
 after.jobs = async () => {
+  try {
+    const log = await db.migrationLog(), mi = $('#migInfo');
+    if (mi) { const last = log.filter((x) => x.kind === 'db').at(-1), errs = log.filter((x) => x.kind === 'job-error'); mi.textContent = `Database version ${last?.to ?? '—'}${last ? ` (upgraded ${new Date(last.at).toLocaleDateString()})` : ''} · ${log.filter((x) => x.kind === 'job').length} job updates logged${errs.length ? ` · ${errs.length} job update${errs.length > 1 ? 's' : ''} failed` : ''}.`; }
+  } catch { /* history not available */ }
   const el = $('#storageInfo');
   try {
     const est = await navigator.storage?.estimate?.();
@@ -3302,8 +3351,11 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 }
 
 (async function init() {
-  S.company = (await db.getMeta('company')) || {};
+  dbConfig.appVersion = APP_VERSION;
+  try { S.company = (await db.getMeta('company')) || {}; }
+  catch (e) { dbFailed(e); return; }
   await loadJobs(); await loadTanks();
+  setTimeout(() => baselineRevisions().catch((e) => console.warn('Baseline revisions', e)), 1500);
   const last = await db.getMeta('lastJob');
   if (last && S.jobs.some((j) => j.id === last)) await openJob(last, 'dash');
   else go('dash');

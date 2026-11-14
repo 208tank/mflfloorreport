@@ -1,6 +1,7 @@
 // Job model helpers.
 import { equipFromLegacy, suggestEquip } from './equipment.js';
-import { defaultLayout, buildLayout, toFloor, toLocal } from './geometry.js';
+import { defaultLayout } from './geometry.js';
+import { JOB_STEPS, JOB_SCHEMA, pendingSteps, runJobSteps, stepNotes } from './migrations.js';
 import { defaultCalc } from './calc.js';
 import { defaultShell, migrateShell } from './shell.js';
 import { defaultRoof, migrateRoof } from './roof.js';
@@ -15,7 +16,7 @@ export const uid = () => Date.now().toString(36) + Math.random().toString(36).sl
 
 /** Job data version this copy of the app understands. Bump it whenever a release changes the job
  *  structure, so older installed copies refuse those files instead of re-saving them without the new data. */
-export const SCHEMA = 3;
+export const SCHEMA = JOB_SCHEMA;
 /** Job file (container) format version. */
 export const FILE_VERSION = 1;
 
@@ -38,20 +39,12 @@ export function newJob(units = 'imperial') {
 export function migrationNotes(job) {
   const out = [];
   if (job.calc?.patchMargin === 25.4) out.push('Patch plates now extend at least 2 in past the corrosion (was 1 in; API 653 §9.11.1.1 c).');
-  if ((job.schema || 1) < 2 && (job.indications || []).length) out.push('Indication X / Y on plates cut by the shell are now measured from the plate edges; positions on the floor are unchanged.');
   if (!Array.isArray(job.equipment) && job.equip && Object.values(job.equip).some(Boolean)) out.push('MFL / UT equipment moved to the Equipment list.');
-  if ((job.schema || 1) < 3) {
-    const c = job.calc || {};
-    if (c.mrtAnnular === 2.54) out.push('Annular plate limit: the old 0.10 in default is replaced by the API 653 Table 4.5 / API 650 Table 5.1 value where it can be calculated (§4.4.6). Enter a limit to override.');
-    if (c.mflThresholdPct === undefined && (job.indications || []).length) out.push('UPr now includes the MFL threshold (default 20 % of nominal, API 653 §4.4.5.1 Note 1). Change it on the API 653 page.');
-    if ((job.indications || []).some((i) => i.repair === 'yes' || i.repairMethod)) out.push('Repaired soil-side locations now keep their corrosion rate in UPr unless "cause of corrosion removed" is ticked, and only welded repairs remove a location from RT (API 653 §4.4.5.1 Note 1, §4.4.5.5–6).');
-    out.push('Calculations follow the approved corrections (critical-zone limit per §4.4.5.4, rate basis, coating / CP checks). Results may differ from the last report.');
-  }
-  return out;
+  return [...out, ...stepNotes(job)];
 }
 
-/** Bring older / imported jobs up to the current shape. */
-export function migrate(job) {
+/** Fill in every field a current job has, from the defaults (not versioned: safe to repeat). */
+function normalise(job) {
   const base = newJob(job.units || 'imperial');
   const out = {
     ...base, ...job,
@@ -73,21 +66,19 @@ export function migrate(job) {
     for (const sec of Object.values(out.secs || {})) for (const n of sec.nde || []) if (!Array.isArray(n.equip)) n.equip = suggestEquip(out.equipment, n.method);
   } else out.equipment = job.equipment;
   if (out.calc.patchMargin === 25.4) out.calc.patchMargin = 50.8; // v3.1 default was 1 in; API 653 §9.11.1.1 c asks for 2 in
-  // schema 3 (calculation review): the old 0.10 in annular default becomes "auto" (Table 4.5 / 5.1 value, §4.4.6)
-  if ((job.schema || 1) < 3) { if (job.calc?.mrtAnnular === 2.54) out.calc.mrtAnnular = null; }
-  // schema 2: X/Y on shell-cut plates are measured from the plate edges, not the seam/shell point.
-  // Convert older jobs so their indications stay where they were on the floor.
-  if ((job.schema || 1) < 2) {
-    try {
-      const oldL = buildLayout(out, { legacySnap: true }), newL = buildLayout(out);
-      for (const it of [...out.indications, ...out.features]) {
-        const po = oldL.byKey.get(it.plate), pn = newL.byKey.get(it.plate);
-        if (!po || !pn || !po.datum?.snapped || it.x == null || it.y == null) continue;
-        const f = toFloor(oldL, po, it.x, it.y), l = toLocal(newL, pn, f.x, f.y);
-        it.x = Math.round(Math.max(0, l.X) * 10) / 10; it.y = Math.round(Math.max(0, l.Y) * 10) / 10;
-      }
-    } catch { /* leave as is */ }
-  }
+  return out;
+}
+
+/**
+ * Bring older / imported jobs up to the current shape: normalise, then run the job migration steps the
+ * job still needs (migrations.js). When a step will run, it works on a copy, so a step that throws leaves
+ * `job` exactly as it was. `log` (optional array) receives one entry per step run.
+ */
+export function migrate(job, { log = null, steps = JOB_STEPS, appVersion = '' } = {}) {
+  const src = pendingSteps(job, steps).length ? structuredClone(job) : job;
+  const out = normalise(src);
+  const done = runJobSteps(out, src, steps, appVersion);
+  if (log) log.push(...done);
   out.schema = Math.max(job.schema || 1, SCHEMA);
   return out;
 }

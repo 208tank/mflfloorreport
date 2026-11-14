@@ -7,6 +7,23 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Data integrity upgrade — stage 11: migration management (v3.7.0)
+
+Database and job migrations are now ordered, numbered steps (`js/migrations.js`), logged on the
+device (Settings → This device shows the database version and the log).
+
+- **Database version 4** adds three empty, append-only stores — `revisions`, `audit`, `imports` — and
+  rewrites no existing record. All steps from the stored version run in one upgrade transaction; if a
+  step fails, the browser rolls the upgrade back, the old database is kept, and the app says so.
+- **Job schema 4**: steps 1→2 (plate X / Y), 2→3 (calculation review) and 3→4 (history fields) run in
+  order on a copy of the job, so a failing step leaves the stored job untouched and the job is not opened.
+- **Revisions**: on the first start after the upgrade every existing job gets one baseline revision (the
+  job exactly as stored, with a SHA-256 checksum). Before a stored job is migrated, a revision of it as it
+  was is kept. Revisions are never changed.
+- **Inspector name** (Settings → This device) is recorded with each revision.
+- Job files: v3.6.0 and older files open as before. Jobs saved by v3.7.0 are schema 4, so an older
+  installed app asks to be reloaded before opening them.
+
 ## Calculation corrections (v3.6.0)
 
 v3.6.0 applies the 28 approved items of the November 2026 calculation review (C-01 to C-31), checked
