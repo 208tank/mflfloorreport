@@ -864,7 +864,7 @@
   ],
   "tol": 0.001,
   "unit": "cm²/m",
-  "source": "40 CFR 60.113b (gap area per metre of tank diameter)",
+  "source": "SOR/2025-88 Schedule 4 2(c)–(f) (Σ width × length ÷ inside diameter); 40 CFR 60.113b not checked",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -1598,6 +1598,63 @@
     "key": "n30",
     "expected": 0.5625,
     "actual": 0.563,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-54",
+  "area": "Rim seal",
+  "units": "metric",
+  "basis": "equation",
+  "title": "Canada SOR/2025-88: external-roof shoe must reach 60 cm above the liquid",
+  "input": "External floating roof; mechanical shoe primary seal, top 30 cm above and bottom 15 cm below the liquid; 40 cm high.",
+  "steps": [
+   "s. 73(2)(b): EFR shoe in contact with the wall at least 60 cm above and 10 cm below the liquid",
+   "30 cm < 60 cm → fails",
+   "App applies the internal-roof rule (s. 64(2)(b)(ii): 10 cm above / below, 30 cm high) to both roof types"
+  ],
+  "tol": null,
+  "unit": "",
+  "source": "SOR/2025-88 s. 73(2)(b) (current to 19 Oct 2026) — C-30",
+  "status": "FAIL",
+  "error": null,
+  "checks": [
+   {
+    "key": "aboveOk",
+    "expected": "false",
+    "actual": "true",
+    "ok": false
+   }
+  ]
+ },
+ {
+  "id": "V-55",
+  "area": "Rim seal",
+  "units": "metric",
+  "basis": "equation",
+  "title": "Canada SOR/2025-88 gap limits are strict (less than)",
+  "input": "Primary seal widest gap exactly 4.0 cm; area 100 cm²/m.",
+  "steps": [
+   "s. 65(2) / 74(2): gaps must be less than 4 cm wide and 200 cm²/m → 4.0 cm fails",
+   "Schedule 4: area = Σ width × length ÷ inside diameter"
+  ],
+  "tol": null,
+  "unit": "",
+  "source": "SOR/2025-88 s. 74(2), Schedule 4",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "widthOk",
+    "expected": "false",
+    "actual": "false",
+    "ok": true
+   },
+   {
+    "key": "areaOk",
+    "expected": "true",
+    "actual": "true",
     "ok": true
    }
   ]

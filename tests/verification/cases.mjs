@@ -21,7 +21,7 @@ import { allowables, annularMin, edgeAllow, nozzleNeck } from '../../js/tables.j
 import { courseSummary } from '../../js/shell.js';
 import { settleCalc, edgeEval, depEval, profileEval, autoN, epOffsets, xKey } from '../../js/settle.js';
 import { pointStatus, plateUT } from '../../js/roof.js';
-import { gapSummary, cm2mToIn2ft } from '../../js/seal.js';
+import { gapSummary, cm2mToIn2ft, sealEval } from '../../js/seal.js';
 import { toMm } from '../../js/units.js';
 import { patchList } from '../../js/patches.js';
 
@@ -441,7 +441,7 @@ export const CASES = [
     input: 'D 30 m; two gaps each 1,000 mm long × 10 mm average width.',
     steps: ['Area = 2 × (100 cm × 1 cm) = 200 cm²', 'Per metre of diameter = 200 / 30 = 6.667 cm²/m'],
     expected: { perM: 6.6667 }, tol: 0.001, unit: 'cm²/m',
-    source: '40 CFR 60.113b (gap area per metre of tank diameter)',
+    source: 'SOR/2025-88 Schedule 4 2(c)–(f) (Σ width × length ÷ inside diameter); 40 CFR 60.113b not checked',
     run() { return { perM: gapSummary([{ len: 1000, wAvg: 10 }, { len: 1000, wAvg: 10 }], 30000).perM }; }
   },
   {
@@ -691,6 +691,40 @@ export const CASES = [
     expected: { n4: 0.337, n12: 0.5, n30: 0.5625 }, tol: 0.001, unit: 'in',
     source: 'API 650 (2021) Tables 5.6b and 5.7b. The app also takes 12.5 % off as a "minimum"; that is an as-built value, not a retirement thickness (C-19)',
     run() { const job = { tank: { code: 'API 650' } }; const n = (nps, sh) => nozzleNeck(nps, 'API 650', sh).nom; return { n4: n(4), n12: n(12), n30: n(30, 1.1) }; }
+  },
+
+  {
+    id: 'V-54', area: 'Rim seal', units: 'metric', basis: 'equation',
+    title: 'Canada SOR/2025-88: external-roof shoe must reach 60 cm above the liquid',
+    input: 'External floating roof; mechanical shoe primary seal, top 30 cm above and bottom 15 cm below the liquid; 40 cm high.',
+    steps: ['s. 73(2)(b): EFR shoe in contact with the wall at least 60 cm above and 10 cm below the liquid', '30 cm < 60 cm → fails', 'App applies the internal-roof rule (s. 64(2)(b)(ii): 10 cm above / below, 30 cm high) to both roof types'],
+    expected: { aboveOk: false }, tol: null, unit: '',
+    source: 'SOR/2025-88 s. 73(2)(b) (current to 19 Oct 2026) — C-30',
+    run() {
+      const job = newJob('metric'); job.tank.diameter = 30000; job.roof.type = 'efr';
+      job.roof.seal.std = { kb: false, ca: true, custom: false };
+      Object.assign(job.roof.seal.primary, { type: 'Mechanical shoe', shoeAbove: 300, shoeBelow: 150, shoeHeight: 400, noGaps: true });
+      job.roof.seal.secondary.noGaps = true;
+      const ev = sealEval(job, 'ca'), row = ev.rows.find((r) => /top above liquid/.test(r.item));
+      return { aboveOk: row ? row.ok : 'no row', limit: row?.limit };
+    }
+  },
+  {
+    id: 'V-55', area: 'Rim seal', units: 'metric', basis: 'equation',
+    title: 'Canada SOR/2025-88 gap limits are strict (less than)',
+    input: 'Primary seal widest gap exactly 4.0 cm; area 100 cm²/m.',
+    steps: ['s. 65(2) / 74(2): gaps must be less than 4 cm wide and 200 cm²/m → 4.0 cm fails', 'Schedule 4: area = Σ width × length ÷ inside diameter'],
+    expected: { widthOk: false, areaOk: true }, tol: null, unit: '',
+    source: 'SOR/2025-88 s. 74(2), Schedule 4',
+    run() {
+      const job = newJob('metric'); job.tank.diameter = 30000; job.roof.type = 'efr';
+      job.roof.seal.std = { kb: false, ca: true, custom: false };
+      job.roof.seal.primary.type = 'Liquid-mounted (foam / liquid filled)';
+      job.roof.seal.primary.gaps = [{ id: 'g', len: 7500, wAvg: 40, wMax: 40 }];
+      job.roof.seal.secondary.noGaps = true;
+      const ev = sealEval(job, 'ca');
+      return { widthOk: ev.rows.find((r) => /Primary seal — widest/.test(r.item)).ok, areaOk: ev.rows.find((r) => /Primary seal — gap area/.test(r.item)).ok };
+    }
   },
 
   /* ------------------------------------------------------------------- repair patches --- */
