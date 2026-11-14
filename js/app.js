@@ -29,7 +29,7 @@ import { esc as h } from './util.js';
 import { $, $$, toast, askConfirm, askChoice } from './ui.js';
 import { jobCard, indCount } from './cards.js';
 
-const APP_VERSION = '3.8.0';
+const APP_VERSION = '3.9.0';
 
 const S = {
   jobs: [], tanks: [], reg: { q: '', open: new Set() }, job: null, layout: null, calc: null, photos: [], company: {},
@@ -111,7 +111,28 @@ function showSaveState(st, err) {
     toast(`Could not save ${reg ? 'the tank' : 'to this device'}: ${saveErrorText(err)}. ${st === 'retrying' ? 'Trying again…' : 'Your changes are kept on screen; the app tries again with your next change.'}`, st === 'error' ? { label: 'Try again', fn: () => saver.flush() } : undefined);
   }
 }
-function scheduleSave() { if (!S.job) return; S.job.updated = Date.now(); saver.touch(); }
+/* Unsaved change detection (stage 2): each committed change is counted, with the area it was made in,
+   until the job is next saved to a file. */
+const VIEW_AREA = { map: 'Floor', inds: 'Floor', plates: 'Floor', api: 'Floor', shell: 'Shell', roofF: 'Roof', roofL: 'Roof', seal: 'Roof', nozzles: 'Nozzles', settle: 'Settlement', setup: 'Tank setup', equip: 'Equipment', summary: 'Findings and report', defs: 'Findings and report', report: 'Findings and report' };
+function scheduleSave() {
+  if (!S.job) return;
+  const j = S.job; j.updated = Date.now();
+  if (!j.regEdit) {
+    j.edits = (j.edits || 0) + 1;
+    const area = VIEW_AREA[S.view] || 'Other'; if (!(j.editAreas || []).includes(area)) j.editAreas = [...(j.editAreas || []), area];
+  }
+  saver.touch();
+  showFileState();
+}
+/** Changes not yet in the job file: { n, areas, known } (known = false for jobs from before the count existed). */
+function fileChanges(j) {
+  if (!j) return { n: 0, areas: [], known: true };
+  // the count decides; jobs from before the count existed fall back to the timestamps
+  const n = j.edits || 0, dirty = n > 0 || (j.edits === undefined && !!j.rev && (j.updated || 0) > (j.savedAt || 0));
+  if (!dirty) return { n: 0, areas: [], known: true };
+  return { n, areas: j.editAreas || [], known: n > 0 };
+}
+const changesText = (c) => (c.known ? `${c.n} change${c.n === 1 ? '' : 's'}` : 'changes');
 /** Write the open job now even if nothing was marked changed (after setting fields that must not
  *  count as an edit, such as the revision stamp). */
 function writeNow() { if (!S.job) return Promise.resolve(true); saver.touch(); return saver.flush(); }
@@ -214,17 +235,23 @@ function go(view) {
 window.tfi = { go: (v) => go(v), zoom: (x, y, r) => { S.mapCtl?.focus(x, y, r); drawMap(); }, job: () => S.job, commit: () => { commit(); renderView(); } }; // used by the automated tests
 function renderAll() { renderHeader(); renderNav(); renderView(); }
 
+/** The job file status in the header: revision, and changes saved on this device but not yet in the file. */
+function showFileState() {
+  const j = S.job, reg = !!j?.regEdit, fs = $('#fileState');
+  if (!fs) return;
+  fs.hidden = !j || reg;
+    const c = fileChanges(j);
+    fs.textContent = j ? (j.rev ? (c.n || !c.known ? `Rev ${j.rev} · ${changesText(c)} not in the file` : revText(j)) : `Not saved to a file${c.n ? ' · ' + changesText(c) : ''}`) : '';
+    fs.dataset.state = j && (!j.rev || c.n || !c.known) ? 'dirty' : 'clean';
+    fs.title = (j?.rev ? `${revText(j, true)}${S.fileName ? ' to ' + S.fileName : ''}` : 'Save file… keeps a copy in OneDrive and starts the revision count')
+      + (c.n || !c.known ? `\nSaved on this device. Not yet in the job file: ${changesText(c)}${c.areas.length ? ' (' + c.areas.join(', ') + ')' : ''} — press Save to put them in the file.` : '');
+}
+
 function renderHeader() {
   const j = S.job, reg = !!j?.regEdit;
   if (reg) $('#jobTitle').innerHTML = `<b>${h(j.info.tankId || 'New tank')} <em class="stg st-reg">Registry</em></b><span>${h([j.info.client, j.info.site, 'editing the tank data'].filter(Boolean).join(' · '))}</span>`;
   else $('#jobTitle').innerHTML = j ? `<b>${h(j.info.tankId || 'Untitled tank')}${j.rev ? ` <em class="rev">Rev ${j.rev}</em>` : ''}${j.status?.stage ? ` <em class="stg st-${j.status.stage}">${h(STAGE_LABEL[j.status.stage])}</em>` : ''}</b><span>${h([j.info.client, j.info.site, j.info.inspDate].filter(Boolean).join(' · '))}</span>` : '<span>No job open</span>';
-  const fs = $('#fileState');
-  if (fs) {
-    fs.hidden = !j || reg;
-    fs.textContent = j ? (j.rev ? (unsavedSinceRev(j) ? `Rev ${j.rev} · unsaved changes` : revText(j)) : 'Not saved to a file') : '';
-    fs.dataset.state = j && (!j.rev || unsavedSinceRev(j)) ? 'dirty' : 'clean';
-    fs.title = j?.rev ? `${revText(j, true)}${S.fileName ? ' to ' + S.fileName : ''}` : 'Save file… keeps a copy in OneDrive and starts the revision count';
-  }
+  showFileState();
   $('#exportMenu').hidden = !j || reg;
   $('#saveFileBtn').hidden = !j || reg;
   const rb = $('.top-acts [data-go="report"]'); if (rb) rb.hidden = reg;
@@ -622,11 +649,12 @@ async function updateRegistryFromJob() {
 /* ------------------------------------------------------------- jobs view --- */
 
 function viewJobs() {
-  const rows = S.jobs.map((j) => `<tr class="${S.job?.id === j.id ? 'cur' : ''}">
+  // the open job's card may lag behind its latest change: show the open job's own values
+  const rows = S.jobs.map((c) => (S.job?.id === c.id ? { ...c, rev: S.job.rev, savedAt: S.job.savedAt, updated: S.job.updated, edits: S.job.edits, editAreas: S.job.editAreas } : c)).map((j) => `<tr class="${S.job?.id === j.id ? 'cur' : ''}">
     <td><b>${h(j.info?.tankId || 'Untitled')}</b><br><small>${h(j.info?.reportNo || '')}</small></td>
     <td>${h(j.info?.client)}<br><small>${h(j.info?.site)}</small></td>
     <td>${h(j.info?.inspDate)}</td><td class="n">${indCount(j)}</td>
-    <td>${j.rev ? `<b>Rev ${j.rev}</b><br><small>saved ${new Date(j.savedAt).toLocaleString()}</small>${unsavedSinceRev(j) ? '<br><small class="warn-txt">changes since</small>' : ''}` : '<small class="muted">not saved to a file</small>'}</td>
+    <td>${j.rev ? `<b>Rev ${j.rev}</b><br><small>saved ${new Date(j.savedAt).toLocaleString()}</small>${(() => { const c = fileChanges(j); return c.n || !c.known ? `<br><small class="warn-txt" title="${h(c.areas.join(', '))}">${changesText(c)} not in the file</small>` : ''; })()}` : (fileChanges(j).n ? `<small class="warn-txt">not saved to a file · ${changesText(fileChanges(j))}</small>` : '<small class="muted">not saved to a file</small>')}</td>
     <td><small>${new Date(j.updated || j.created).toLocaleString()}</small></td>
     <td class="acts"><button class="btn sm primary" data-act="job-open" data-id="${j.id}">Open</button>
       <button class="btn sm" data-act="job-dup" data-id="${j.id}">Duplicate</button>
@@ -3144,7 +3172,9 @@ async function jobFile(id) {
   const stored = await db.getJob(id); const keys = await db.jobPhotoKeys(id);
   const at = Date.now();
   const stamp = { rev: (stored.rev || 0) + 1, savedAt: at };
-  const job = { ...stored, ...stamp, updated: at, revisions: [...(stored.revisions || []), { rev: stamp.rev, at }].slice(-100) };
+  const job = { ...stored, ...stamp, updated: at, edits: 0, editAreas: [], revisions: [...(stored.revisions || []), { rev: stamp.rev, at }].slice(-100) };
+  // what the file contains: the stored job as read here. applyStamp keeps counting anything changed after it.
+  const counted = { edits: stored.edits || 0, updated: stored.updated || 0 };
   const tank = stored.tankRef ? await db.getTank(stored.tankRef).catch(() => null) : null;
   const head = JSON.stringify({ format: 'tank-floor-inspector', version: FILE_VERSION, saved: new Date(at).toISOString(), rev: stamp.rev }).slice(0, -1) + ',"job":' + JSON.stringify(job) + ',"photos":[';
   const tail = ']' + (tank ? ',"tank":' + JSON.stringify(tank) : '') + ',"appVersion":' + JSON.stringify(APP_VERSION) + '}';
@@ -3157,17 +3187,22 @@ async function jobFile(id) {
     }
     yield tail;
   }
-  return { job, stamp, chunks };
+  return { job, stamp, chunks, counted };
 }
 
 /** After a successful save, record the new revision on the stored job (and the open one). */
-async function applyStamp(id, job) {
+async function applyStamp(id, job, counted = { edits: 0, updated: 0 }) {
+  // changes made while the file was being written are not in it: keep counting them
+  const keep = (cur) => {
+    const later = Math.max(0, (cur.edits || 0) - counted.edits), after = (cur.updated || 0) > counted.updated;
+    return { rev: job.rev, savedAt: job.savedAt, updated: after ? cur.updated : job.updated, revisions: job.revisions, edits: after ? Math.max(later, 1) : 0, editAreas: after ? cur.editAreas || [] : [] };
+  };
   if (S.job?.id === id) {
-    Object.assign(S.job, { rev: job.rev, savedAt: job.savedAt, updated: job.updated, revisions: job.revisions });
+    Object.assign(S.job, keep(S.job));
     await writeNow(); renderHeader();
   } else {
     const stored = await db.getJob(id);
-    await db.putJob({ ...stored, rev: job.rev, savedAt: job.savedAt, updated: job.updated, revisions: job.revisions });
+    await db.putJob({ ...stored, ...keep(stored) });
   }
   await loadJobs();
   if (S.view === 'jobs') renderView();
@@ -3179,7 +3214,7 @@ function revText(j, long = false) {
   const when = long ? d.toLocaleString() : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   return `Rev ${j.rev} · saved ${when}`;
 }
-const unsavedSinceRev = (j) => j?.rev && (j.updated || 0) > (j.savedAt || 0);
+const unsavedSinceRev = (j) => { const c = fileChanges(j); return !!j?.rev && (c.n > 0 || !c.known); };
 
 async function fileHandle(id, write) {
   const hnd = await db.getMeta('fh:' + id).catch(() => null);
@@ -3244,14 +3279,14 @@ async function saveJobFile(id = S.job?.id, saveAs = false) {
         if (v === 'open') { const nid = await importJobFile(await hnd.getFile()); if (nid) await rememberFile(nid, hnd, true); return; }
         if (v === 'copy') hnd = null;
       }
-      const { job, stamp, chunks } = await jobFile(id);
+      const { job, stamp, chunks, counted } = await jobFile(id);
       if (!hnd) hnd = await window.showSaveFilePicker({ suggestedName: fileBase(job) + '.json', id: 'tank-floor-jobs', startIn: 'documents', types: FILE_TYPES });
       const w = await hnd.createWritable();
       try { for await (const c of chunks()) await w.write(c); await w.close(); }
       catch (e) { await w.abort().catch(() => {}); throw e; } // abort leaves the previous file untouched
       await rememberFile(id, hnd, true);
       if (S.job?.id === id) S.fileName = hnd.name;
-      await applyStamp(id, job);
+      await applyStamp(id, job, counted);
       toast(`Saved ${hnd.name} — Rev ${stamp.rev}`);
       return;
     } catch (e) {
@@ -3260,11 +3295,11 @@ async function saveJobFile(id = S.job?.id, saveAs = false) {
       console.warn('Save file failed, downloading instead', e);
     }
   }
-  const { job, stamp, chunks } = await jobFile(id);
+  const { job, stamp, chunks, counted } = await jobFile(id);
   const name = fileBase(job) + '.json', parts = [];
   for await (const c of chunks()) parts.push(c);
   download(name, new Blob(parts, { type: 'application/json' }), 'application/json');
-  await applyStamp(id, job);
+  await applyStamp(id, job, counted);
   toast(`Downloaded ${name} (Rev ${stamp.rev}). Move it into your OneDrive folder to share it.`);
 }
 
@@ -3349,6 +3384,8 @@ function flushNow() {
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushNow(); });
 window.addEventListener('pagehide', flushNow);
+// Closing while a change is not yet on the device: ask first (the browser shows its own wording).
+window.addEventListener('beforeunload', (e) => { flushNow(); if (saver.pending()) { e.preventDefault(); e.returnValue = ''; } });
 window.addEventListener('beforeprint', () => { if (S.view !== 'report' && S.job) { S._prevView = S.view; go('report'); } });
 window.addEventListener('afterprint', () => { if (S._prevView) { const v = S._prevView; S._prevView = null; go(v); } });
 

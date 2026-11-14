@@ -7,6 +7,20 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Data integrity upgrade — stage 2: unsaved change detection (v3.9.0)
+
+The header shows two separate things:
+
+- **Saved on this device** (right-hand corner): *Saving…*, *Saved locally*, or *Not saved — retrying*.
+- **The job file** (next to the job title): *Rev 3 · 4 changes not in the file*, or *Not saved to a file · 4
+  changes*. Hover for the areas changed (Floor, Shell, Roof, Nozzles, Settlement, Tank setup, Equipment,
+  Findings and report). Saving the file clears the count.
+
+Changes made while a file is being written are not in that file, so they stay counted (this also fixes an
+older race where such a change could look as if it had been saved to the file). The Jobs list shows the same
+count for every job. Closing the app asks first only while a change is not yet on the device; everything
+already saved on the device is safe to close without asking.
+
 ## Data integrity upgrade — stage 1: reliable automatic saving (v3.8.0)
 
 Every change is still written to the device about a third of a second after it is made, now through a

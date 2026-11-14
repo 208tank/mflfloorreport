@@ -238,6 +238,66 @@ export default {
     await page.context().close();
   },
 
+  async 'unsaved: changes are counted by area until saved to a file, including changes made during the save'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(linkTestFile);
+    const fs = () => page.evaluate(() => ({ text: document.querySelector('#fileState').textContent, title: document.querySelector('#fileState').title, state: document.querySelector('#fileState').dataset.state }));
+    const base = (await fs()).text;
+    assert.match(base, /^Not saved to a file/);
+    const n0 = await page.evaluate(() => window.tfi.job().edits || 0);
+    await page.evaluate(() => window.tfi.go('setup'));
+    await page.fill('[data-bind="info.client"]', 'Counted'); await page.keyboard.press('Tab');
+    await page.evaluate(() => { window.tfi.go('shell'); window.tfi.job().shell.notes = 'a'; window.tfi.commit(); });
+    let f = await fs();
+    assert.equal(f.text, `Not saved to a file · ${n0 + 2} changes`);
+    assert.match(f.title, /Tank setup, Shell|Shell, Tank setup|Tank setup.*Shell/);
+    // save: Rev 1, nothing left over
+    await page.evaluate(() => window.tfi.go('setup')); await page.keyboard.press('Control+s');
+    await page.waitForFunction(() => /^Rev 1 · saved/.test(document.querySelector('#fileState').textContent));
+    f = await fs(); assert.equal(f.state, 'clean');
+    // one more change: counted against Rev 1, and shown on the Jobs list
+    await page.fill('[data-bind="info.site"]', 'After rev 1'); await page.keyboard.press('Tab');
+    assert.equal((await fs()).text, 'Rev 1 · 1 change not in the file');
+    await page.evaluate(() => window.tfi.go('jobs'));
+    assert.match(await page.textContent('#main'), /1 change not in the file/);
+    // a change made while the file is being written is not in the file, so it stays counted
+    await page.evaluate(async () => {
+      // the save reads the job, then (slowly) its photos; an edit lands in between
+      const { db } = await import('./js/db.js'), keys = db.jobPhotoKeys.bind(db), get = db.getJob.bind(db);
+      db.getJob = async (id) => { const v = await get(id); if (window.__slow) { window.__slow = false; window.__read = true; await new Promise((r) => setTimeout(r, 600)); } return v; };
+      window.__slow = true; window.__read = false;
+      window.tfi.go('setup');
+    });
+    await page.keyboard.press('Control+s');
+    await page.waitForFunction(() => window.__read);
+    await page.evaluate(() => { window.tfi.job().info.notes = 'typed during the save'; window.tfi.commit(); });
+    await page.waitForFunction(() => /^Rev 2/.test(document.querySelector('#fileState').textContent));
+    await page.waitForTimeout(300);
+    assert.equal((await fs()).text, 'Rev 2 · 1 change not in the file');
+    const file = await page.evaluate(() => window.__file());
+    assert.equal(file.job.info.site, 'After rev 1');
+    assert.notEqual(file.job.info.notes, 'typed during the save');
+    assert.equal(file.job.edits, 0);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'unsaved: closing the app asks first only while a change is not yet on the device'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const fire = () => page.evaluate(() => { const e = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; });
+    await page.waitForFunction(() => document.querySelector('#saveState').textContent !== 'Saving…');
+    assert.equal(await fire(), false, 'nothing pending: close without asking');
+    await page.evaluate(() => { const put = IDBObjectStore.prototype.put; window.__restorePut = () => { IDBObjectStore.prototype.put = put; }; IDBObjectStore.prototype.put = function (...a) { if (this.name === 'jobs') throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); return put.apply(this, a); }; });
+    await page.evaluate(() => { window.tfi.job().info.client = 'Pending'; window.tfi.commit(); });
+    await page.waitForFunction(() => /^Not saved/.test(document.querySelector('#saveState').textContent));
+    assert.equal(await fire(), true, 'a change not on the device: ask first');
+    await page.evaluate(() => window.__restorePut());
+    await page.evaluate(() => window.tfi.commit());
+    await page.waitForFunction(() => document.querySelector('#saveState').textContent === 'Saved locally');
+    assert.equal(await fire(), false);
+    await page.context().close();
+  },
+
   async 'offline: an update never caches stale files from the browser HTTP cache'({ browser, serve }) {
     const { readFile } = await import('node:fs/promises');
     const root = new URL('../../', import.meta.url);
@@ -667,4 +727,17 @@ async function dumpStores() {
   const m = await new Promise((res) => { const r = db.transaction('meta').objectStore('meta').get('migrations'); r.onsuccess = () => res(r.result?.value || []); });
   out.migrations = m; db.close();
   return out;
+}
+
+/** In the page: give the open job a real file (Origin Private File System) as its job file, and window.__file() to read it. */
+async function linkTestFile() {
+  const { db } = await import('./js/db.js');
+  const dir = await navigator.storage.getDirectory();
+  const hnd = await dir.getFileHandle('job-' + Math.random().toString(36).slice(2) + '.json', { create: true });
+  // keep file handles in memory: reading a handle back from IndexedDB crashes headless Chrome
+  const handles = new Map(), get = db.getMeta.bind(db), set = db.setMeta.bind(db);
+  db.getMeta = async (k) => (k.startsWith('fh:') ? handles.get(k) : get(k));
+  db.setMeta = async (k, v) => (k.startsWith('fh:') ? handles.set(k, v) : set(k, v));
+  await db.setMeta('fh:' + window.tfi.job().id, hnd);
+  window.__file = async () => JSON.parse(await (await hnd.getFile()).text());
 }
