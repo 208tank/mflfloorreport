@@ -24,6 +24,10 @@ registers its screen with `defineView` and its buttons with `onAction` / `onChan
 | Step | Release | Screens moved |
 | --- | --- | --- |
 | 2 | v3.12.1 | Report (`views/report.js`), code tables (`views/codetables.js`) |
+| 3 | v3.12.2 | Settlement (`views/settle.js`) |
+
+Screen modules can't import `app.js`, so the few app-level steps they need that haven't moved yet (for now
+only `commit`) are handed over at start-up through `js/app/host.js`.
 
 ## Data integrity upgrade — stage 4: database integrity check (v3.11.0)
 
@@ -243,6 +247,8 @@ Nothing in `tests/` or `package.json` is used by the app, which still has no dep
 - `node tests/tools/screens-diff.mjs <old copy> <new copy>` — renders every screen with the demo tank in
   two copies of the app and reports any difference in the HTML. Used to confirm a refactoring step
   changes nothing on screen.
+- `node tests/tools/actions-diff.mjs <old copy> <new copy> <script>` — runs a scripted sequence of edits
+  (`tests/tools/scripts/`) on both copies and compares the job data, screen and focus after every step.
 - After a deliberate, reviewed change to a calculation or the report, re-record the golden outputs
   with `UPDATE_GOLDEN=1 node --test tests/*.test.mjs` and review the diff before committing.
 

@@ -39,3 +39,10 @@ export function field(label, key, kind = 'text', extra = {}) {
   const un = unitFor(kind, extra);
   return `<label class="fld${extra.cls ? ' ' + extra.cls : ''}" for="${id}"><span class="lbl">${label}</span><span class="ctl">${input}${un ? `<i class="unit">${un}</i>` : ''}</span>${extra.hint ? `<small>${extra.hint}</small>` : ''}</label>`;
 }
+
+/** A selector that finds the same input again after its panel is redrawn (keeps focus while typing). */
+export function focusSel(el) {
+  const attrs = ['data-rowf', 'data-row', 'data-secf', 'data-sec', 'data-mpf', 'data-pl', 'data-shc', 'data-shut', 'data-course', 'data-z', 'data-zf', 'data-zone', 'data-rut', 'data-pt', 'data-rpt', 'data-f', 'data-rpc', 'data-sg', 'data-gid', 'data-sck', 'data-sckn', 'data-st', 'data-se', 'data-sd', 'data-eid', 'data-sts', 'data-ep', 'data-x', 'data-eps', 'data-epz', 'data-zid', 'data-cv', 'data-cid', 'data-shs', 'data-bind', 'data-act'];
+  const parts = attrs.filter((k) => el.hasAttribute(k)).map((k) => `[${k}="${CSS.escape(el.getAttribute(k))}"]`);
+  return parts.length ? el.tagName.toLowerCase() + parts.join('') : null;
+}
