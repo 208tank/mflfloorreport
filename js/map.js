@@ -227,7 +227,9 @@ export class MapController {
     container.addEventListener('pointerdown', (e) => this.onDown(e));
     container.addEventListener('pointermove', (e) => this.onMove(e));
     container.addEventListener('pointerup', (e) => this.onUp(e));
+    container.addEventListener('pointercancel', (e) => this.onUp(e, true));
     container.addEventListener('pointerleave', () => this.h.onHover?.(null));
+    this.pts = new Map(); this.pinch = null; this.pinched = false; // two-finger pinch zoom on touch screens
   }
   get svg() { return this.c.querySelector('svg'); }
   afterRender() {
@@ -265,9 +267,34 @@ export class MapController {
   }
   onDown(e) {
     if (e.button !== 0 || !this.svg) return;
+    if (e.pointerType === 'touch') {
+      this.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.pts.size === 2) { this.startPinch(); return; }
+      if (this.pts.size > 2) return;
+    }
     this.drag = { x: e.clientX, y: e.clientY, vb: this.curVB(), moved: false, id: e.pointerId };
   }
+  /** Two fingers down: zoom about their midpoint as they spread or pinch, and pan as they move together. */
+  startPinch() {
+    const [a, b] = [...this.pts.values()], svg = this.svg, rect = svg.getBoundingClientRect(), vb = this.curVB();
+    const u = Math.max(vb[2] / rect.width, vb[3] / rect.height), rc = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    this.drag = null; this.pinched = true; this.c.classList.add('panning');
+    this.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, vb, u, rc, P: { x: vb[0] + vb[2] / 2 + (m.x - rc.x) * u, y: vb[1] + vb[3] / 2 + (m.y - rc.y) * u } };
+  }
+  movePinch() {
+    const [a, b] = [...this.pts.values()], P = this.pinch, R = +this.svg.dataset.r || 1;
+    let f = P.d / (Math.hypot(a.x - b.x, a.y - b.y) || 1);
+    f = Math.min(Math.max(f, (R * 0.01) / P.vb[2]), (R * 4) / P.vb[2]);
+    const w = P.vb[2] * f, hh = P.vb[3] * f, u = P.u * f, m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const cx = P.P.x - (m.x - P.rc.x) * u, cy = P.P.y - (m.y - P.rc.y) * u;
+    this.setVB([cx - w / 2, cy - hh / 2, w, hh]);
+  }
   onMove(e) {
+    if (this.pts.has(e.pointerId)) {
+      this.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.pinch && this.pts.size >= 2) { this.movePinch(); return; }
+    }
     const fp = this.floorPt(e);
     this.h.onHover?.(fp);
     if (!this.drag) return;
@@ -278,9 +305,14 @@ export class MapController {
     const vb = this.drag.vb, scale = Math.max(vb[2] / rect.width, vb[3] / rect.height);
     this.setVB([vb[0] - dx * scale, vb[1] - dy * scale, vb[2], vb[3]]);
   }
-  onUp(e) {
+  onUp(e, cancelled = false) {
+    if (this.pts.delete(e.pointerId) && (this.pinch || this.pinched)) {
+      if (this.pts.size < 2) this.pinch = null;
+      if (!this.pts.size) { this.pinched = false; this.c.classList.remove('panning'); }
+      this.drag = null; return; // lifting fingers after a pinch never counts as a tap
+    }
     const d = this.drag; this.drag = null; this.c.classList.remove('panning');
-    if (!d || d.moved) return;
+    if (!d || d.moved || cancelled) return;
     const fp = this.floorPt(e);
     const t = e.target.closest?.('[data-ind],[data-feature],[data-nozzle],[data-plate]');
     this.h.onClick?.(fp, { ind: t?.dataset.ind, feature: t?.dataset.feature, nozzle: t?.dataset.nozzle, plate: t?.dataset.plate, shift: e.shiftKey });

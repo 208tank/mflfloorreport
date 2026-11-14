@@ -138,7 +138,8 @@ export function api653(job, layout) {
     const r = ratesFrom(rep), k = r.StPr + r.UPr;
     return use.every((it) => rep.has(it.ind.id) || it.ind.repair === 'no' || it.a.rem - Or * k - limitFor(it.a) >= -1e-9);
   };
-  for (const id of [...autoSet].sort((a, b) => (use.find((x) => x.ind.id === b).a.rem) - (use.find((x) => x.ind.id === a).a.rem))) {
+  const remOf = new Map(use.map((x) => [x.ind.id, x.a.rem]));
+  for (const id of [...autoSet].sort((a, b) => remOf.get(b) - remOf.get(a))) {
     repaired.delete(id);
     if (allPass(repaired)) autoSet.delete(id); else repaired.add(id);
   }

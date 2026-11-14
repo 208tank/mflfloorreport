@@ -70,10 +70,19 @@ const FT_TYPES = [['column', 'Roof column'], ['sump', 'Sump'], ['patch', 'Patch 
 
 /* ---------------------------------------------------------------- state ---- */
 
+/* The floor layout and the API 653 results are rebuilt only when their inputs change, so typing in the
+   shell, roof or settlement pages doesn't recalculate the whole floor. Inputs: buildLayout reads tank,
+   layout and plates; api653 also reads calc, indications and the shell courses (critical-zone limit). */
+const RC = { job: null, inds: null, lay: null, calc: null };
 function recompute() {
-  if (!S.job) { S.layout = null; S.calc = null; return; }
-  S.layout = buildLayout(S.job);
-  S.calc = api653(S.job, S.layout);
+  if (!S.job) { S.layout = null; S.calc = null; RC.job = null; return; }
+  const j = S.job, same = RC.job === j && RC.inds === j.indications;
+  const { rd, ...shell } = j.shell || {};
+  const layKey = JSON.stringify([j.tank, j.layout, j.plates]);
+  if (!same || !S.layout || layKey !== RC.lay) { S.layout = buildLayout(j); RC.lay = layKey; RC.calc = null; }
+  const calcKey = JSON.stringify([j.calc, j.indications, shell]);
+  if (!same || !S.calc || calcKey !== RC.calc) { S.calc = api653(j, S.layout); RC.calc = calcKey; }
+  RC.job = j; RC.inds = j.indications;
 }
 
 let saveTimer = null;
@@ -103,7 +112,8 @@ function setSaveState(t) { const el = $('#saveState'); if (el) { el.textContent 
 
 function commit() { recompute(); scheduleSave(); }
 
-async function loadJobs() { S.jobs = (await db.allJobs()).sort((a, b) => (b.updated || 0) - (a.updated || 0)); }
+/** S.jobs holds light job cards (no readings; db.lite). Fetch the full job with db.getJob when needed. */
+async function loadJobs() { S.jobs = (await db.allCards()).sort((a, b) => (b.updated || 0) - (a.updated || 0)); }
 async function loadTanks() { S.tanks = (await db.allTanks()).sort((a, b) => tankKeyOf(a).localeCompare(tankKeyOf(b), undefined, { numeric: true })); }
 
 async function openJob(id, view = 'map') {
@@ -247,15 +257,16 @@ const canDir = () => 'showDirectoryPicker' in window && window.self === window.t
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
 /** Light summary of a job for the dashboard (works on raw stored jobs and on jobs read from files). */
+const indCount = (j) => j.nInds ?? (j.indications || []).length;
 function jobCard(j) {
   const st = { ...defaultStatus(), ...(j.status || {}) };
-  if (!j.status) st.stage = (j.indications || []).length || j.rev ? 'inspection' : 'upcoming';
+  if (!j.status) st.stage = indCount(j) || j.rev ? 'inspection' : 'upcoming';
   let open = 0, pri = 0;
   for (const k of Object.keys(j.secs || {})) for (const r of j.secs[k].recs || []) if (r.def && r.status !== 'Closed') { open++; if (r.priority === 'P1' || r.priority === 'P2') pri++; }
   const since = (st.history || []).filter((x) => x.stage === st.stage).pop()?.at || null;
   return { id: j.id, tankId: j.info?.tankId || 'Untitled', client: j.info?.client || '', site: j.info?.site || '', inspDate: j.info?.inspDate || '', reportNo: j.info?.reportNo || '',
     inspector: j.info?.inspector || st.inspector || '', reviewer: st.reviewer || '', stage: st.stage, planned: st.planned || '', due: st.due || '', since,
-    tankRef: j.tankRef || null, scope: j.scope || null, rev: j.rev || 0, savedAt: j.savedAt || 0, updated: j.updated || j.created || 0, condition: j.summary?.condition || '', open, pri, inds: (j.indications || []).length, diameter: j.tank?.diameter || null };
+    tankRef: j.tankRef || null, scope: j.scope || null, rev: j.rev || 0, savedAt: j.savedAt || 0, updated: j.updated || j.created || 0, condition: j.summary?.condition || '', open, pri, inds: indCount(j), diameter: j.tank?.diameter || null };
 }
 
 async function dashInit() {
@@ -269,21 +280,31 @@ async function scanFolder() {
   const D = S.dash; if (!D.dir) return;
   D.scanning = true; if (S.view === 'dash') renderView();
   const files = new Map();
+  // Job files can be tens of MB (photos). Each file's card is cached by path, modified time and size,
+  // so a rescan only reads the files that changed since the last one.
+  const cache = (await db.getMeta('scanCache').catch(() => null)) || {}, seen = {};
   const walk = async (dir, path, depth) => {
     for await (const [name, hnd] of dir.entries()) {
       if (hnd.kind === 'directory') { if (depth < 2 && !name.startsWith('.')) await walk(hnd, path + name + '/', depth + 1); continue; }
       if (!/\.json$/i.test(name)) continue;
       try {
-        const f = await hnd.getFile();
-        if (!(await f.slice(0, 80).text()).includes('"tank-floor-inspector"')) continue;
-        const data = JSON.parse(await f.text());
-        if (data.format !== 'tank-floor-inspector' || !data.job?.id) continue;
-        const prev = files.get(data.job.id), card = jobCard(data.job);
-        if (!prev || card.updated > prev.card.updated) files.set(data.job.id, { name, path: path + name, fh: hnd, card, modified: f.lastModified });
+        const f = await hnd.getFile(), p = path + name, c = cache[p];
+        let id, card;
+        if (c && c.m === f.lastModified && c.s === f.size) ({ id, card } = c);
+        else {
+          if (!(await f.slice(0, 80).text()).includes('"tank-floor-inspector"')) { seen[p] = { m: f.lastModified, s: f.size, id: null }; continue; }
+          const data = JSON.parse(await f.text());
+          if (data.format !== 'tank-floor-inspector' || !data.job?.id) { seen[p] = { m: f.lastModified, s: f.size, id: null }; continue; }
+          id = data.job.id; card = jobCard(data.job);
+        }
+        seen[p] = { m: f.lastModified, s: f.size, id, card };
+        if (!id) continue;
+        const prev = files.get(id);
+        if (!prev || card.updated > prev.card.updated) files.set(id, { name, path: p, fh: hnd, card, modified: f.lastModified });
       } catch { /* not readable — skip */ }
     }
   };
-  try { await walk(D.dir, '', 0); D.files = files; D.scanned = true; D.scannedAt = Date.now(); }
+  try { await walk(D.dir, '', 0); D.files = files; D.scanned = true; D.scannedAt = Date.now(); await db.setMeta('scanCache', seen).catch(() => {}); }
   catch (e) { toast('Could not read the folder: ' + e.message); }
   D.scanning = false;
   if (S.view === 'dash') renderView();
@@ -315,7 +336,7 @@ async function writeStageToFile(id, stage, at = Date.now()) {
     data.job.status = { ...old, stage, history: [...(old.history || []), { stage, at }].slice(-50) };
     const w = await fh.createWritable(); await w.write(JSON.stringify(data)); await w.close();
     const e = D.files.get(id); if (e) e.card = jobCard(data.job);
-    return true;
+    return true; // (the scan cache sees the new modified time and re-reads this file next time)
   } catch (e) { console.warn('stage write failed', e); return false; }
 }
 
@@ -483,7 +504,7 @@ async function buildRegistry() {
     let t = S.tanks.find((x) => tankKeyOf(x) === k);
     if (!t) {
       const latest = js.slice().sort((a, b) => (b.info.inspDate || '').localeCompare(a.info.inspDate || '') || (b.updated || 0) - (a.updated || 0))[0];
-      t = tankFromJob(migrate(latest)); await db.putTank(t); S.tanks.push(t); made++;
+      t = tankFromJob(migrate(await db.getJob(latest.id))); await db.putTank(t); S.tanks.push(t); made++;
     }
     for (const j of js) { const full = await db.getJob(j.id); full.tankRef = t.id; await db.putJob(full); if (S.job?.id === j.id) S.job.tankRef = t.id; linked++; }
   }
@@ -554,7 +575,7 @@ function viewJobs() {
   const rows = S.jobs.map((j) => `<tr class="${S.job?.id === j.id ? 'cur' : ''}">
     <td><b>${h(j.info?.tankId || 'Untitled')}</b><br><small>${h(j.info?.reportNo || '')}</small></td>
     <td>${h(j.info?.client)}<br><small>${h(j.info?.site)}</small></td>
-    <td>${h(j.info?.inspDate)}</td><td class="n">${j.indications?.length || 0}</td>
+    <td>${h(j.info?.inspDate)}</td><td class="n">${indCount(j)}</td>
     <td>${j.rev ? `<b>Rev ${j.rev}</b><br><small>saved ${new Date(j.savedAt).toLocaleString()}</small>${unsavedSinceRev(j) ? '<br><small class="warn-txt">changes since</small>' : ''}` : '<small class="muted">not saved to a file</small>'}</td>
     <td><small>${new Date(j.updated || j.created).toLocaleString()}</small></td>
     <td class="acts"><button class="btn sm primary" data-act="job-open" data-id="${j.id}">Open</button>
@@ -3041,15 +3062,29 @@ $('#dlg').addEventListener('close', () => { if (S.view === 'inds') refreshIndTab
 const FILE_TYPES = [{ description: 'Tank floor inspection', accept: { 'application/json': ['.json'] } }];
 const canPick = () => 'showSaveFilePicker' in window && window.self === window.top;
 
-/** Build the file for the next revision without changing the stored job yet. */
-async function jobFileText(id) {
+/** Build the file for the next revision without changing the stored job yet.
+ *  The file is produced in pieces (header + job, then one photo at a time, then the rest) so a job with
+ *  hundreds of photos never needs one huge string in memory. The bytes are exactly what
+ *  JSON.stringify({ format, version, saved, rev, job, photos, tank?, appVersion }) gives. */
+async function jobFile(id) {
   await flushSave();
-  const stored = await db.getJob(id); const photos = await db.jobPhotos(id);
+  const stored = await db.getJob(id); const keys = await db.jobPhotoKeys(id);
   const at = Date.now();
   const stamp = { rev: (stored.rev || 0) + 1, savedAt: at };
   const job = { ...stored, ...stamp, updated: at, revisions: [...(stored.revisions || []), { rev: stamp.rev, at }].slice(-100) };
   const tank = stored.tankRef ? await db.getTank(stored.tankRef).catch(() => null) : null;
-  return { job, stamp, text: JSON.stringify({ format: 'tank-floor-inspector', version: FILE_VERSION, saved: new Date(at).toISOString(), rev: stamp.rev, job, photos, ...(tank ? { tank } : {}), appVersion: APP_VERSION }) };
+  const head = JSON.stringify({ format: 'tank-floor-inspector', version: FILE_VERSION, saved: new Date(at).toISOString(), rev: stamp.rev }).slice(0, -1) + ',"job":' + JSON.stringify(job) + ',"photos":[';
+  const tail = ']' + (tank ? ',"tank":' + JSON.stringify(tank) : '') + ',"appVersion":' + JSON.stringify(APP_VERSION) + '}';
+  async function* chunks() {
+    yield head;
+    let first = true;
+    for (const k of keys) {
+      const p = await db.getPhoto(k); if (!p) continue;
+      yield (first ? '' : ',') + JSON.stringify(p); first = false;
+    }
+    yield tail;
+  }
+  return { job, stamp, chunks };
 }
 
 /** After a successful save, record the new revision on the stored job (and the open one). */
@@ -3136,9 +3171,11 @@ async function saveJobFile(id = S.job?.id, saveAs = false) {
         if (v === 'open') { const nid = await importJobFile(await hnd.getFile()); if (nid) await rememberFile(nid, hnd, true); return; }
         if (v === 'copy') hnd = null;
       }
-      const { job, stamp, text } = await jobFileText(id);
+      const { job, stamp, chunks } = await jobFile(id);
       if (!hnd) hnd = await window.showSaveFilePicker({ suggestedName: fileBase(job) + '.json', id: 'tank-floor-jobs', startIn: 'documents', types: FILE_TYPES });
-      const w = await hnd.createWritable(); await w.write(text); await w.close();
+      const w = await hnd.createWritable();
+      try { for await (const c of chunks()) await w.write(c); await w.close(); }
+      catch (e) { await w.abort().catch(() => {}); throw e; } // abort leaves the previous file untouched
       await rememberFile(id, hnd, true);
       if (S.job?.id === id) S.fileName = hnd.name;
       await applyStamp(id, job);
@@ -3149,9 +3186,10 @@ async function saveJobFile(id = S.job?.id, saveAs = false) {
       console.warn('Save file failed, downloading instead', e);
     }
   }
-  const { job, stamp, text } = await jobFileText(id);
-  const name = fileBase(job) + '.json';
-  download(name, text, 'application/json');
+  const { job, stamp, chunks } = await jobFile(id);
+  const name = fileBase(job) + '.json', parts = [];
+  for await (const c of chunks()) parts.push(c);
+  download(name, new Blob(parts, { type: 'application/json' }), 'application/json');
   await applyStamp(id, job);
   toast(`Downloaded ${name} (Rev ${stamp.rev}). Move it into your OneDrive folder to share it.`);
 }

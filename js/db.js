@@ -1,6 +1,13 @@
-// Minimal IndexedDB wrapper. Stores: jobs, photos, meta, tanks (the tank registry).
+// Minimal IndexedDB wrapper. Stores: jobs, photos, meta, tanks (the tank registry) and cards
+// (a light copy of each job, without readings, for the job lists and the Dashboard).
 const DB_NAME = 'tank-floor-inspector';
-const DB_VER = 2;
+const DB_VER = 3;
+
+/** The job without its bulky readings: what the Jobs list, Dashboard and registry need. */
+export function lite(job) {
+  const { indications, plates, features, shell, roof, settle, ...rest } = job;
+  return { ...rest, nInds: (indications || []).length };
+}
 let dbp = null;
 
 function open() {
@@ -16,8 +23,17 @@ function open() {
       }
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
       if (!db.objectStoreNames.contains('tanks')) db.createObjectStore('tanks', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('cards')) {
+        const cards = db.createObjectStore('cards', { keyPath: 'id' });
+        req.transaction.objectStore('jobs').openCursor().onsuccess = (e) => { const c = e.target.result; if (c) { cards.put(lite(c.value)); c.continue(); } };
+      }
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      // let a newer version of the app (in another tab) upgrade the database
+      db.onversionchange = () => { db.close(); dbp = null; };
+      resolve(db);
+    };
     req.onerror = () => reject(req.error);
   });
   return dbp;
@@ -54,13 +70,14 @@ const reqP = (r) => new Promise((res, rej) => { r.onsuccess = () => res(r.result
 export const db = {
   async allJobs() { return tx('jobs', 'readonly', (s) => reqP(s.getAll())); },
   async getJob(id) { return tx('jobs', 'readonly', (s) => reqP(s.get(id))); },
-  async putJob(job) { return tx('jobs', 'readwrite', (s) => reqP(s.put(job))); },
+  async putJob(job) { return txMany(['jobs', 'cards'], (J, C) => { J.put(job); C.put(lite(job)); }); },
+  async allCards() { return tx('cards', 'readonly', (s) => reqP(s.getAll())); },
   /** Delete a job and its photos together: either both go or neither does. */
   async deleteJob(id) {
-    return txMany(['jobs', 'photos'], (J, P) => {
+    return txMany(['jobs', 'photos', 'cards'], (J, P, C) => {
       const r = P.index('jobId').getAllKeys(id);
       r.onsuccess = () => r.result.forEach((k) => P.delete(k));
-      J.delete(id);
+      J.delete(id); C.delete(id);
     });
   },
   /** Write a job and its photos in one transaction. With removeId, that job's existing photos that are
@@ -68,17 +85,18 @@ export const db = {
    *  If anything fails, nothing on the device changes. */
   async replaceJob(job, photos = [], removeId = null) {
     const keep = new Set(photos.map((p) => p.id));
-    return txMany(['jobs', 'photos'], (J, P) => {
+    return txMany(['jobs', 'photos', 'cards'], (J, P, C) => {
       if (removeId) {
         const r = P.index('jobId').getAllKeys(removeId);
         r.onsuccess = () => r.result.forEach((k) => { if (!keep.has(k)) P.delete(k); });
-        if (removeId !== job.id) J.delete(removeId);
+        if (removeId !== job.id) { J.delete(removeId); C.delete(removeId); }
       }
-      J.put(job);
+      J.put(job); C.put(lite(job));
       for (const p of photos) P.put({ ...p, jobId: job.id });
     });
   },
   async jobPhotos(jobId) { return tx('photos', 'readonly', (s) => reqP(s.index('jobId').getAll(jobId))); },
+  async jobPhotoKeys(jobId) { return tx('photos', 'readonly', (s) => reqP(s.index('jobId').getAllKeys(jobId))); },
   async getPhoto(id) { return tx('photos', 'readonly', (s) => reqP(s.get(id))); },
   async putPhoto(p) { return tx('photos', 'readwrite', (s) => reqP(s.put(p))); },
   async deletePhoto(id) { return tx('photos', 'readwrite', (s) => reqP(s.delete(id))); },

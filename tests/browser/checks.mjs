@@ -289,5 +289,175 @@ export default {
     await page.waitForTimeout(200);
     assert.match(await page.textContent('#storageInfo'), /Nearly full/);
     await page.context().close();
+  },
+
+  async 'performance: cached floor results always equal a fresh calculation'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const bad = await page.evaluate(async () => {
+      const { buildLayout } = await import('./js/geometry.js');
+      const { api653 } = await import('./js/calc.js');
+      const ser = (v) => JSON.stringify(v, (k, x) => (x instanceof Map ? [...x] : x instanceof Set ? [...x] : x));
+      const S = window.__app, j = () => S.job, out = [];
+      const edits = [
+        ['indication UT', () => { j().indications[2].utMin = 1.5; }],
+        ['indication repair', () => { j().indications[0].repair = 'no'; }],
+        ['new indication', () => { j().indications.push({ ...j().indications[1], id: 'new1', no: '099', utMin: 2 }); }],
+        ['Or', () => { j().calc.Or = 15; }],
+        ['coated', () => { j().calc.coated = true; }],
+        ['shell course t-min', () => { j().shell.courses[0].tMin = 9; }],
+        ['shell UT reading only', () => { const k = Object.keys(j().shell.rd)[0]; const z = Object.keys(j().shell.rd[k])[0]; j().shell.rd[k][z] = 7.5; }],
+        ['tank bottom t', () => { j().tank.tBottom = 7; }],
+        ['plate thickness', () => { const p = S.layout.plates[5].key; j().plates[p] = { ...(j().plates[p] || {}), t: 5 }; }],
+        ['annular off', () => { j().layout.annular = false; }],
+        ['diameter', () => { j().tank.diameter = 30000; }],
+        ['delete indication', () => { j().indications.splice(0, 1); }]
+      ];
+      for (const [name, fn] of edits) {
+        fn(); window.tfi.commit();
+        if (ser(S.calc) !== ser(api653(j(), buildLayout(j())))) out.push(name);
+      }
+      return out;
+    });
+    assert.deepEqual(bad, []);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'performance: a shell UT edit on a 1,000-indication floor is fast'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const ms = await page.evaluate(async () => {
+      const j = window.tfi.job(), base = j.indications;
+      for (let i = 0; i < 1000; i++) { const b = base[i % base.length]; j.indications.push({ ...b, id: 'bulk' + i, no: String(100 + i), utMin: (b.utMin || 4) * (0.8 + (i % 20) / 50) }); }
+      window.tfi.commit();
+      window.tfi.go('shell');
+      const inp = document.querySelector('input[data-rd], .readings input');
+      const times = [];
+      for (let k = 0; k < 5; k++) {
+        inp.value = String(0.3 + k / 100);
+        const t0 = performance.now();
+        inp.dispatchEvent(new Event('change', { bubbles: true }));
+        times.push(performance.now() - t0);
+      }
+      return times.sort((a, b) => a - b)[2];
+    });
+    console.log(`      median shell UT edit with 1,014 indications: ${ms.toFixed(1)} ms`);
+    assert.ok(ms < 20, `took ${ms.toFixed(0)} ms`);
+    await page.context().close();
+  },
+
+  async 'storage: upgrading from v3.4.2 keeps every job and builds the light job list'({ browser, url, appPage }) {
+    const { readFileSync } = await import('node:fs');
+    const demo = JSON.parse(readFileSync(new URL('../fixtures/demo.json', import.meta.url), 'utf8'));
+    const ctx = await browser.newContext({ serviceWorkers: 'block' });
+    const pre = await ctx.newPage();
+    await pre.goto(url + 'icons/icon.svg');
+    await pre.evaluate(async (job) => {
+      // the v3.4.2 database: version 2, no cards store
+      const db = await new Promise((res) => { const q = indexedDB.open('tank-floor-inspector', 2); q.onupgradeneeded = () => { const d = q.result; d.createObjectStore('jobs', { keyPath: 'id' }); d.createObjectStore('photos', { keyPath: 'id' }).createIndex('jobId', 'jobId'); d.createObjectStore('meta', { keyPath: 'key' }); d.createObjectStore('tanks', { keyPath: 'id' }); }; q.onsuccess = () => res(q.result); });
+      await new Promise((res) => { const t = db.transaction('jobs', 'readwrite'); t.objectStore('jobs').put(job); t.objectStore('jobs').put({ ...job, id: 'second', info: { ...job.info, tankId: 'TK-202' } }); t.oncomplete = res; });
+      db.close();
+    }, demo);
+    await pre.close();
+    const page = await appPage(browser, url, { demo: false, ctx });
+    // count full-job reads while the job list and dashboard render
+    await page.evaluate(() => { const g = IDBObjectStore.prototype.getAll; window.__fullReads = 0; IDBObjectStore.prototype.getAll = function (...a) { if (this.name === 'jobs') window.__fullReads++; return g.apply(this, a); }; });
+    await page.evaluate(() => window.tfi.go('jobs'));
+    await page.evaluate(() => window.tfi.go('dash'));
+    const r = await page.evaluate(() => ({ jobs: window.__app.jobs.map((j) => [j.info.tankId, j.nInds, 'indications' in j]).sort(), rows: document.querySelectorAll('#main [data-act]').length, fullReads: window.__fullReads }));
+    assert.deepEqual(r.jobs, [['TK-101', 14, false], ['TK-202', 14, false]]);
+    assert.equal(r.fullReads, 0);
+    await page.evaluate(() => window.tfi.go('jobs'));
+    assert.match(await page.textContent('#main'), /TK-202/);
+    // opening a job still loads all of it
+    await page.click('[data-act="job-open"][data-id="second"]');
+    await page.waitForFunction(() => window.tfi.job()?.id === 'second');
+    assert.equal(await page.evaluate(() => window.tfi.job().indications.length), 14);
+    assert.deepEqual(page.errors, []);
+    await ctx.close();
+  },
+
+  async 'performance: Dashboard rescans only re-read job files that changed'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const r = await page.evaluate(async () => {
+      const root = await navigator.storage.getDirectory();
+      const dir = await root.getDirectoryHandle('jobs', { create: true });
+      const job = window.tfi.job(), write = async (name, obj) => { const h = await dir.getFileHandle(name, { create: true }); const w = await h.createWritable(); await w.write(JSON.stringify(obj)); await w.close(); };
+      for (const n of [1, 2, 3]) await write(`tk${n}.json`, { format: 'tank-floor-inspector', version: 1, rev: 1, job: { ...job, id: 'f' + n, info: { ...job.info, tankId: 'FILE-' + n } }, photos: [] });
+      await write('other.json', { hello: 'not a job' });
+      let full = 0; const text = Blob.prototype.text;
+      Blob.prototype.text = function () { if (this instanceof File) full++; return text.call(this); };
+      const S = window.__app;
+      S.dash.dir = dir; S.dash.perm = 'granted'; S.dash.scanned = false;
+      const rescan = async () => { full = 0; window.tfi.go('dash'); document.querySelector('[data-act="dash-rescan"]').click(); for (let i = 0; i < 50 && (S.dash.scanning || !S.dash.scanned); i++) await new Promise((r) => setTimeout(r, 50)); await new Promise((r) => setTimeout(r, 100)); return full; };
+      const first = await rescan();
+      const second = await rescan();
+      await write('tk2.json', { format: 'tank-floor-inspector', version: 1, rev: 2, job: { ...job, id: 'f2', updated: Date.now() + 9999, info: { ...job.info, tankId: 'FILE-2-NEW' } }, photos: [] });
+      const third = await rescan();
+      const cards = [...S.dash.files.values()].map((f) => f.card.tankId).sort();
+      Blob.prototype.text = text;
+      return { first, second, third, cards };
+    });
+    assert.deepEqual(r, { first: 3, second: 0, third: 1, cards: ['FILE-1', 'FILE-2-NEW', 'FILE-3'] });
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'job files: the file written in pieces is byte-for-byte the v3.4.2 format'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(async () => {
+      const { db } = await import('./js/db.js');
+      const job = window.tfi.job(), id = job.id;
+      await db.replaceJob(job, [1, 2, 3].map((n) => ({ id: 'ph' + n, jobId: id, sec: 'floor', n, dataUrl: 'data:image/jpeg;base64,' + 'A'.repeat(1000 * n), caption: 'Photo "' + n + '" ü', anno: [{ k: 'arrow', x: n }] })));
+      const dir = await navigator.storage.getDirectory(), hnd = await dir.getFileHandle('bytes.json', { create: true });
+      const handles = new Map(), get = db.getMeta.bind(db), set = db.setMeta.bind(db);
+      db.getMeta = async (k) => (k.startsWith('fh:') ? handles.get(k) : get(k));
+      db.setMeta = async (k, v) => (k.startsWith('fh:') ? handles.set(k, v) : set(k, v));
+      await db.setMeta('fh:' + id, hnd);
+      window.__hnd = hnd;
+    });
+    await page.keyboard.press('Control+s');
+    const r = await page.evaluate(async () => {
+      const { db } = await import('./js/db.js');
+      const id = window.tfi.job().id, hnd = window.__hnd;
+      for (let i = 0; i < 50 && !(await hnd.getFile()).size; i++) await new Promise((res) => setTimeout(res, 50));
+      await new Promise((res) => setTimeout(res, 200));
+      const text = await (await hnd.getFile()).text(), f = JSON.parse(text);
+      const expected = JSON.stringify({ format: 'tank-floor-inspector', version: 1, saved: f.saved, rev: f.rev, job: f.job, photos: await db.jobPhotos(id), appVersion: f.appVersion });
+      return { same: text === expected, photos: f.photos.length, len: text.length };
+    });
+    assert.deepEqual({ same: r.same, photos: r.photos }, { same: true, photos: 3 });
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'tablet: two-finger pinch zooms the floor map; one finger still pans and taps'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => window.tfi.go('map'));
+    const r = await page.evaluate(async () => {
+      const box = document.querySelector('#mapbox'), svg = () => box.querySelector('svg');
+      const vbw = () => +svg().getAttribute('viewBox').split(/\s+/)[2];
+      const rect = box.getBoundingClientRect(), cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+      const ev = (type, id, x, y, kind = 'touch') => svg().dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: kind, clientX: x, clientY: y, button: 0, bubbles: true, isPrimary: id === 1 }));
+      const start = vbw(), selBefore = window.__app.selPlate;
+      ev('pointerdown', 1, cx - 20, cy); ev('pointerdown', 2, cx + 20, cy);
+      for (let k = 1; k <= 5; k++) { ev('pointermove', 1, cx - 20 - k * 20, cy); ev('pointermove', 2, cx + 20 + k * 20, cy); }
+      ev('pointerup', 1, cx - 120, cy); ev('pointerup', 2, cx + 120, cy);
+      const zoomed = vbw();
+      const sel = window.__app.selPlate;
+      // one-finger pan: viewBox moves, width unchanged
+      const vb0 = svg().getAttribute('viewBox');
+      ev('pointerdown', 7, cx, cy); for (let k = 1; k <= 5; k++) ev('pointermove', 7, cx + k * 10, cy); ev('pointerup', 7, cx + 50, cy);
+      const panned = svg().getAttribute('viewBox') !== vb0 && vbw() === zoomed;
+      // one-finger tap still selects
+      ev('pointerdown', 8, cx, cy); ev('pointerup', 8, cx, cy);
+      await new Promise((res) => setTimeout(res, 50));
+      return { start, zoomed, tappedDuringPinch: sel !== selBefore, panned, tapSelects: !!(window.__app.selPlate || window.__app.sel || window.__app.selFeature) };
+    });
+    assert.ok(r.zoomed < r.start * 0.3, `pinch should zoom in (width ${r.start} → ${r.zoomed})`);
+    assert.equal(r.tappedDuringPinch, false);
+    assert.ok(r.panned, 'one-finger drag should pan');
+    assert.ok(r.tapSelects, 'a tap should still select');
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
   }
 };
