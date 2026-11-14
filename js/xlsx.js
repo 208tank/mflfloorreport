@@ -1,6 +1,7 @@
 // Minimal .xlsx writer and reader — no libraries, works offline.
 // Writer: inline strings, a fixed style set, frozen panes, hidden rows/columns, data validation and
 // conditional formatting. Reader: shared or inline strings and numbers from every sheet.
+import { escText } from './util.js';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -70,7 +71,7 @@ async function unzip(buf) {
 
 /* --------------------------------------------------------------------------- writer --- */
 
-const x = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
+const x = (s) => escText(s).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
 export const colName = (i) => { let s = ''; i += 1; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
 export const ref = (r, c) => colName(c) + (r + 1);
 

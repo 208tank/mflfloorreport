@@ -3,10 +3,10 @@ import { polar, datumPoint, datumAxes } from './geometry.js';
 import { nozzleUT } from './calc.js';
 import { patchList, patchPath } from './patches.js';
 import { coursesWithElev, coursePlates } from './shell.js';
+import { escText as esc } from './util.js';
 
 export const COLORS = { ps: '#1f6feb', ss: '#d9480f', both: '#8250df', pending: '#6b7280', nri: '#9ca3af', other: '#9ca3af' };
 
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const f = (v) => (Math.round(v * 10) / 10).toString();
 const pathOf = (poly) => 'M' + poly.map(([x, y]) => `${f(x)} ${f(-y)}`).join('L') + 'Z';
 

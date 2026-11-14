@@ -8,7 +8,7 @@ import { ROOF_TYPES, FIXED_TYPES, FIXED_SUPPORT, FLOAT_TYPES, PT5, PT5_SHORT, PO
 import { download, indicationsCSV, platesCSV, nozzlesCSV, shellCSV, roofCSV, settleCSV, svgForExport, svgToPng, fileBase } from './export.js';
 import { buildReport, legendHTML, buildDefReport } from './report.js';
 import { patchList, patchOf } from './patches.js';
-import { newJob, migrate, nextNo, uid, getPath, setPath, STAGES, STAGE_LABEL, defaultStatus, copyPhotos, SCHEMA, FILE_VERSION } from './model.js';
+import { newJob, migrate, nextNo, uid, getPath, setPath, STAGES, STAGE_LABEL, defaultStatus, copyPhotos, SCHEMA, FILE_VERSION, migrationNotes } from './model.js';
 import { makeDemo } from './demo.js';
 import { defaultShell, defaultZones, autoLocCount, autoPlateCount, utLocations, coursesWithElev, courseAt, coursePlates, shellHeight, courseSummary, readingElevations, zoneCount, getReading, fmtElev, zKey, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
 import { buildLoader, readLoader, loaderAreas } from './loader.js';
@@ -22,11 +22,11 @@ import { SECTIONS, SEC, CHILDREN, viewPlace, childView, findings, allDefs, numbe
 import { EQ_TYPES, EQ_LABEL, EQ_DETAIL_PH, newEquip, suggestEquip, equipName, equipLine, calState, equipUse, useByMethod } from './equipment.js';
 import { SCOPE, SCOPE_HINT, inScope, scopeText, tankFromJob, newTank, jobFromTank, editJobFor, diffFromTank, tankKeyOf, normKey } from './registry.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
+import { esc as h } from './util.js';
+import { $, $$, toast, askConfirm, askChoice } from './ui.js';
+import { jobCard, indCount } from './cards.js';
 
-const APP_VERSION = '3.4.2';
-const $ = (s, el = document) => el.querySelector(s);
-const $$ = (s, el = document) => [...el.querySelectorAll(s)];
-const h = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const APP_VERSION = '3.5.0';
 
 const S = {
   jobs: [], tanks: [], reg: { q: '', open: new Set() }, job: null, layout: null, calc: null, photos: [], company: {},
@@ -120,6 +120,7 @@ async function openJob(id, view = 'map') {
   await flushSave();
   const j = await db.getJob(id);
   if (!j) return toast('Job not found');
+  const notes = migrationNotes(j);
   S.job = migrate(j);
   S.photos = await db.jobPhotos(id);
   const fh = await db.getMeta('fh:' + id).catch(() => null);
@@ -128,7 +129,10 @@ async function openJob(id, view = 'map') {
   recompute();
   await db.setMeta('lastJob', id);
   go(S.job.tank.diameter ? view : 'setup');
+  if (notes.length) { scheduleSave(); showMigrationNotes(notes); }
 }
+
+function showMigrationNotes(notes) { toast('This job was updated from an older version of the app. ' + notes.join(' '), { label: 'OK', fn: () => {} }); }
 
 async function createJob(job) {
   await db.putJob(job);
@@ -257,17 +261,6 @@ const canDir = () => 'showDirectoryPicker' in window && window.self === window.t
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
 /** Light summary of a job for the dashboard (works on raw stored jobs and on jobs read from files). */
-const indCount = (j) => j.nInds ?? (j.indications || []).length;
-function jobCard(j) {
-  const st = { ...defaultStatus(), ...(j.status || {}) };
-  if (!j.status) st.stage = indCount(j) || j.rev ? 'inspection' : 'upcoming';
-  let open = 0, pri = 0;
-  for (const k of Object.keys(j.secs || {})) for (const r of j.secs[k].recs || []) if (r.def && r.status !== 'Closed') { open++; if (r.priority === 'P1' || r.priority === 'P2') pri++; }
-  const since = (st.history || []).filter((x) => x.stage === st.stage).pop()?.at || null;
-  return { id: j.id, tankId: j.info?.tankId || 'Untitled', client: j.info?.client || '', site: j.info?.site || '', inspDate: j.info?.inspDate || '', reportNo: j.info?.reportNo || '',
-    inspector: j.info?.inspector || st.inspector || '', reviewer: st.reviewer || '', stage: st.stage, planned: st.planned || '', due: st.due || '', since,
-    tankRef: j.tankRef || null, scope: j.scope || null, rev: j.rev || 0, savedAt: j.savedAt || 0, updated: j.updated || j.created || 0, condition: j.summary?.condition || '', open, pri, inds: indCount(j), diameter: j.tank?.diameter || null };
-}
 
 async function dashInit() {
   const D = S.dash;
@@ -522,7 +515,7 @@ async function newInspectionDlg(tid) {
   const lastTxt = last ? `${last.info.inspDate || 'undated'}${last.info.reportNo ? ', ' + last.info.reportNo : ''}` : '';
   const dlg = $('#dlg');
   $('#dlgBody').innerHTML = `<form class="ni-dlg" method="dialog">
-    <div class="ed-head"><h2>New inspection — ${h(t.info?.tankId || 'tank')}</h2><button type="button" class="btn sm ghost" data-ni="close">✕</button></div>
+    <div class="ed-head"><h2>New inspection — ${h(t.info?.tankId || 'tank')}</h2><button aria-label="Close" type="button" class="btn sm ghost" data-ni="close">✕</button></div>
     <p class="muted small">${h([t.info?.client, t.info?.site].filter(Boolean).join(' · '))}</p>
     <h3>Scope</h3><div class="ni-scope">${SCOPE.map(([k, l]) => `<label class="chk"><input type="checkbox" name="scope" value="${k}" ${sug.has(k) ? 'checked' : ''}><span><b>${l}</b><small class="muted"> ${SCOPE_HINT[k] || ''}</small></span></label>`).join('')}</div>
     <h3>Floor layout</h3><div class="ni-floor">
@@ -745,16 +738,16 @@ function builderHTML() {
       <td><b>${lab}</b></td>
       <td>${r.type === 'block' ? '<span class="chip blk">Block</span>' : '<span class="chip rw">Row</span>'}</td>
       <td>${f(r, 'h', 'big', '', 'title="' + (r.type === 'block' ? 'Plate length (block depth)' : 'Row width (plate width)') + '"')}</td>
-      <td><div class="cnt"><button class="btn sm icon" data-act="row-n" data-row="${r.id}" data-d="-1" title="One plate fewer">−</button>${f(r, 'n', 'num')}<button class="btn sm icon" data-act="row-n" data-row="${r.id}" data-d="1" title="One plate more">+</button>${sug && sug !== +r.n ? `<button class="sug" data-act="row-sug" data-row="${r.id}" data-v="${sug}" title="Fits the chord with full plates in the middle">fits ${sug}</button>` : ''}</div></td>
+      <td><div class="cnt"><button aria-label="One plate fewer" class="btn sm icon" data-act="row-n" data-row="${r.id}" data-d="-1" title="One plate fewer">−</button>${f(r, 'n', 'num')}<button aria-label="One plate more" class="btn sm icon" data-act="row-n" data-row="${r.id}" data-d="1" title="One plate more">+</button>${sug && sug !== +r.n ? `<button class="sug" data-act="row-sug" data-row="${r.id}" data-v="${sug}" title="Fits the chord with full plates in the middle">fits ${sug}</button>` : ''}</div></td>
       <td>${r.type === 'block' ? f(r, 'w', 'big', inVal(L.plateW, 'big', S.job), 'title="Plate width"') : f(r, 'len', 'big', inVal(L.plateL, 'big', S.job), 'title="Full plate length"')}</td>
       <td>${f(r, 'off', 'big', '0', 'title="Shift plates along the row (stagger)"')}</td>
       <td>${r.type === 'block' ? `${f(r, 'sideH', 'big', inVal(L.plateW, 'big', S.job), 'title="Side sketch-plate row width" class="sm"')} × ${f(r, 'sideN', 'num', '1', 'title="Plates per side row" class="xs"')}` : '<span class="muted small">—</span>'}</td>
       <td class="n muted">${plates}</td>
       <td class="rowacts">
-        <button class="btn sm icon ghost" data-act="row-move" data-row="${r.id}" data-d="-1" ${i === 0 ? 'disabled' : ''} title="Move up">↑</button>
-        <button class="btn sm icon ghost" data-act="row-move" data-row="${r.id}" data-d="1" ${i === rows.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
-        <button class="btn sm icon ghost" data-act="row-add" data-at="${i}" data-type="row" title="Insert a row above">⊕</button>
-        <button class="btn sm icon ghost danger" data-act="row-del" data-row="${r.id}" title="Delete">✕</button></td></tr>`;
+        <button aria-label="Move up" class="btn sm icon ghost" data-act="row-move" data-row="${r.id}" data-d="-1" ${i === 0 ? 'disabled' : ''} title="Move up">↑</button>
+        <button aria-label="Move down" class="btn sm icon ghost" data-act="row-move" data-row="${r.id}" data-d="1" ${i === rows.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
+        <button aria-label="Insert a row above" class="btn sm icon ghost" data-act="row-add" data-at="${i}" data-type="row" title="Insert a row above">⊕</button>
+        <button aria-label="Delete" class="btn sm icon ghost danger" data-act="row-del" data-row="${r.id}" title="Delete">✕</button></td></tr>`;
   }).join('');
   return `<div class="sp-head"><h2>Floor builder</h2><span class="muted small">${S.layout.plates.filter((p) => p.kind === 'floor').length} bottom plates</span></div>
     <p class="muted small">Sections run ${L.orient === 'v' ? 'left to right' : 'top to bottom'}. A <b>row</b> is a strip of ${L.orient === 'v' ? 'vertical' : 'horizontal'} plates: give the number of plates and the middle ones are full length, with sketch plates at each end cut to the shell. A <b>block</b> is a set of full-length plates laid across the rows (e.g. vertical plates in the centre); the gaps to the shell beside it are filled with sketch-plate rows.</p>
@@ -806,14 +799,14 @@ function measuredHTML() {
     const chips = (sec.plates || []).map((pl, k) => `<span class="pchip${labelOf.has(pl.id) ? '' : ' out'}" title="${labelOf.has(pl.id) ? '' : 'Outside the shell — not drawn'}"><b>${h(labelOf.get(pl.id) || '–')}</b>
         ${blk ? inp(`data-mpf="wid" ${sa} data-pl="${pl.id}"`, pl.wid, inVal(L.plateW, 'big', S.job), 'Width') + '<i>×</i>' + inp(`data-mpf="len" ${sa} data-pl="${pl.id}"`, pl.len, inVal(sec.h, 'big', S.job), 'Length (blank = block depth)')
           : inp(`data-mpf="len" ${sa} data-pl="${pl.id}"`, pl.len, inVal(L.plateL, 'big', S.job), 'Length') + '<i>×</i>' + inp(`data-mpf="wid" ${sa} data-pl="${pl.id}"`, pl.wid, inVal(sec.h, 'big', S.job), 'Width (blank = row width)')}
-        <button class="x" data-act="mp-del" ${sa} data-pl="${pl.id}" title="Remove plate">✕</button></span>`).join('');
+        <button aria-label="Remove plate" class="x" data-act="mp-del" ${sa} data-pl="${pl.id}" title="Remove plate">✕</button></span>`).join('');
     return `<div class="msec ${blk ? 'blk' : ''}">
       <div class="msec-head"><b class="lt">${rowLetter(i)}</b>${blk ? '<span class="chip blk">Block</span>' : '<span class="chip rw">Row</span>'}
         <label>${blk ? 'Depth' : 'Row width'} ${inp(`data-secf="h" ${sa}`, sec.h, '', blk ? 'Block depth (plate length)' : 'Row width (plate width)')}</label>
         <label>Offset ${inp(`data-secf="off" ${sa}`, sec.off, '0', 'Shift plates along the row')}</label>
         ${blk ? `<label>Side rows ${inp(`data-secf="sideH" ${sa}`, sec.sideH, inVal(L.plateW, 'big', S.job), 'Side sketch-plate row width')} × <input data-secf="sideN" ${sa} data-kind="num" inputmode="numeric" value="${h(sec.sideN ?? 1)}" title="Plates per side row" class="xs"></label>` : ''}
         ${(() => { const out = (sec.plates || []).filter((pl) => !labelOf.has(pl.id)).length; return `<span class="tot ${out || (chord && tot < chord - 25) ? 'warn-txt' : 'muted'}">${blk ? 'widths' : 'lengths'} ${fmt(tot, 'big', S.job)}${chord ? ` · floor ${fmt(chord, 'big', S.job)}` : ''}${out ? ` · <b>${out} plate${out > 1 ? 's' : ''} outside the shell</b>` : ''}</span>`; })()}
-        <span class="rowacts"><button class="btn sm icon ghost" data-act="msec-move" ${sa} data-d="-1" ${i === 0 ? 'disabled' : ''} title="Move up">↑</button><button class="btn sm icon ghost" data-act="msec-move" ${sa} data-d="1" ${i === secs.length - 1 ? 'disabled' : ''} title="Move down">↓</button><button class="btn sm icon ghost" data-act="msec-add" data-at="${i}" data-type="row" title="Insert a row above">⊕</button><button class="btn sm icon ghost danger" data-act="msec-del" ${sa} title="Delete">✕</button></span></div>
+        <span class="rowacts"><button aria-label="Move up" class="btn sm icon ghost" data-act="msec-move" ${sa} data-d="-1" ${i === 0 ? 'disabled' : ''} title="Move up">↑</button><button aria-label="Move down" class="btn sm icon ghost" data-act="msec-move" ${sa} data-d="1" ${i === secs.length - 1 ? 'disabled' : ''} title="Move down">↓</button><button aria-label="Insert a row above" class="btn sm icon ghost" data-act="msec-add" data-at="${i}" data-type="row" title="Insert a row above">⊕</button><button aria-label="Delete" class="btn sm icon ghost danger" data-act="msec-del" ${sa} title="Delete">✕</button></span></div>
       <div class="pchips">${chips}<button class="btn sm" data-act="mp-add" ${sa}>+ Plate</button></div></div>`;
   }).join('');
   return `<div class="sp-head"><h2>Floor builder — plate by plate</h2><span class="muted small">${S.layout.plates.filter((p) => p.kind === 'floor').length} bottom plates</span></div>
@@ -892,7 +885,7 @@ function viewMap() {
         <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="showCZ" ${S.showCZ ? 'checked' : ''}><span>Critical zone</span></label>
         <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="showPatches" ${S.showPatches ? 'checked' : ''}><span>Patches</span></label>
       </div>
-      <div class="seg zoom"><button class="btn sm icon" data-act="zoom-out" title="Zoom out">−</button><button class="btn sm icon" data-act="zoom-in" title="Zoom in">+</button><button class="btn sm" data-act="zoom-fit" title="Fit (F)">Fit</button></div>
+      <div class="seg zoom"><button aria-label="Zoom out" class="btn sm icon" data-act="zoom-out" title="Zoom out">−</button><button aria-label="Zoom in" class="btn sm icon" data-act="zoom-in" title="Zoom in">+</button><button class="btn sm" data-act="zoom-fit" title="Fit (F)">Fit</button></div>
     </div>
     <div class="mapbox" id="mapbox" data-mode="${S.mode}"></div>
     <div class="mapstatus"><span id="hoverInfo">Scroll to zoom · drag to pan</span><span id="modeHint"></span></div>
@@ -1066,9 +1059,9 @@ function indEditor(ind, where) {
     <div class="ed-head">
       <div class="ed-title"><span class="dot r-${ind.result || 'pending'}"></span><span>Indication</span><input class="ed-no" data-ib="no" data-kind="text" value="${h(ind.no)}" aria-label="Indication number"></div>
       <div class="acts">
-        <button class="btn sm icon" data-act="ind-nav" data-d="-1" ${idx <= 0 ? 'disabled' : ''} title="Previous">‹</button>
+        <button aria-label="Previous" class="btn sm icon" data-act="ind-nav" data-d="-1" ${idx <= 0 ? 'disabled' : ''} title="Previous">‹</button>
         <button class="btn sm icon" data-act="ind-nav" data-d="1" ${idx >= inds.length - 1 ? 'disabled' : ''} title="Next">›</button>
-        <button class="btn sm icon ghost" data-act="ind-close" title="Close (Esc)">✕</button>
+        <button aria-label="Close (Esc)" class="btn sm icon ghost" data-act="ind-close" title="Close (Esc)">✕</button>
       </div>
     </div>
     ${plateDatalist()}
@@ -1098,7 +1091,7 @@ function indEditor(ind, where) {
       ${f('Comments', 'comments', 'area', { rows: 2, cls: 'span2' })}
     </div></fieldset>
     <fieldset><legend>Photos</legend>
-      <div class="photos-ed">${photos.map((p) => `<figure><img src="${p.dataUrl}" alt="" data-act="photo-view" data-id="${p.id}"><input data-photo-cap="${p.id}" value="${h(p.caption)}" placeholder="Caption"><button class="btn sm ghost danger" data-act="photo-del" data-id="${p.id}" title="Delete photo">✕</button></figure>`).join('')}
+      <div class="photos-ed">${photos.map((p) => `<figure><img src="${p.dataUrl}" alt="" data-act="photo-view" data-id="${p.id}"><input data-photo-cap="${p.id}" value="${h(p.caption)}" placeholder="Caption"><button aria-label="Delete photo" class="btn sm ghost danger" data-act="photo-del" data-id="${p.id}" title="Delete photo">✕</button></figure>`).join('')}
       <label class="photo-add"><input type="file" accept="image/*" multiple data-act="photo-add" hidden><span>+ Add photo</span></label></div>
     </fieldset>
     <div class="ed-foot"><button class="btn sm" data-act="ind-dup">Duplicate</button><button class="btn sm danger ghost" data-act="ind-del">Delete indication</button></div>
@@ -1137,7 +1130,7 @@ function refreshEditorParts(root) {
 function nozzleEditor() {
   const nz = (S.job.nozzles || []).find((x) => x.id === S.selNozzle); if (!nz) return sideOverview();
   const f = (label, key, kind = 'text', extra = {}) => field(label, key, kind, { ...extra, attr: 'data-nb', value: nz[key], attrs: `data-id="${nz.id}"` });
-  return `<div class="ed" data-ed="nozzle" data-id="${nz.id}"><div class="ed-head"><div class="ed-title"><span>Shell nozzle</span><b>${h(nz.mark || '')}</b></div><div class="acts"><button class="btn sm icon ghost" data-act="close-sel">✕</button></div></div>
+  return `<div class="ed" data-ed="nozzle" data-id="${nz.id}"><div class="ed-head"><div class="ed-title"><span>Shell nozzle</span><b>${h(nz.mark || '')}</b></div><div class="acts"><button aria-label="Close" class="btn sm icon ghost" data-act="close-sel">✕</button></div></div>
     <div class="fgrid">
       ${f('Mark', 'mark')}${f('Type', 'type', 'sel', { options: NZ_TYPES })}
       ${f('Angle (clockwise from 0°)', 'angle', 'num', { unit: '°' })}${f('Size (nominal / opening)', 'size', 'small')}
@@ -1149,7 +1142,7 @@ function nozzleEditor() {
       ${f('Schedule / class', 'sched', 'text', { ph: 'e.g. Sch 40, STD, XS' })}${(() => { const w = nozzleWall({ ...nz, tNom: null, tMin: null }, S.job); return f('Nominal wall', 'tNom', 't', { ph: w.tNom ? inVal(w.tNom, 't', S.job) : '', hint: w.tNom ? 'Blank = ' + w.src : '' }) + f('t-min (required)', 'tMin', 't', { ph: w.tMin ? inVal(w.tMin, 't', S.job) : '', hint: w.tMin ? 'Blank = nominal less 12.5 % mill tolerance' : '' }); })()}
     </div>
     <div class="ut-clock">${UT_CLOCK.map(([k, lab]) => field(`${lab} o’clock`, k, 't', { attr: 'data-nb', value: nz[k], attrs: `data-id="${nz.id}"` })).join('')}</div>
-    <div class="ut-extra">${(nz.utx || []).map((r) => `<div class="utx-row"><input data-nbx="loc" data-id="${nz.id}" data-rid="${r.id}" data-kind="text" value="${h(r.loc || '')}" placeholder="Location, e.g. flange side 12"><span class="ctl"><input data-nbx="t" data-id="${nz.id}" data-rid="${r.id}" data-kind="t" inputmode="decimal" value="${h(inVal(r.t, 't', S.job))}"><i class="unit">${u(S.job).small}</i></span><button class="btn sm icon ghost danger" data-act="utx-del" data-id="${nz.id}" data-rid="${r.id}" title="Remove reading">✕</button></div>`).join('')}
+    <div class="ut-extra">${(nz.utx || []).map((r) => `<div class="utx-row"><input data-nbx="loc" data-id="${nz.id}" data-rid="${r.id}" data-kind="text" value="${h(r.loc || '')}" placeholder="Location, e.g. flange side 12"><span class="ctl"><input data-nbx="t" data-id="${nz.id}" data-rid="${r.id}" data-kind="t" inputmode="decimal" value="${h(inVal(r.t, 't', S.job))}"><i class="unit">${u(S.job).small}</i></span><button aria-label="Remove reading" class="btn sm icon ghost danger" data-act="utx-del" data-id="${nz.id}" data-rid="${r.id}" title="Remove reading">✕</button></div>`).join('')}
       <button class="btn sm" data-act="utx-add" data-id="${nz.id}">+ Reading</button></div>
     <div class="nz-ut" data-part="nzut">${nozzleUTBox(nz)}</div>
     </fieldset>
@@ -1184,13 +1177,13 @@ function nozzleTableHTML(design = false) {
   if (design) return `<div class="sp-head"><h2>Nozzles</h2><span class="muted small">${list.length} on the shell</span></div>
     <p class="muted small">Position each nozzle by <b>angle</b> or by <b>distance around the shell</b>, both clockwise from the 0° datum (${h(S.job.info.zeroRef || 'set the 0° reference label above')}) — enter either one and the other follows. Elevation is to the nozzle centreline above the bottom. Nozzles are drawn on the floor drawing and the shell roll-out; neck UT readings are entered on the Nozzles page during an inspection.</p>
     <div class="tblwrap"><table class="grid nozzles"><thead><tr><th>Mark</th><th>Type</th><th>Connection</th><th>Angle (°)</th><th title="Distance around the shell, clockwise from the datum">From datum (${U.big})</th><th>Size (${U.small})</th><th>Elev. (${U.small})</th><th>Schedule</th><th>Nom. wall</th><th>t-min</th><th>Service / description</th><th></th></tr></thead><tbody>
-    ${list.slice().sort((a, b) => (+a.angle || 0) - (+b.angle || 0)).map((n) => `<tr><td>${inp(n, 'mark', 'text', 'class="mk"')}</td><td>${inp(n, 'type', 'sel')}</td><td>${inp(n, 'conn', 'conn')}</td><td>${inp(n, 'angle', 'num')}</td><td>${arcIn(n)}</td><td>${inp(n, 'size', 'small')}</td><td>${inp(n, 'elev', 'small')}</td><td>${inp(n, 'sched', 'text', 'class="sch"')}</td><td>${inp(n, 'tNom', 't')}</td><td>${inp(n, 'tMin', 't')}</td><td>${inp(n, 'service', 'text')}</td><td><button class="btn sm icon ghost danger" data-act="nozzle-del" data-id="${n.id}" title="Delete">✕</button></td></tr>`).join('') || '<tr><td colspan="12" class="empty">No nozzles yet. Add them here, or place them by clicking around the shell on the floor drawing.</td></tr>'}
+    ${list.slice().sort((a, b) => (+a.angle || 0) - (+b.angle || 0)).map((n) => `<tr><td>${inp(n, 'mark', 'text', 'class="mk"')}</td><td>${inp(n, 'type', 'sel')}</td><td>${inp(n, 'conn', 'conn')}</td><td>${inp(n, 'angle', 'num')}</td><td>${arcIn(n)}</td><td>${inp(n, 'size', 'small')}</td><td>${inp(n, 'elev', 'small')}</td><td>${inp(n, 'sched', 'text', 'class="sch"')}</td><td>${inp(n, 'tNom', 't')}</td><td>${inp(n, 'tMin', 't')}</td><td>${inp(n, 'service', 'text')}</td><td><button aria-label="Delete" class="btn sm icon ghost danger" data-act="nozzle-del" data-id="${n.id}" title="Delete">✕</button></td></tr>`).join('') || '<tr><td colspan="12" class="empty">No nozzles yet. Add them here, or place them by clicking around the shell on the floor drawing.</td></tr>'}
     </tbody></table></div>
     <div class="acts"><button class="btn sm" data-act="nozzle-add">+ Nozzle</button><button class="btn sm" data-act="nozzle-place">Place on the floor drawing…</button></div>`;
   return `<div class="sp-head"><h2>Shell nozzles</h2><span class="muted small">${list.length} on the shell</span></div>
     <p class="muted small">Angle is clockwise from 0° (${h(S.job.info.zeroRef || 'the 0° reference')}). Neck UT readings at 12, 3, 6 and 9 o’clock; add more readings by clicking the nozzle on the Floor map. Thickness in ${U.small}.</p>
     <div class="tblwrap"><table class="grid nozzles"><thead><tr><th>Mark</th><th>Type</th><th>Connection</th><th>Angle (°)</th><th>Size (${U.small})</th><th>Elev. (${U.small})</th><th>Schedule</th><th>Nom. wall</th><th>t-min</th>${UT_CLOCK.map(([, l]) => `<th>${l}:00</th>`).join('')}<th>Min</th><th>Status</th><th>Service / description</th><th></th></tr></thead><tbody>
-    ${list.slice().sort((a, b) => (+a.angle || 0) - (+b.angle || 0)).map((n) => { const r = nozzleUT(n, S.job); return `<tr class="${r.status === 'Below t-min' ? 'is-bad' : ''}"><td>${inp(n, 'mark', 'text', 'class="mk"')}</td><td>${inp(n, 'type', 'sel')}</td><td>${inp(n, 'conn', 'conn')}</td><td>${inp(n, 'angle', 'num')}</td><td>${inp(n, 'size', 'small')}</td><td>${inp(n, 'elev', 'small')}</td><td>${inp(n, 'sched', 'text', 'class="sch"')}</td><td>${inp(n, 'tNom', 't')}</td><td>${inp(n, 'tMin', 't')}</td>${UT_CLOCK.map(([k]) => `<td>${inp(n, k, 't')}</td>`).join('')}<td class="n" data-part="min-${n.id}">${r.count ? fmt(r.min, 't', S.job, false) + ((n.utx || []).length ? `<sup title="Includes ${(n.utx || []).length} extra reading(s)">+${(n.utx || []).length}</sup>` : '') : '—'}</td><td data-part="st-${n.id}"><span class="st ${r.status === 'OK' ? 'st-OK' : r.status ? 'st-below-MRT' : ''}">${r.status || ''}</span></td><td>${inp(n, 'service', 'text')}</td><td><button class="btn sm icon ghost danger" data-act="nozzle-del" data-id="${n.id}" title="Delete">✕</button></td></tr>`; }).join('') || '<tr><td colspan="17" class="empty">No nozzles yet.</td></tr>'}
+    ${list.slice().sort((a, b) => (+a.angle || 0) - (+b.angle || 0)).map((n) => { const r = nozzleUT(n, S.job); return `<tr class="${r.status === 'Below t-min' ? 'is-bad' : ''}"><td>${inp(n, 'mark', 'text', 'class="mk"')}</td><td>${inp(n, 'type', 'sel')}</td><td>${inp(n, 'conn', 'conn')}</td><td>${inp(n, 'angle', 'num')}</td><td>${inp(n, 'size', 'small')}</td><td>${inp(n, 'elev', 'small')}</td><td>${inp(n, 'sched', 'text', 'class="sch"')}</td><td>${inp(n, 'tNom', 't')}</td><td>${inp(n, 'tMin', 't')}</td>${UT_CLOCK.map(([k]) => `<td>${inp(n, k, 't')}</td>`).join('')}<td class="n" data-part="min-${n.id}">${r.count ? fmt(r.min, 't', S.job, false) + ((n.utx || []).length ? `<sup title="Includes ${(n.utx || []).length} extra reading(s)">+${(n.utx || []).length}</sup>` : '') : '—'}</td><td data-part="st-${n.id}"><span class="st ${r.status === 'OK' ? 'st-OK' : r.status ? 'st-below-MRT' : ''}">${r.status || ''}</span></td><td>${inp(n, 'service', 'text')}</td><td><button aria-label="Delete" class="btn sm icon ghost danger" data-act="nozzle-del" data-id="${n.id}" title="Delete">✕</button></td></tr>`; }).join('') || '<tr><td colspan="17" class="empty">No nozzles yet.</td></tr>'}
     </tbody></table></div>
     <div class="acts"><button class="btn sm" data-act="nozzle-add">+ Nozzle</button><button class="btn sm" data-act="exp-noz">Export CSV</button></div>`;
 }
@@ -1199,7 +1192,7 @@ function featureEditor() {
   const ft = S.job.features.find((x) => x.id === S.selFeature); if (!ft) return sideOverview();
   const p = S.layout.byKey.get(ft.plate);
   const f = (label, key, kind = 'text', extra = {}) => field(label, key, kind, { ...extra, attr: 'data-fb', value: ft[key] });
-  return `<div class="ed" data-ed="feature" data-id="${ft.id}"><div class="ed-head"><div class="ed-title"><span>Floor feature</span></div><div class="acts"><button class="btn sm icon ghost" data-act="close-sel">✕</button></div></div>
+  return `<div class="ed" data-ed="feature" data-id="${ft.id}"><div class="ed-head"><div class="ed-title"><span>Floor feature</span></div><div class="acts"><button aria-label="Close" class="btn sm icon ghost" data-act="close-sel">✕</button></div></div>
     ${plateDatalist()}
     <div class="fgrid">
       ${f('Type', 'type', 'sel', { options: FT_TYPES })}${f('Label', 'label')}
@@ -1216,7 +1209,7 @@ function plateEditor(key) {
   const o = S.job.plates[key] || {};
   const inds = S.job.indications.filter((i) => i.plate === key).sort(byNo);
   const nom = p.kind === 'annular' ? S.job.tank.tAnnular ?? S.job.tank.tBottom : S.job.tank.tBottom;
-  return `<div class="ed" data-ed="plate" data-key="${key}"><div class="ed-head"><div class="ed-title"><span>Plate</span><b>${h(p.label)}</b></div><div class="acts"><button class="btn sm icon ghost" data-act="close-sel">✕</button></div></div>
+  return `<div class="ed" data-ed="plate" data-key="${key}"><div class="ed-head"><div class="ed-title"><span>Plate</span><b>${h(p.label)}</b></div><div class="acts"><button aria-label="Close" class="btn sm icon ghost" data-act="close-sel">✕</button></div></div>
     <p class="muted small">${p.kind === 'annular' ? 'Annular segment' : p.cut ? 'Cut (sketch) plate' : 'Full plate'} · ${fmt(p.bb.x1 - p.bb.x0, 'big', S.job)} × ${fmt(p.bb.y1 - p.bb.y0, 'big', S.job)} · auto label ${h(p.autoLabel)}</p>
     <div class="fgrid">
       ${field('Label', 'label', 'text', { attr: 'data-pb', value: o.label ?? '', ph: p.autoLabel, attrs: `data-key="${key}"` })}
@@ -1234,7 +1227,7 @@ function plateEditor(key) {
     ${p.rowId && S.job.layout.mode === 'custom' ? (() => { const r = (S.job.layout.rows || []).find((x) => x.id === p.rowId); if (!r) return ''; const cnt = S.layout.plates.filter((q) => q.rowId === r.id && q.part !== 'side').length;
       return `<fieldset><legend>${r.type === 'block' ? 'Block' : 'Row'} ${h(rowLetter(p.row ?? 0))}</legend><div class="acts row-step">
         <span>${r.type === 'block' ? 'Full-length plates in block' : 'Plates in this row'}: <b>${r.n}</b>${cnt !== +r.n ? ` <span class="muted small">(${cnt} drawn)</span>` : ''}</span>
-        <button class="btn sm icon" data-act="row-n" data-row="${r.id}" data-d="-1" title="One plate fewer">−</button><button class="btn sm icon" data-act="row-n" data-row="${r.id}" data-d="1" title="One plate more">+</button></div>
+        <button aria-label="One plate fewer" class="btn sm icon" data-act="row-n" data-row="${r.id}" data-d="-1" title="One plate fewer">−</button><button aria-label="One plate more" class="btn sm icon" data-act="row-n" data-row="${r.id}" data-d="1" title="One plate more">+</button></div>
         <p class="muted small">${p.part === 'side' ? 'This is a side sketch plate of the block. ' : ''}Edit row widths, plate lengths and offsets in Tank setup → Floor builder.</p></fieldset>`; })() : ''}
     ${p.kind === 'annular' || p.plId ? '' : `<fieldset><legend>Plate size &amp; orientation</legend><div class="fgrid g3">
       ${field('Length', 'len', 'big', { attr: 'data-pb', value: o.len, ph: inVal(p.std.len, 'big', S.job), attrs: `data-key="${key}"` })}
@@ -1437,7 +1430,7 @@ function fixedCardHTML() {
           ${field('Notes', 'roof.fixed.notes', 'area', { rows: 2, cls: 'span2' })}</div>
         <h3>UT points</h3>
         <div class="tblwrap"><table class="grid rpts"><thead><tr><th>Point</th><th>Angle (°)</th><th>From centre (${U.big})</th><th>Reading (${U.small})</th><th>Status</th><th></th></tr></thead><tbody>
-        ${pts.map((pt) => { const st = pointStatus(job, pt); return `<tr class="${S.roofPt === pt.id ? 'sel' : ''}${st.status === 'Below t-min' ? ' is-bad' : ''}"><td>${pin(pt, 'label', 'text', 'class="lbl"')}</td><td>${pin(pt, 'angle', 'num')}</td><td>${pin(pt, 'r', 'big')}</td><td>${pin(pt, 't', 't')}</td><td>${rStatus(st.status)}</td><td><button class="btn sm icon ghost danger" data-act="rpt-del" data-id="${pt.id}" title="Delete point">✕</button></td></tr>`; }).join('') || '<tr><td colspan="6" class="empty">No UT points yet.</td></tr>'}
+        ${pts.map((pt) => { const st = pointStatus(job, pt); return `<tr class="${S.roofPt === pt.id ? 'sel' : ''}${st.status === 'Below t-min' ? ' is-bad' : ''}"><td>${pin(pt, 'label', 'text', 'class="lbl"')}</td><td>${pin(pt, 'angle', 'num')}</td><td>${pin(pt, 'r', 'big')}</td><td>${pin(pt, 't', 't')}</td><td>${rStatus(st.status)}</td><td><button aria-label="Delete point" class="btn sm icon ghost danger" data-act="rpt-del" data-id="${pt.id}" title="Delete point">✕</button></td></tr>`; }).join('') || '<tr><td colspan="6" class="empty">No UT points yet.</td></tr>'}
         </tbody></table></div>
         <div class="acts"><button class="btn sm" data-act="rpt-add">+ Point</button><button class="btn sm" data-act="rpt-std">Standard points: edge &amp; mid-radius at each shell UT station + centre</button></div>
       </div>
@@ -1465,7 +1458,7 @@ function floatingCardHTML() {
   const rin = (p, k) => `<input data-rut="${p.key}" data-pt="${k}" data-kind="t" inputmode="decimal" value="${h(inVal(F.ut?.[p.key]?.[k], 't', job))}">`;
   const row = (p) => { const x = plateUT(job, p); return `<tr class="${S.roofSel === p.key ? 'sel' : ''}${x.status === 'Below t-min' ? ' is-bad' : ''}"><td><button class="linkbtn" data-act="rsel" data-key="${p.key}">${h(p.label)}</button>${p.cut ? ' <small class="muted">cut</small>' : ''}</td>${PT5.map(([k]) => `<td>${rin(p, k)}</td>`).join('')}<td class="n"><b>${x.min != null ? fmt(x.min, 't', job, false) : '—'}</b></td><td class="n">${x.lossPct != null ? x.lossPct.toFixed(0) + '%' : '—'}</td><td>${rStatus(x.status)}</td></tr>`; };
   const prow = (p) => { const pc = F.pont?.[p.key] || {}; return `<tr class="${S.roofSel === p.key ? 'sel' : ''}${['Liquid present', 'Leaking'].includes(pc.cond) ? ' is-bad' : ''}"><td><button class="linkbtn" data-act="rsel" data-key="${p.key}">${h(p.label)}</button></td><td>${condSel(p.key, pc.cond)}</td><td><input class="pnote" data-rpc="${p.key}" data-f="notes" data-kind="text" value="${h(pc.notes || '')}"></td></tr>`; };
-  const nav = (list, i) => `<div class="acts"><button class="btn sm icon" data-act="rsel-nav" data-d="-1" ${i <= 0 ? 'disabled' : ''} title="Previous">‹</button><button class="btn sm icon" data-act="rsel-nav" data-d="1" ${i >= list.length - 1 ? 'disabled' : ''} title="Next">›</button><button class="btn sm icon ghost" data-act="rsel-close" title="Close">✕</button></div>`;
+  const nav = (list, i) => `<div class="acts"><button aria-label="Previous" class="btn sm icon" data-act="rsel-nav" data-d="-1" ${i <= 0 ? 'disabled' : ''} title="Previous">‹</button><button class="btn sm icon" data-act="rsel-nav" data-d="1" ${i >= list.length - 1 ? 'disabled' : ''} title="Next">›</button><button aria-label="Close" class="btn sm icon ghost" data-act="rsel-close" title="Close">✕</button></div>`;
   let panel;
   if (!sel) panel = `<p class="muted small">Click a deck plate on the plan (or its name in the table) to enter its 5 UT readings. Click a pontoon to record its condition.</p>`;
   else if (sel.kind === 'annular') {
@@ -1526,7 +1519,7 @@ function sealCardHTML() {
     const sd = k === 'p' ? seal.primary : seal.secondary, sum = gapSummary(sd.gaps, D);
     const gin = (g, f, kind, extra = '') => `<input data-sg="${k}" data-gid="${g.id}" data-f="${f}" data-kind="${kind}" ${kind === 'text' ? '' : 'inputmode="decimal"'} value="${h(kind === 'small' ? inVal(g[f], 'small', job) : g[f] ?? '')}" ${extra}>`;
     return `<div class="tblwrap"><table class="grid sgaps"><thead><tr><th>#</th><th>Start angle (°)</th><th>Length (${U.small})</th><th>Max width (${U.small})</th><th>Avg width (${U.small})</th><th class="n">Area</th><th>Notes</th><th></th></tr></thead><tbody>
-      ${sd.gaps.map((g, i) => { const L = +g.len, W = +(g.wAvg ?? g.wMax); const a = L > 0 && W > 0 ? (L / 10) * (W / 10) : null; return `<tr><td>${i + 1}</td><td>${gin(g, 'angle', 'num')}</td><td>${gin(g, 'len', 'small')}</td><td>${gin(g, 'wMax', 'small')}</td><td>${gin(g, 'wAvg', 'small', 'placeholder="= max"')}</td><td class="n">${a === null ? '—' : job.units === 'metric' ? a.toFixed(1) + ' cm²' : (a / 6.4516).toFixed(2) + ' in²'}</td><td>${gin(g, 'notes', 'text', 'class="note"')}</td><td><button class="btn sm icon ghost danger" data-act="sg-del" data-sg="${k}" data-gid="${g.id}" title="Remove gap">✕</button></td></tr>`; }).join('') || `<tr><td colspan="8" class="empty">${sd.noGaps ? 'No gaps found.' : 'No gaps entered.'}</td></tr>`}
+      ${sd.gaps.map((g, i) => { const L = +g.len, W = +(g.wAvg ?? g.wMax); const a = L > 0 && W > 0 ? (L / 10) * (W / 10) : null; return `<tr><td>${i + 1}</td><td>${gin(g, 'angle', 'num')}</td><td>${gin(g, 'len', 'small')}</td><td>${gin(g, 'wMax', 'small')}</td><td>${gin(g, 'wAvg', 'small', 'placeholder="= max"')}</td><td class="n">${a === null ? '—' : job.units === 'metric' ? a.toFixed(1) + ' cm²' : (a / 6.4516).toFixed(2) + ' in²'}</td><td>${gin(g, 'notes', 'text', 'class="note"')}</td><td><button aria-label="Remove gap" class="btn sm icon ghost danger" data-act="sg-del" data-sg="${k}" data-gid="${g.id}" title="Remove gap">✕</button></td></tr>`; }).join('') || `<tr><td colspan="8" class="empty">${sd.noGaps ? 'No gaps found.' : 'No gaps entered.'}</td></tr>`}
       </tbody></table></div>
       <div class="acts"><button class="btn sm" data-act="sg-add" data-sg="${k}">+ Gap</button>${field('No gaps found', `roof.seal.${k === 'p' ? 'primary' : 'secondary'}.noGaps`, 'bool', { cls: 'inline-chk' })}<span class="spacer"></span><span class="muted small">${sum.n} gap${sum.n === 1 ? '' : 's'} · total ${job.units === 'metric' ? sum.areaCm2.toFixed(1) + ' cm²' : (sum.areaCm2 / 6.4516).toFixed(2) + ' in²'} · ${fmtGapArea(sum.n ? sum.perM : seal[k === 'p' ? 'primary' : 'secondary'].noGaps ? 0 : null)}</span></div>`;
   };
@@ -1654,7 +1647,7 @@ function shellBodyHTML() {
       const vals = locs.map((l) => getReading(job, l.key, z)).filter((v) => v !== null);
       const rmin = vals.length ? Math.min(...vals) : null;
       const extra = (sh.extraZ || []).some((e) => zKey(e) === zKey(z));
-      rows.push(`<tr><td class="el">${fmtElev(z, job)}${extra ? ` <button class="x" data-act="z-del" data-z="${zKey(z)}" title="Remove this extra elevation">✕</button>` : ''}</td>${locs.map((l) => { const v = getReading(job, l.key, z); const bad = v != null && c?.tMin > 0 && v < c.tMin - 1e-9; return `<td class="${bad ? 'bad-cell' : ''}"><input data-shut="${l.key}" data-z="${zKey(z)}" data-kind="t" inputmode="decimal" value="${h(inVal(v, 't', job))}"></td>`; }).join('')}<td class="n">${rmin != null ? fmt(rmin, 't', job, false) : ''}</td></tr>`);
+      rows.push(`<tr><td class="el">${fmtElev(z, job)}${extra ? ` <button aria-label="Remove this extra elevation" class="x" data-act="z-del" data-z="${zKey(z)}" title="Remove this extra elevation">✕</button>` : ''}</td>${locs.map((l) => { const v = getReading(job, l.key, z); const bad = v != null && c?.tMin > 0 && v < c.tMin - 1e-9; return `<td class="${bad ? 'bad-cell' : ''}"><input data-shut="${l.key}" data-z="${zKey(z)}" data-kind="t" ${bad ? 'aria-invalid="true" title="Below t-min" ' : ''}inputmode="decimal" value="${h(inVal(v, 't', job))}"></td>`; }).join('')}<td class="n">${rmin != null ? fmt(rmin, 't', job, false) : ''}</td></tr>`);
     }
     grid = rows.join('');
   }
@@ -1662,7 +1655,7 @@ function shellBodyHTML() {
   return `<div class="shell-grid">
     <section class="card"><div class="sp-head"><h2>Shell courses &amp; plates</h2><span class="muted small">${courses.length} course${courses.length === 1 ? '' : 's'} · ${fmt(H, 'big', job)} high</span></div>
       <div class="tblwrap"><table class="grid courses"><thead><tr><th>Course</th><th>Height (${U.big})</th><th>Nominal t (${U.small})</th><th>t-min (${U.small})</th><th title="Number of shell plates in the course">Plates</th><th title="Angle of the first vertical seam">1st seam (°)</th><th title="Optional: plate length; the last plate is the closure plate">Plate length (${U.big})</th><th class="n">Min. reading</th><th>Status</th><th></th></tr></thead><tbody>
-      ${top.map((c, k) => { const s = sm.get(c.id); const cp = coursePlates(job, c, c.no - 1); return `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${c.no}</b>${c.no === 1 ? ' <span class="muted small">bottom</span>' : ''}</td><td>${cin(c, 'h', 'big')}</td><td>${cin(c, 'tNom', 't')}</td><td>${cin(c, 'tMin', 't')}</td><td>${cin(c, 'pn', 'num', String(c.plen ? cp.n : autoN), 'xs')}</td><td>${cin(c, 'seam0', 'num', (Math.round(cp.seam0 * 10) / 10).toString(), 'xs')}</td><td>${cin(c, 'plen', 'big', fmt(cp.plates[0]?.len, 'big', job, false))}</td><td class="n">${s.min != null ? fmt(s.min, 't', job, false) : '—'}<small class="muted"> ${s.count}</small></td><td>${st(s)}</td><td><button class="btn sm icon ghost danger" data-act="course-del" data-course="${c.id}" title="Delete course">✕</button></td></tr>`; }).join('') || `<tr><td colspan="10" class="empty">No courses yet. Add them from the bottom course up, or start with <button class="btn sm" data-act="courses-std" data-n="5">5 courses</button> <button class="btn sm" data-act="courses-std" data-n="6">6 courses</button> <button class="btn sm" data-act="courses-std" data-n="8">8 courses</button></td></tr>`}
+      ${top.map((c, k) => { const s = sm.get(c.id); const cp = coursePlates(job, c, c.no - 1); return `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${c.no}</b>${c.no === 1 ? ' <span class="muted small">bottom</span>' : ''}</td><td>${cin(c, 'h', 'big')}</td><td>${cin(c, 'tNom', 't')}</td><td>${cin(c, 'tMin', 't')}</td><td>${cin(c, 'pn', 'num', String(c.plen ? cp.n : autoN), 'xs')}</td><td>${cin(c, 'seam0', 'num', (Math.round(cp.seam0 * 10) / 10).toString(), 'xs')}</td><td>${cin(c, 'plen', 'big', fmt(cp.plates[0]?.len, 'big', job, false))}</td><td class="n">${s.min != null ? fmt(s.min, 't', job, false) : '—'}<small class="muted"> ${s.count}</small></td><td>${st(s)}</td><td><button aria-label="Delete course" class="btn sm icon ghost danger" data-act="course-del" data-course="${c.id}" title="Delete course">✕</button></td></tr>`; }).join('') || `<tr><td colspan="10" class="empty">No courses yet. Add them from the bottom course up, or start with <button class="btn sm" data-act="courses-std" data-n="5">5 courses</button> <button class="btn sm" data-act="courses-std" data-n="6">6 courses</button> <button class="btn sm" data-act="courses-std" data-n="8">8 courses</button></td></tr>`}
       </tbody></table></div>
       <div class="acts"><button class="btn sm" data-act="course-add">+ Course on top</button></div>
       <p class="muted small">Course 1 is the bottom course. Plates: give the number of plates (equal lengths), or a plate length (full plates from the first seam, the last one is the closure plate). Blank first seam staggers alternate courses by half a plate. t-min is calculated to API 653 4.3.3.1 (grey) once the product SG is entered — see the shell evaluation below; type a value to override it.</p></section>
@@ -1676,7 +1669,7 @@ function shellBodyHTML() {
     <section class="card"><div class="sp-head"><h2>Reading elevations</h2><span class="muted small">${zs.length} per station · ${zs.length * locs.length} readings</span></div>
       <p class="muted small">Readings are taken at each station at these elevations above the bottom. Each zone gives a reading every <i>step</i> from <i>start</i> to <i>end</i> (blank end = top of the shell). Values in ${U.small}.</p>
       <table class="grid zones"><thead><tr><th>From</th><th>To</th><th>Every</th><th class="n">Readings</th><th></th></tr></thead><tbody>
-      ${(sh.zones || []).map((zn) => `<tr><td><input data-zf="start" data-zone="${zn.id}" data-kind="small" inputmode="decimal" value="${h(inVal(zn.start, 'small', job))}"></td><td><input data-zf="end" data-zone="${zn.id}" data-kind="small" inputmode="decimal" value="${h(inVal(zn.end, 'small', job))}" placeholder="top"></td><td><input data-zf="step" data-zone="${zn.id}" data-kind="small" inputmode="decimal" value="${h(inVal(zn.step, 'small', job))}"></td><td class="n">${zoneCount(job, zn)}<br><small class="muted">${fmtElev(+zn.start || 0, job)}${zn.end != null ? ' – ' + fmtElev(+zn.end, job) : ' – top'}</small></td><td><button class="btn sm icon ghost danger" data-act="zone-del" data-zone="${zn.id}" title="Remove zone">✕</button></td></tr>`).join('') || '<tr><td colspan="5" class="empty">No zones.</td></tr>'}
+      ${(sh.zones || []).map((zn) => `<tr><td><input data-zf="start" data-zone="${zn.id}" data-kind="small" inputmode="decimal" value="${h(inVal(zn.start, 'small', job))}"></td><td><input data-zf="end" data-zone="${zn.id}" data-kind="small" inputmode="decimal" value="${h(inVal(zn.end, 'small', job))}" placeholder="top"></td><td><input data-zf="step" data-zone="${zn.id}" data-kind="small" inputmode="decimal" value="${h(inVal(zn.step, 'small', job))}"></td><td class="n">${zoneCount(job, zn)}<br><small class="muted">${fmtElev(+zn.start || 0, job)}${zn.end != null ? ' – ' + fmtElev(+zn.end, job) : ' – top'}</small></td><td><button aria-label="Remove zone" class="btn sm icon ghost danger" data-act="zone-del" data-zone="${zn.id}" title="Remove zone">✕</button></td></tr>`).join('') || '<tr><td colspan="5" class="empty">No zones.</td></tr>'}
       </tbody></table>
       <div class="acts"><button class="btn sm" data-act="zone-add">+ Zone</button><button class="btn sm" data-act="zones-std">Standard: every 1 in to 2 ft, then every 1 ft</button></div>
       <div class="acts extra-z"><label class="fld inline"><span class="lbl">Add one elevation</span><span class="ctl"><input id="extraZ" data-kind="small" inputmode="decimal" placeholder="${U.small}"><i class="unit">${U.small}</i></span></label><button class="btn sm" data-act="z-add">Add</button></div></section>
@@ -1744,7 +1737,7 @@ function shellBuildHTML() {
       <td>${inp(c, 'seam0', 'num', (Math.round(cp.seam0 * 10) / 10).toString(), 'xs')}</td>
       <td>${inp(c, 'plen', 'big', cp.plates[0] ? inVal(cp.plates[0].len, 'big', job) : '')}</td>
       <td class="small muted">${cp.n ? `${cp.n} × ${fmt(cp.plates[0]?.len, 'big', job)}${closure ? `<br>closure ${fmt(closure.len, 'big', job)}` : ''}` : '—'}</td>
-      <td><button class="btn sm icon ghost danger" data-act="course-del" data-course="${c.id}" title="Delete course">✕</button></td></tr>`;
+      <td><button aria-label="Delete course" class="btn sm icon ghost danger" data-act="course-del" data-course="${c.id}" title="Delete course">✕</button></td></tr>`;
   }).join('');
   return `<div class="sp-head"><h2>Shell</h2><span class="muted small">${courses.length} course${courses.length === 1 ? '' : 's'}${H > 0 ? ' · ' + fmt(H, 'big', job) + ' high' : ''}${Cc > 0 ? ' · circumference ' + fmt(Cc, 'big', job) : ''}</span></div>
     <p class="muted small">Build the shell from the bottom course up. For each course give the height, nominal thickness and the plates — either the <b>number of plates</b> (equal lengths) or a <b>plate length</b> (full plates from the first seam; the last is the closure plate). Locate the <b>first vertical seam</b> by its distance around the shell or its angle, clockwise from the 0° datum (${h(job.info.zeroRef || 'set the 0° reference label above')}). Blank = alternate courses staggered by half a plate. Grey values are what will be used.</p>
@@ -1810,9 +1803,9 @@ function settleBodyHTML() {
   const stt = (s) => `<span class="st ${s === 'Acceptable' ? 'st-OK' : s === 'Exceeds' ? 'st-below-MRT' : s === 'NDE required' ? 'st-warn' : ''}">${s}</span>`;
   const edgeRows = st.edge.map((x, i) => { const ev = edgeEval(x, S.job); return `<tr class="${ev.status === 'Exceeds' ? 'is-bad' : ev.status === 'NDE required' ? 'is-warn' : ''}"><td><b>E${i + 1}</b></td><td>${ein(x, 'angle', 'num')}</td><td>${ein(x, 'arc', 'big', 'placeholder="opt."')}</td><td>${ein(x, 'R', 'big')}</td><td>${ein(x, 'B', 'small')}</td>
     <td><select data-se="edge" data-eid="${x.id}" data-f="weld" data-kind="text">${WELDS.map(([k, l]) => `<option value="${k}" ${x.weld === k ? 'selected' : ''}>${h(l)}</option>`).join('')}</select></td><td>${x.weld === 'angle' ? ein(x, 'alpha', 'num', 'placeholder="0–90"') : '<span class="muted">—</span>'}</td>
-    ${(() => { const cv = edgeCurve(job, +x.R || 0); return `<td>${ein(x, 'Bew', 'small', cv.Bew != null ? `placeholder="${fS(cv.Bew)}"` : '')}</td><td>${ein(x, 'Be', 'small', cv.Be != null ? `placeholder="${fS(cv.Be)}"` : x.weld === 'par' ? 'placeholder="opt."' : '')}</td>`; })()}<td class="n"><b>${ev.allow != null ? fmt(ev.allow, 'small', job, false) : '—'}</b></td><td class="n">${ev.pct != null ? ev.pct.toFixed(0) + '%' : '—'}</td><td title="${h(ev.basis)}">${stt(ev.status)}</td><td>${ein(x, 'notes', 'text', 'class="note"')}</td><td><button class="btn sm icon ghost danger" data-act="se-del" data-k="edge" data-eid="${x.id}" title="Remove">✕</button></td></tr>`; }).join('') || '<tr><td colspan="14" class="empty">No edge settlement recorded.</td></tr>';
+    ${(() => { const cv = edgeCurve(job, +x.R || 0); return `<td>${ein(x, 'Bew', 'small', cv.Bew != null ? `placeholder="${fS(cv.Bew)}"` : '')}</td><td>${ein(x, 'Be', 'small', cv.Be != null ? `placeholder="${fS(cv.Be)}"` : x.weld === 'par' ? 'placeholder="opt."' : '')}</td>`; })()}<td class="n"><b>${ev.allow != null ? fmt(ev.allow, 'small', job, false) : '—'}</b></td><td class="n">${ev.pct != null ? ev.pct.toFixed(0) + '%' : '—'}</td><td title="${h(ev.basis)}">${stt(ev.status)}</td><td>${ein(x, 'notes', 'text', 'class="note"')}</td><td><button aria-label="Remove" class="btn sm icon ghost danger" data-act="se-del" data-k="edge" data-eid="${x.id}" title="Remove">✕</button></td></tr>`; }).join('') || '<tr><td colspan="14" class="empty">No edge settlement recorded.</td></tr>';
   const edgeNotes = [...new Set(st.edge.map((x) => edgeEval(x, S.job).status).filter((s) => s === 'NDE required' || s === 'Exceeds'))].map((s) => `<p class="small"><b>${s}:</b> ${h(EDGE_NOTE[s])}</p>`).join('');
-  const depRows = st.dep.map((x, i) => { const ev = depEval(x); return `<tr class="${ev.status === 'Exceeds' ? 'is-bad' : ''}"><td><b>D${i + 1}</b></td><td>${din(x, 'angle', 'num')}</td><td>${din(x, 'r', 'big')}</td><td>${din(x, 'R', 'big')}</td><td>${din(x, 'B', 'small')}</td><td class="n"><b>${ev.allow != null ? fmt(ev.allow, 'small', job, false) : '—'}</b></td><td class="n">${ev.pct != null ? ev.pct.toFixed(0) + '%' : '—'}</td><td>${stt(ev.status)}</td><td>${din(x, 'notes', 'text', 'class="note"')}</td><td><button class="btn sm icon ghost danger" data-act="se-del" data-k="dep" data-eid="${x.id}" title="Remove">✕</button></td></tr>`; }).join('') || '<tr><td colspan="10" class="empty">No bottom depressions recorded.</td></tr>';
+  const depRows = st.dep.map((x, i) => { const ev = depEval(x); return `<tr class="${ev.status === 'Exceeds' ? 'is-bad' : ''}"><td><b>D${i + 1}</b></td><td>${din(x, 'angle', 'num')}</td><td>${din(x, 'r', 'big')}</td><td>${din(x, 'R', 'big')}</td><td>${din(x, 'B', 'small')}</td><td class="n"><b>${ev.allow != null ? fmt(ev.allow, 'small', job, false) : '—'}</b></td><td class="n">${ev.pct != null ? ev.pct.toFixed(0) + '%' : '—'}</td><td>${stt(ev.status)}</td><td>${din(x, 'notes', 'text', 'class="note"')}</td><td><button aria-label="Remove" class="btn sm icon ghost danger" data-act="se-del" data-k="dep" data-eid="${x.id}" title="Remove">✕</button></td></tr>`; }).join('') || '<tr><td colspan="10" class="empty">No bottom depressions recorded.</td></tr>';
 
   return `<section class="card"><div class="sp-head"><h2>Shell settlement survey</h2><span class="muted small">${c.n}/${c.N} stations read · <b class="${stCls}">${c.status}</b></span></div>
     <div class="fgrid g4">${field('Survey date', 'settle.date', 'date')}${field('Surveyed by', 'settle.surveyor')}${field('Instrument', 'settle.instrument', 'text', { ph: 'e.g. level, total station' })}${field('Benchmark', 'settle.benchmark')}
@@ -1864,7 +1857,7 @@ function edgeSurveyHTML(c) {
   if (!S.epSel || !P.has(S.epSel)) S.epSel = (sts.find((x) => P.get(x.i).R > 0) || sts[0])?.i || 1;
   const stt = (s) => `<span class="st ${s === 'Acceptable' ? 'st-OK' : s === 'Exceeds' ? 'st-below-MRT' : s === 'NDE required' ? 'st-warn' : s === 'No edge settlement' ? 'st-OK' : 'st-no-action'}">${s}</span>`;
   const head = sts.map((x) => `<th class="n"><button class="linkbtn${S.epSel === x.i ? ' on' : ''}" data-act="ep-sel" data-i="${x.i}" title="${x.angle.toFixed(1)}° — show profile">${x.i}</button><br><small class="muted">${Math.round(x.angle)}°</small></th>`).join('');
-  const rows = offs.map((x) => `<tr><td class="el">${fmtOff(x)}</td>${sts.map((t) => { const v = ep.rd?.[t.i]?.[xKey(x)], p = P.get(t.i), inZ = p.R > 0 && x < p.R - 1e-6; return `<td class="${inZ ? (p.status === 'Exceeds' ? 'bad-cell' : 'zone-cell') : ''}${S.epSel === t.i ? ' selcol' : ''}"><input data-ep="${t.i}" data-x="${xKey(x)}" data-kind="num" inputmode="decimal" value="${v == null ? '' : +(v / eu[0]).toFixed(eu[2])}"></td>`; }).join('')}</tr>`).join('');
+  const rows = offs.map((x) => `<tr><td class="el">${fmtOff(x)}</td>${sts.map((t) => { const v = ep.rd?.[t.i]?.[xKey(x)], p = P.get(t.i), inZ = p.R > 0 && x < p.R - 1e-6; return `<td class="${inZ ? (p.status === 'Exceeds' ? 'bad-cell' : 'zone-cell') : ''}${S.epSel === t.i ? ' selcol' : ''}"><input data-ep="${t.i}" data-x="${xKey(x)}" data-kind="num" ${inZ && p.status === 'Exceeds' ? 'aria-invalid="true" title="Exceeds the allowable" ' : ''}inputmode="decimal" value="${v == null ? '' : +(v / eu[0]).toFixed(eu[2])}"></td>`; }).join('')}</tr>`).join('');
   const sumRow = (lab, fn) => `<tr class="ep-sum"><td class="el">${lab}</td>${sts.map((t) => `<td class="n${S.epSel === t.i ? ' selcol' : ''}">${fn(P.get(t.i))}</td>`).join('')}</tr>`;
   const so = (i) => ep.st?.[i] || {};
   const sel = (i, f, opts, v) => `<select data-eps="${i}" data-f="${f}" data-kind="text">${opts.map(([k, l]) => `<option value="${h(k)}" ${String(v ?? '') === String(k) ? 'selected' : ''}>${h(l)}</option>`).join('')}</select>`;
@@ -1879,12 +1872,12 @@ function edgeSurveyHTML(c) {
       <td class="n"><b>${p.ev?.allow != null ? fS(p.ev.allow) : '—'}</b></td><td class="n">${p.ev?.pct != null ? p.ev.pct.toFixed(0) + '%' : '—'}</td><td>${stt(p.status)}</td><td>${sin(t.i, 'notes', 'text', '', 'note')}</td></tr>`;
   }).join('');
   const cur = P.get(S.epSel);
-  const curveRows = (st.curve || []).map((r) => `<tr><td><input data-cv="${r.id}" data-f="R" data-kind="big" inputmode="decimal" value="${h(inVal(r.R, 'big', job))}"></td><td><input data-cv="${r.id}" data-f="Bew" data-kind="small" inputmode="decimal" value="${h(inVal(r.Bew, 'small', job))}"></td><td><input data-cv="${r.id}" data-f="Be" data-kind="small" inputmode="decimal" value="${h(inVal(r.Be, 'small', job))}"></td><td><button class="btn sm icon ghost danger" data-act="cv-del" data-cid="${r.id}" title="Remove">✕</button></td></tr>`).join('') || '<tr><td colspan="4" class="empty">No curve values yet.</td></tr>';
+  const curveRows = (st.curve || []).map((r) => `<tr><td><input data-cv="${r.id}" data-f="R" data-kind="big" inputmode="decimal" value="${h(inVal(r.R, 'big', job))}"></td><td><input data-cv="${r.id}" data-f="Bew" data-kind="small" inputmode="decimal" value="${h(inVal(r.Bew, 'small', job))}"></td><td><input data-cv="${r.id}" data-f="Be" data-kind="small" inputmode="decimal" value="${h(inVal(r.Be, 'small', job))}"></td><td><button aria-label="Remove" class="btn sm icon ghost danger" data-act="cv-del" data-cid="${r.id}" title="Remove">✕</button></td></tr>`).join('') || '<tr><td colspan="4" class="empty">No curve values yet.</td></tr>';
   const nRead = sts.filter((t) => P.get(t.i).n).length, worst = ['Exceeds', 'NDE required'].find((k) => sts.some((t) => P.get(t.i).status === k));
   return `<section class="card ep-card"><div class="sp-head"><h2>Edge settlement survey</h2><span class="muted small">Radial readings inward from the shell at each of the ${sts.length} settlement stations · ${nRead} read${worst ? ` · <b class="${worst === 'Exceeds' ? 'bad' : 'warn-txt'}">${sts.filter((t) => P.get(t.i).status === worst).length} ${worst === 'Exceeds' ? 'exceed allowable' : 'need NDE'}</b>` : ''}</span></div>
     <div class="ep-top">
       <div><h3>Reading spacing (from the shell)</h3>
-        <table class="grid epz"><thead><tr><th>From (${sU})</th><th>To (${sU})</th><th>Every (${sU})</th><th></th></tr></thead><tbody>${(ep.zones || []).map((z) => `<tr><td><input data-epz="1" data-zid="${z.id}" data-f="start" data-kind="small" inputmode="decimal" value="${h(inVal(z.start, 'small', job))}"></td><td><input data-epz="1" data-zid="${z.id}" data-f="end" data-kind="small" inputmode="decimal" value="${h(inVal(z.end, 'small', job))}"></td><td><input data-epz="1" data-zid="${z.id}" data-f="step" data-kind="small" inputmode="decimal" value="${h(inVal(z.step, 'small', job))}"></td><td><button class="btn sm icon ghost danger" data-act="epz-del" data-zid="${z.id}" title="Remove">✕</button></td></tr>`).join('')}</tbody></table>
+        <table class="grid epz"><thead><tr><th>From (${sU})</th><th>To (${sU})</th><th>Every (${sU})</th><th></th></tr></thead><tbody>${(ep.zones || []).map((z) => `<tr><td><input data-epz="1" data-zid="${z.id}" data-f="start" data-kind="small" inputmode="decimal" value="${h(inVal(z.start, 'small', job))}"></td><td><input data-epz="1" data-zid="${z.id}" data-f="end" data-kind="small" inputmode="decimal" value="${h(inVal(z.end, 'small', job))}"></td><td><input data-epz="1" data-zid="${z.id}" data-f="step" data-kind="small" inputmode="decimal" value="${h(inVal(z.step, 'small', job))}"></td><td><button aria-label="Remove" class="btn sm icon ghost danger" data-act="epz-del" data-zid="${z.id}" title="Remove">✕</button></td></tr>`).join('')}</tbody></table>
         <div class="acts row-acts"><button class="btn sm" data-act="epz-add">+ Spacing</button>${field('Reading at the shell (0)', 'settle.ep.at0', 'bool', { cls: 'inline-chk' })}</div>
         <div class="fgrid">${field('Breakover tolerance', 'settle.ep.tol', 'small', { hint: 'A reading this far below the unsettled-bottom line starts the settled zone' })}</div>
         <p class="muted small">${offs.length} readings per station: ${offs.map(fmtOff).join(', ')}${met ? ' mm' : ''}. Readings use the same units as the shell survey (${eu[1]}${st.rod ? ', rod readings' : ''}).</p>
@@ -1950,7 +1943,7 @@ function secHead(sec, title, sub, acts = '') {
 /* NDE scope */
 function viewNDE() {
   const k = viewPlace(S.view).sec, sec = SEC.get(k), d = secData(k), F = findings(S.job, S.layout, S.calc)[k];
-  const rows = d.nde.map((it) => `<tr><td>${sxSel('nde', k, it, 'method', NDE_METHODS)}</td><td>${sxIn('nde', k, it, 'extent', 'text', 'placeholder="Extent / coverage"')}</td><td>${sxIn('nde', k, it, 'proc', 'text', 'placeholder="Procedure / technique"')}</td><td>${sxIn('nde', k, it, 'tech', 'text', 'placeholder="Technician, level"')}</td><td>${sxIn('nde', k, it, 'date', 'date')}</td><td>${eqPicker(k, it)}</td><td>${sxSel('nde', k, it, 'result', NDE_RESULTS)}</td><td>${sxIn('nde', k, it, 'notes', 'text', 'placeholder="Results / notes"')}</td><td><button class="btn sm icon ghost danger" data-act="sx-del" data-kind="nde" data-sec="${k}" data-iid="${it.id}" title="Remove">✕</button></td></tr>`).join('') || '<tr><td colspan="8" class="empty">No NDE methods set up yet.</td></tr>';
+  const rows = d.nde.map((it) => `<tr><td>${sxSel('nde', k, it, 'method', NDE_METHODS)}</td><td>${sxIn('nde', k, it, 'extent', 'text', 'placeholder="Extent / coverage"')}</td><td>${sxIn('nde', k, it, 'proc', 'text', 'placeholder="Procedure / technique"')}</td><td>${sxIn('nde', k, it, 'tech', 'text', 'placeholder="Technician, level"')}</td><td>${sxIn('nde', k, it, 'date', 'date')}</td><td>${eqPicker(k, it)}</td><td>${sxSel('nde', k, it, 'result', NDE_RESULTS)}</td><td>${sxIn('nde', k, it, 'notes', 'text', 'placeholder="Results / notes"')}</td><td><button aria-label="Remove" class="btn sm icon ghost danger" data-act="sx-del" data-kind="nde" data-sec="${k}" data-iid="${it.id}" title="Remove">✕</button></td></tr>`).join('') || '<tr><td colspan="8" class="empty">No NDE methods set up yet.</td></tr>';
   return `<div class="page wide">${secHead(k, 'NDE', 'Set up the NDE methods for this part of the tank and record their results. Enter the readings on the data pages (tabs above).')}
     <section class="card"><div class="sp-head"><h2>NDE methods and results</h2><span class="muted small">${d.nde.length} method${d.nde.length === 1 ? '' : 's'}</span></div>
       <div class="tblwrap"><table class="grid sxt nde-t"><thead><tr><th>Method</th><th>Extent / coverage</th><th>Procedure / technique</th><th>Technician</th><th>Date</th><th>Equipment</th><th>Result</th><th>Notes</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
@@ -1989,7 +1982,7 @@ function viewEquip() {
       <td>${inp(e, 'calDate', '', 'date')}</td><td>${inp(e, 'calDue', '', 'date')}${cs(e)}</td>
       <td>${inp(e, 'details', EQ_DETAIL_PH[e.type] || 'Settings / details')}${e.type === 'mfl' ? `<label class="eq-thr">Reporting threshold ${inp(e, 'threshold', '%', 'text', 'xs')} %</label>` : ''}</td>
       <td class="small eq-use">${useByMethod(use.get(e.id)).map((u) => `<div>${h(u)}</div>`).join('') || '<span class="muted">Not picked yet</span>'}</td>
-      <td><button class="btn sm icon ghost" data-act="eq-dup" data-id="${e.id}" title="Duplicate (e.g. a second probe)">⧉</button><button class="btn sm icon ghost danger" data-act="eq-del" data-id="${e.id}" title="Remove">✕</button></td></tr>`).join('');
+      <td><button aria-label="Duplicate (e.g. a second probe)" class="btn sm icon ghost" data-act="eq-dup" data-id="${e.id}" title="Duplicate (e.g. a second probe)">⧉</button><button aria-label="Remove" class="btn sm icon ghost danger" data-act="eq-del" data-id="${e.id}" title="Remove">✕</button></td></tr>`).join('');
   const others = S.jobs.filter((x) => x.id !== j.id && (x.equipment || []).length);
   const unassigned = list.filter((e) => !use.has(e.id)).length;
   return `<div class="page wide eq-page"><div class="page-head"><div><h1>Equipment</h1><p class="muted">List every instrument, probe, block and tool on this job once. Under each section's <b>NDE</b> page, pick the items each method used — the report lists the equipment with serials and calibration, and shows it against each method.</p></div>
@@ -2009,7 +2002,7 @@ function viewEquip() {
 function viewObs() {
   const k = viewPlace(S.view).sec, d = secData(k), ph = secPhotos(k);
   const rows = d.obs.map((o, i) => { const lp = ph.filter((p) => p.obs === o.id); return `<div class="obs-row c-${o.cond || 'x'}"><div class="obs-no">${i + 1}</div>
-    <div class="obs-main"><div class="obs-top">${sxIn('obs', k, o, 'item', 'text', 'class="obs-item" placeholder="Item / component"')}${sxIn('obs', k, o, 'loc', 'text', 'placeholder="Location"')}${sxSel('obs', k, o, 'cond', CONDITIONS)}<button class="btn sm icon ghost danger" data-act="sx-del" data-kind="obs" data-sec="${k}" data-iid="${o.id}" title="Remove">✕</button></div>
+    <div class="obs-main"><div class="obs-top">${sxIn('obs', k, o, 'item', 'text', 'class="obs-item" placeholder="Item / component"')}${sxIn('obs', k, o, 'loc', 'text', 'placeholder="Location"')}${sxSel('obs', k, o, 'cond', CONDITIONS)}<button aria-label="Remove" class="btn sm icon ghost danger" data-act="sx-del" data-kind="obs" data-sec="${k}" data-iid="${o.id}" title="Remove">✕</button></div>
     ${sxIn('obs', k, o, 'text', 'area', 'placeholder="Observation"')}
     ${lp.length ? `<div class="obs-ph">${lp.map((p) => `<button class="thumb" data-act="ph-open" data-id="${p.id}" title="${h(p.caption || photoNo(p))}">${photoFig(p, true)}<span>${photoNo(p)}</span></button>`).join('')}</div>` : ''}
     <div class="obs-acts"><button class="linkbtn" data-act="obs-rec" data-sec="${k}" data-iid="${o.id}">→ Make a recommendation</button></div></div></div>`; }).join('') || '<p class="muted">No observations yet. Add your own, or start from the typical items for this part of the tank.</p>';
@@ -2060,7 +2053,7 @@ function openAnno(id) {
     $$('#annoTools [data-tool]').forEach((b) => b.classList.toggle('on', b.dataset.tool === st.tool));
     $$('#annoTools [data-col]').forEach((b) => b.classList.toggle('on', b.dataset.col === st.c));
   };
-  $('#dlgBody').innerHTML = `<div class="anno-dlg"><div class="ed-head"><h2>Annotate ${photoNo(p)}</h2><button class="btn sm ghost" data-anno="close">✕</button></div>
+  $('#dlgBody').innerHTML = `<div class="anno-dlg"><div class="ed-head"><h2>Annotate ${photoNo(p)}</h2><button aria-label="Close" class="btn sm ghost" data-anno="close">✕</button></div>
     <div class="anno-tools" id="annoTools">${[['arrow', '↗ Arrow'], ['ell', '◯ Circle'], ['rect', '▭ Box'], ['pen', '✎ Pen'], ['text', 'T Text']].map(([t, l]) => `<button class="btn sm" data-tool="${t}">${l}</button>`).join('')}
       <span class="spacer"></span>${ANNO_COLORS.map((c) => `<button class="swatch" data-col="${c}" style="background:${c}" title="${c}"></button>`).join('')}
       <span class="spacer"></span><button class="btn sm" data-anno="undo">Undo</button><button class="btn sm" data-anno="clear">Clear</button></div>
@@ -2147,7 +2140,7 @@ function viewRecs() {
   const sugg = F.items.filter((it) => !used.has(it.key));
   const rows = d.recs.map((r) => `<div class="rec-row p-${r.priority}${r.status === 'Closed' ? ' closed' : ''}">
     <div class="rec-top"><b class="rec-no">${r.def ? h(r.no || 'D-?') : 'Rec.'}</b>${sxSel('recs', k, r, 'priority', PRIORITIES)}${sxIn('recs', k, r, 'due', 'text', 'placeholder="Due / timing" class="due"')}${sxSel('recs', k, r, 'status', STATUSES)}
-      <label class="chk small"><input type="checkbox" data-sx="recs" data-sec="${k}" data-iid="${r.id}" data-f="def" ${r.def ? 'checked' : ''}><span>Deficiency</span></label><button class="btn sm icon ghost danger" data-act="sx-del" data-kind="recs" data-sec="${k}" data-iid="${r.id}" title="Remove">✕</button></div>
+      <label class="chk small"><input type="checkbox" data-sx="recs" data-sec="${k}" data-iid="${r.id}" data-f="def" ${r.def ? 'checked' : ''}><span>Deficiency</span></label><button aria-label="Remove" class="btn sm icon ghost danger" data-act="sx-del" data-kind="recs" data-sec="${k}" data-iid="${r.id}" title="Remove">✕</button></div>
     <div class="rec-grid"><label>Finding / deficiency${sxIn('recs', k, r, 'finding', 'area')}</label><label>Recommended action${sxIn('recs', k, r, 'action', 'area')}</label></div>
     <div class="rec-bot">${sxIn('recs', k, r, 'loc', 'text', 'placeholder="Location"')}${sxIn('recs', k, r, 'ref', 'text', 'placeholder="Code reference"')}<select data-sx="recs" data-sec="${k}" data-iid="${r.id}" data-f="photo"><option value="">Photo —</option>${ph.map((p) => `<option value="${p.id}" ${r.photo === p.id ? 'selected' : ''}>${photoNo(p)} ${h(p.caption || '')}</option>`).join('')}</select></div></div>`).join('') || '<p class="muted">No recommendations yet.</p>';
   return `<div class="page wide">${secHead(k, 'Recommendations', 'Recommended repairs and actions. Items ticked as deficiencies get a number (D-001…) and appear in the Deficiencies list and the client deficiency report.')}
@@ -3212,6 +3205,7 @@ async function importJobFile(file) {
     const data = JSON.parse(await file.text());
     if (data.format !== 'tank-floor-inspector' || !data.job) throw new Error('This is not a Tank Floor Inspector job file.');
     if ((data.version || 1) > FILE_VERSION || (data.job.schema || 1) > SCHEMA) throw new Error(`it was saved by a newer version of the app${data.appVersion ? ' (v' + data.appVersion + ')' : ''}. Reload the app to update it (this is v${APP_VERSION}), then open the file again.`);
+    const notes = migrationNotes(data.job);
     const job = migrate(data.job);
     if (data.tank?.id && data.tank.id === job.tankRef && !(await db.getTank(data.tank.id))) { await db.putTank(data.tank); await loadTanks(); }
     const exists = await db.getJob(job.id);
@@ -3227,6 +3221,7 @@ async function importJobFile(file) {
     const photos = job.id === oldId ? data.photos || [] : copyPhotos(job, data.photos || []);
     await db.replaceJob(job, photos, exists && job.id === oldId ? oldId : null);
     await loadJobs(); toast(`Opened ${file.name}`); await openJob(job.id); checkStorage();
+    if (notes.length) showMigrationNotes(notes);
     return job.id;
   } catch (err) { toast('Could not open the file: ' + err.message); return null; }
 }
@@ -3258,43 +3253,6 @@ async function uploadLoader(file) {
   S.job.utLoads = [...(S.job.utLoads || []), { at: Date.now(), file: file.name, count: res.total, tech: res.info.tech || '' }].slice(-50);
   commit(); renderAll();
   toast(`Updated ${res.total} reading${res.total === 1 ? '' : 's'} from ${file.name}.`);
-}
-
-/** In-app confirmation dialog (works where native confirm() is blocked). Resolves true for OK. */
-function askConfirm(msg, { ok = 'OK', cancel = 'Cancel', danger = false } = {}) {
-  return new Promise((resolve) => {
-    const d = $('#confirmDlg');
-    d.innerHTML = `<div class="cf"><p>${h(msg).replace(/\n/g, '<br>')}</p><div class="acts">
-      <button type="button" class="btn" data-cf="no">${h(cancel)}</button>
-      <button type="button" class="btn ${danger ? 'danger-solid' : 'primary'}" data-cf="yes">${h(ok)}</button></div></div>`;
-    d.returnValue = '';
-    d.onclick = (e) => { const b = e.target.closest('[data-cf]'); if (b) d.close(b.dataset.cf); };
-    d.onclose = () => resolve(d.returnValue === 'yes');
-    d.showModal();
-    $('[data-cf="yes"]', d).focus();
-  });
-}
-
-/** In-app dialog with several buttons: choices = [[key, label, cls?], …]. Resolves the key, or null on Esc. */
-function askChoice(msg, choices) {
-  return new Promise((resolve) => {
-    const d = $('#confirmDlg');
-    d.innerHTML = `<div class="cf"><p>${h(msg).replace(/\n/g, '<br>')}</p><div class="acts">${choices.map(([k, label, cls]) => `<button type="button" class="btn ${cls || ''}" data-cf="${h(k)}">${h(label)}</button>`).join('')}</div></div>`;
-    d.returnValue = '';
-    d.onclick = (e) => { const b = e.target.closest('[data-cf]'); if (b) d.close(b.dataset.cf); };
-    d.onclose = () => resolve(d.returnValue || null);
-    d.showModal();
-    $('.primary[data-cf]', d)?.focus();
-  });
-}
-
-let toastTimer;
-function toast(msg, action) {
-  const t = $('#toast');
-  t.innerHTML = `<span>${h(msg)}</span>${action ? `<button class="btn sm" id="toastAct">${h(action.label)}</button>` : ''}`;
-  t.hidden = false; clearTimeout(toastTimer);
-  if (action) $('#toastAct').onclick = () => { t.hidden = true; action.fn(); };
-  toastTimer = setTimeout(() => (t.hidden = true), action ? 15000 : 3500);
 }
 
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installEvt = e; renderHeader(); });

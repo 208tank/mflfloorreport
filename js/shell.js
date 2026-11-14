@@ -2,6 +2,7 @@
 import { fmt, fromMm, u } from './units.js';
 import { nozzleUT } from './calc.js';
 import { courseDesigns } from './design.js';
+import { escText as esc } from './util.js';
 
 export const SPACING_MM = 32 * 304.8; // one UT station per 32 ft of circumference
 const STD_PLATE_MM = 30 * 304.8;      // used only to suggest a plate count
@@ -167,7 +168,6 @@ export function courseSummary(job) {
 
 /* --------------------------------------------------------------------------- roll-out --- */
 
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const f1 = (v) => (Math.round(v * 10) / 10).toString();
 
 /** Dimension text: 12'-1 7/8" (to 1/32") for imperial, mm for metric. */

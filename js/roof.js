@@ -1,6 +1,7 @@
 // Roof: fixed roof details and UT points, floating roof layout (deck plates + pontoons) and 5-point plate UT.
 import { buildLayout, defaultLayout, polar, pointInPoly } from './geometry.js';
 import { defaultSeal, migrateSeal, sealGapOverlay } from './seal.js';
+import { escText as esc } from './util.js';
 
 const IN = 25.4, FT = 304.8;
 
@@ -111,7 +112,6 @@ export function pointStatus(job, pt) {
 
 /* ----------------------------------------------------------------------------- drawings --- */
 
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const f = (v) => (Math.round(v * 10) / 10).toString();
 const pathOf = (poly) => 'M' + poly.map(([x, y]) => `${f(x)} ${f(-y)}`).join('L') + 'Z';
 

@@ -13,12 +13,12 @@ import { polar } from './geometry.js';
 import { shellHeight } from './shell.js';
 import { shellYE, toMPa } from './design.js';
 import { edgeAllow, kFor } from './tables.js';
+import { escText as esc } from './util.js';
 
 const IN = 25.4, FT = 304.8, DEG = Math.PI / 180;
 const uidS = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const num = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(+v) ? null : +v);
 const f = (v) => (Math.round(v * 100) / 100).toString();
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 export const PSI_PER_MPA = 145.0377;
 /** Reading units for the survey: [mm per unit, label, decimals]. */

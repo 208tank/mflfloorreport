@@ -13,8 +13,8 @@ import { SECTIONS, findings, allDefs, STATUS_TEXT, PRIORITY_LABEL, CONDITIONS } 
 import { patchList, patchOf } from './patches.js';
 import { itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
 import { inScope } from './registry.js';
+import { escText as h } from './util.js';
 
-const h = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const yn = (b) => (b ? 'Yes' : 'No');
 const or = (v, d = '—') => (v === null || v === undefined || v === '' ? d : v);
 

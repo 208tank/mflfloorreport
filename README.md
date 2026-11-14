@@ -97,6 +97,22 @@ Installed copies pick up the new version and show a *Reload* prompt.
 **Local testing:** service workers need `http://localhost` or HTTPS, so run
 `python3 -m http.server 8000` in this folder and open `http://localhost:8000`.
 
+## Automated tests
+
+The tests live in `tests/` and run on every push (GitHub Actions, `.github/workflows/test.yml`).
+Nothing in `tests/` or `package.json` is used by the app, which still has no dependencies.
+
+- `node --test tests/*.test.mjs` — **golden tests**: every engineering result (floor layout,
+  API 653 MRT and repairs, patches, shell t-min and evaluation, nozzles, settlement, roof and rim
+  seal, CSV exports) and the full report HTML for seven fixture jobs must match the outputs recorded
+  from v3.4.2. Plus checks that `sw.js` lists every file, and that the calculation modules don't
+  touch the page.
+- `node tests/browser/run.mjs` — browser checks with Playwright (`npm i --no-save playwright` and
+  `npx playwright install chromium` first): every page renders, user text can't run as script,
+  storage is all-or-nothing, save conflicts, the service-worker update, pinch zoom, and more.
+- After a deliberate, reviewed change to a calculation or the report, re-record the golden outputs
+  with `UPDATE_GOLDEN=1 node --test tests/*.test.mjs` and review the diff before committing.
+
 ## Repairs
 
 Open an indication (Floor → NDE → Indications, or click it on the floor map) and fill in **Repair & remarks**:
@@ -187,7 +203,16 @@ one `.json` file holding all the job data and its photos.
   the rev, so you can tell which copy is newer.
 - The app does not merge edits, so only one person should edit a job at a time: open the latest
   file, work, save, then the next person opens it.
-- Clearing the browser's site data deletes jobs that haven't been saved to a file.
+- **Save conflicts (v3.5):** before Save overwrites a job file, the app checks that nobody else has
+  saved it since this computer last opened or saved it. If someone has, it shows both revisions and
+  asks: **Save mine as a copy** (keeps both), **Open their version**, **Overwrite their changes** or
+  Cancel. A stage change made from a teammate's Dashboard is not a conflict: it is merged into your
+  save instead of being overwritten.
+- A job file saved by a newer version of the app is refused with a message to reload and update, so
+  an older installed copy can't re-save it and lose the newer data. Older jobs opened in a newer
+  version are updated, and the app says what changed (e.g. the API 653 patch margin).
+- Clearing the browser's site data deletes jobs that haven't been saved to a file. The app asks the
+  browser to keep its data permanently and warns when the device's storage is over 80 % full.
 
 ## Workflow
 
@@ -541,12 +566,16 @@ every limit is editable.
 | --- | --- |
 | `index.html` | App shell |
 | `css/app.css` | Screen, dark mode and print styles |
-| `js/app.js` | UI, views, events |
+| `js/app.js` | UI, views, events, job files |
+| `js/ui.js` | Element lookup, toasts and in-app dialogs |
+| `js/cards.js` | Job summary cards for the Jobs list, Dashboard and registry |
+| `js/util.js` | HTML escaping (the one place it is defined) |
 | `js/geometry.js` | Plate layout generator, plate ↔ floor coordinates |
 | `js/calc.js` | Indication analysis and API 653 MRT |
 | `js/map.js` | SVG floor map and pan/zoom |
 | `js/report.js` | Printable report |
 | `js/export.js` | CSV, SVG/PNG export |
-| `js/db.js` | IndexedDB storage |
+| `js/db.js` | IndexedDB storage (jobs, photos, light job cards, registry, settings); job + photo writes are one transaction |
 | `js/model.js`, `js/demo.js` | Job model, demo data |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA install and offline support |
+| `tests/` | Golden and browser tests (not used by the app) |

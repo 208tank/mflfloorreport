@@ -33,6 +33,16 @@ export function newJob(units = 'imperial') {
   };
 }
 
+/** What migrate() will change in this (raw, stored) job, in plain words, so the user is told when an
+ *  older job is updated rather than finding a setting changed. Empty for current jobs. */
+export function migrationNotes(job) {
+  const out = [];
+  if (job.calc?.patchMargin === 25.4) out.push('Patch plates now extend at least 2 in past the corrosion (was 1 in; API 653 9.10.1.1 b).');
+  if ((job.schema || 1) < 2 && (job.indications || []).length) out.push('Indication X / Y on plates cut by the shell are now measured from the plate edges; positions on the floor are unchanged.');
+  if (!Array.isArray(job.equipment) && job.equip && Object.values(job.equip).some(Boolean)) out.push('MFL / UT equipment moved to the Equipment list.');
+  return out;
+}
+
 /** Bring older / imported jobs up to the current shape. */
 export function migrate(job) {
   const base = newJob(job.units || 'imperial');

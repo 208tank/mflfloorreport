@@ -176,9 +176,10 @@ export default {
     const saved = await page.evaluate(async () => {
       Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
       document.dispatchEvent(new Event('visibilitychange'));
-      await new Promise((r) => setTimeout(r, 300));
       const { db } = await import('./js/db.js');
-      return (await db.getJob(window.tfi.job().id)).info.client;
+      let v;
+      for (let i = 0; i < 40; i++) { v = (await db.getJob(window.tfi.job().id)).info.client; if (v === 'Typed then app switched') break; await new Promise((r) => setTimeout(r, 50)); }
+      return v;
     });
     assert.equal(saved, 'Typed then app switched');
     await page.context().close();
@@ -457,6 +458,40 @@ export default {
     assert.equal(r.tappedDuringPinch, false);
     assert.ok(r.panned, 'one-finger drag should pan');
     assert.ok(r.tapSelects, 'a tap should still select');
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'accessibility: every button on every page has a readable name'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const views = [...VIEWS, ...SECS.flatMap((s) => CHILD.map((c) => `${c}:${s}`)), 'an:shell', 'an:settle'];
+    const bad = new Set();
+    for (const v of views) {
+      await page.evaluate((x) => window.tfi.go(x), v);
+      for (const b of await page.evaluate(() => [...document.querySelectorAll('button')].filter((b) => !/[\p{L}\p{N}]/u.test(b.textContent) && !b.getAttribute('aria-label')).map((b) => (b.dataset.act || b.className) + ' ' + b.outerHTML.slice(0, 80)))) bad.add(b);
+    }
+    assert.deepEqual([...bad], []);
+    await page.context().close();
+  },
+
+  async 'job files: opening an older job says what was updated, once'({ browser, url, appPage }) {
+    const { readFileSync } = await import('node:fs');
+    const legacy = readFileSync(new URL('../fixtures/legacy-schema1.json', import.meta.url));
+    const page = await appPage(browser, url, { demo: false });
+    await page.evaluate(() => window.tfi.go('jobs'));
+    await page.setInputFiles('#openFileInput', { name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ format: 'tank-floor-inspector', version: 1, job: JSON.parse(legacy), photos: [] })) });
+    await page.waitForTimeout(500);
+    const t = await page.textContent('#toast');
+    assert.match(t, /updated from an older version/);
+    assert.match(t, /2 in past the corrosion/);
+    assert.match(t, /plate edges/);
+    // saved in the new shape, so the next open says nothing
+    await page.waitForTimeout(600);
+    const id = await page.evaluate(() => window.tfi.job().id);
+    await page.evaluate(() => { document.querySelector('#toast').hidden = true; window.tfi.go('jobs'); });
+    await page.click(`[data-act="job-open"][data-id="${id}"]`);
+    await page.waitForTimeout(400);
+    assert.equal(await page.isVisible('#toast'), false);
     assert.deepEqual(page.errors, []);
     await page.context().close();
   }
