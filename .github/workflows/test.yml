@@ -1,0 +1,11 @@
+name: tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node --test tests/*.test.mjs
+      - run: npx -y playwright@1.49 install --with-deps chromium && npx -y -p playwright@1.49 node tests/browser/run.mjs

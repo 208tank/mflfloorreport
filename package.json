@@ -1,0 +1,11 @@
+{
+  "name": "tank-floor-inspector",
+  "private": true,
+  "type": "module",
+  "description": "Test runner config only. The app itself has no dependencies and no build step.",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "node tests/browser/run.mjs",
+    "golden:update": "UPDATE_GOLDEN=1 node --test tests/*.test.mjs"
+  }
+}
