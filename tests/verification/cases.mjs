@@ -17,7 +17,7 @@ import { newJob, migrate } from '../../js/model.js';
 import { buildLayout, plateAt, toLocal, polar } from '../../js/geometry.js';
 import { api653, nozzleUT } from '../../js/calc.js';
 import { courseDesigns, fillFromT, annularReq } from '../../js/design.js';
-import { allowables, annularMin, edgeAllow } from '../../js/tables.js';
+import { allowables, annularMin, edgeAllow, nozzleNeck } from '../../js/tables.js';
 import { courseSummary } from '../../js/shell.js';
 import { settleCalc, edgeEval, depEval, profileEval, autoN, epOffsets, xKey } from '../../js/settle.js';
 import { pointStatus, plateUT } from '../../js/roof.js';
@@ -394,7 +394,7 @@ export const CASES = [
     input: 'NPS 4 Sch 80: nominal 0.337 in; t-min entered 0.200 in; readings 0.301, 0.255, 0.290, 0.300 in.',
     steps: ['Minimum = 0.255 in', 'Loss = (0.337 − 0.255) / 0.337 = 24.33 %', '0.255 ≥ 0.200 → OK'],
     expected: { min: 0.255 * IN, lossPct: 24.3323, status: 'OK' }, tol: 0.01, unit: 'mm / %',
-    source: 'Arithmetic; the t-min itself is an engineering input (see report)',
+    source: 'Arithmetic; the t-min itself is an engineering input (API 653 gives no neck retirement rule; C-19)',
     run() {
       const n = { size: 4 * IN, tNom: 0.337 * IN, tMin: 0.2 * IN, ut12: 0.301 * IN, ut3: 0.255 * IN, ut6: 0.29 * IN, ut9: 0.3 * IN };
       const r = nozzleUT(n, newJob());
@@ -663,6 +663,34 @@ export const CASES = [
       const { L, c } = evalFloor(job), p = patchList(job, L, c);
       return { flagged: p.some((q) => q.checks.some((k) => /24 in|600 mm/.test(k.item) && k.ok === false)), widthIn: Math.max(...p.map((q) => q.W)) / IN };
     }
+  },
+
+  {
+    id: 'V-51', area: 'Annular plates', units: 'imperial', basis: 'equation',
+    title: 'API 650 Table 5.1b for SG ≥ 1 (via API 653 §4.4.6.3)',
+    input: 'Course 1 t = 1.00 in; Sb = 30,000 psi (G 1.0).',
+    steps: ['Row 0.75 < t ≤ 1.00, column ≤ 30,000 → 9/32 = 0.28125 in'],
+    expected: { t: 0.28125 }, tol: 0.001, unit: 'in',
+    source: 'API 650 13th ed. Errata 1 (2021) Table 5.1b; API 653 (2025) §4.4.6.3',
+    run() { const t1 = 1, H = 1 + (30000 * t1) / (2.6 * 100); return { t: annularMin(100, H, 1.0, t1).t }; }
+  },
+  {
+    id: 'V-52', area: 'Annular plates', units: 'imperial', basis: 'equation',
+    title: 'Table 5.1 is not used beyond H × G = 75 ft or a first course thicker than 1.75 in',
+    input: 'D 100 ft; H 80 ft; G 1.0; course 1 t = 1.80 in.',
+    steps: ['API 650 §5.5.3: Table 5.1a/b applies for H × G ≤ 75 ft (23 m); beyond that an elastic analysis is required', 'Table 5.1b rows stop at 1.75 in', 'Required: no table value'],
+    expected: { t: null }, tol: null, unit: '',
+    source: 'API 650 (2021) §5.5.3 and Table 5.1b — C-08',
+    run() { const r = annularMin(100, 80, 1.0, 1.8); return { t: r ? r.t : null }; }
+  },
+  {
+    id: 'V-53', area: 'Nozzles', units: 'imperial', basis: 'equation',
+    title: 'Default neck wall for API 650 nozzles matches Table 5.6b / 5.7b',
+    input: 'API 650 tank; NPS 4, NPS 12; NPS 30 in a 1.10 in shell.',
+    steps: ['Table 5.6b column 3: NPS 4 → 0.337 in; NPS 12 → 0.50 in', 'NPS ≥ 26: Table 5.6b note e → Table 5.7b column 2: shell 1-1/8 in → 9/16 in'],
+    expected: { n4: 0.337, n12: 0.5, n30: 0.5625 }, tol: 0.001, unit: 'in',
+    source: 'API 650 (2021) Tables 5.6b and 5.7b. The app also takes 12.5 % off as a "minimum"; that is an as-built value, not a retirement thickness (C-19)',
+    run() { const job = { tank: { code: 'API 650' } }; const n = (nps, sh) => nozzleNeck(nps, 'API 650', sh).nom; return { n4: n(4), n12: n(12), n30: n(30, 1.1) }; }
   },
 
   /* ------------------------------------------------------------------- repair patches --- */

@@ -743,7 +743,7 @@
   ],
   "tol": 0.01,
   "unit": "mm / %",
-  "source": "Arithmetic; the t-min itself is an engineering input (see report)",
+  "source": "Arithmetic; the t-min itself is an engineering input (API 653 gives no neck retirement rule; C-19)",
   "status": "PASS",
   "error": null,
   "checks": [
@@ -1512,6 +1512,93 @@
     "expected": "true",
     "actual": "false",
     "ok": false
+   }
+  ]
+ },
+ {
+  "id": "V-51",
+  "area": "Annular plates",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "API 650 Table 5.1b for SG ≥ 1 (via API 653 §4.4.6.3)",
+  "input": "Course 1 t = 1.00 in; Sb = 30,000 psi (G 1.0).",
+  "steps": [
+   "Row 0.75 < t ≤ 1.00, column ≤ 30,000 → 9/32 = 0.28125 in"
+  ],
+  "tol": 0.001,
+  "unit": "in",
+  "source": "API 650 13th ed. Errata 1 (2021) Table 5.1b; API 653 (2025) §4.4.6.3",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "t",
+    "expected": 0.28125,
+    "actual": 0.281,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "id": "V-52",
+  "area": "Annular plates",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Table 5.1 is not used beyond H × G = 75 ft or a first course thicker than 1.75 in",
+  "input": "D 100 ft; H 80 ft; G 1.0; course 1 t = 1.80 in.",
+  "steps": [
+   "API 650 §5.5.3: Table 5.1a/b applies for H × G ≤ 75 ft (23 m); beyond that an elastic analysis is required",
+   "Table 5.1b rows stop at 1.75 in",
+   "Required: no table value"
+  ],
+  "tol": null,
+  "unit": "",
+  "source": "API 650 (2021) §5.5.3 and Table 5.1b — C-08",
+  "status": "FAIL",
+  "error": null,
+  "checks": [
+   {
+    "key": "t",
+    "expected": "null",
+    "actual": 0.344,
+    "ok": false
+   }
+  ]
+ },
+ {
+  "id": "V-53",
+  "area": "Nozzles",
+  "units": "imperial",
+  "basis": "equation",
+  "title": "Default neck wall for API 650 nozzles matches Table 5.6b / 5.7b",
+  "input": "API 650 tank; NPS 4, NPS 12; NPS 30 in a 1.10 in shell.",
+  "steps": [
+   "Table 5.6b column 3: NPS 4 → 0.337 in; NPS 12 → 0.50 in",
+   "NPS ≥ 26: Table 5.6b note e → Table 5.7b column 2: shell 1-1/8 in → 9/16 in"
+  ],
+  "tol": 0.001,
+  "unit": "in",
+  "source": "API 650 (2021) Tables 5.6b and 5.7b. The app also takes 12.5 % off as a \"minimum\"; that is an as-built value, not a retirement thickness (C-19)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+   {
+    "key": "n4",
+    "expected": 0.337,
+    "actual": 0.337,
+    "ok": true
+   },
+   {
+    "key": "n12",
+    "expected": 0.5,
+    "actual": 0.5,
+    "ok": true
+   },
+   {
+    "key": "n30",
+    "expected": 0.5625,
+    "actual": 0.563,
+    "ok": true
    }
   ]
  },
