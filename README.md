@@ -7,7 +7,7 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
-## Modular refactoring — step 1: core modules (v3.12.0)
+## Modular refactoring (v3.12.0 onwards)
 
 Nothing changes for the user: every screen renders the same HTML, and the calculations, job files and
 report are unchanged. The shared core of `js/app.js` now lives in `js/app/`:
@@ -18,7 +18,12 @@ report are unchanged. The shared core of `js/app.js` now lives in `js/app/`:
 - `actions.js` — the button and input registry (`onAction`, `onChange`). Each `data-act` name is
   registered once; a duplicate name stops the app at start-up instead of silently replacing a handler.
 
-Later steps move each screen into its own module under `js/views/`, one functional area at a time.
+Each screen is moving into its own module under `js/views/`, one functional area at a time. A screen module
+registers its screen with `defineView` and its buttons with `onAction` / `onChange`; `app.js` imports it once.
+
+| Step | Release | Screens moved |
+| --- | --- | --- |
+| 2 | v3.12.1 | Report (`views/report.js`), code tables (`views/codetables.js`) |
 
 ## Data integrity upgrade — stage 4: database integrity check (v3.11.0)
 
