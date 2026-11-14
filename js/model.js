@@ -79,3 +79,11 @@ export function setPath(o, path, v) {
   for (let i = 0; i < ks.length - 1; i++) { if (a[ks[i]] == null || typeof a[ks[i]] !== 'object') a[ks[i]] = {}; a = a[ks[i]]; }
   a[ks[ks.length - 1]] = v;
 }
+
+/** Copies of a job's photos with new ids, for a duplicated job. Recommendations in `job` that link
+ *  to a photo are pointed at the new copy, so the duplicate's report keeps its photos. */
+export function copyPhotos(job, photos) {
+  const map = new Map(photos.map((p) => [p.id, uid()]));
+  for (const sec of Object.values(job.secs || {})) for (const r of sec.recs || []) if (r.photo && map.has(r.photo)) r.photo = map.get(r.photo);
+  return photos.map((p) => ({ ...p, id: map.get(p.id), jobId: job.id }));
+}

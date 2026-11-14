@@ -2,6 +2,7 @@
 // NDE scope, observations, photos, analysis and recommendations; automatic findings used by the analysis
 // pages, the executive summary and the deficiency report.
 import { fmt } from './units.js';
+import { esc } from './util.js';
 import { nozzleUT, nozzleWall } from './calc.js';
 import { courseSummary, coursesWithElev } from './shell.js';
 import { hasFixed, hasFloating, floatingLayout, plateUT, pointStatus } from './roof.js';
@@ -167,7 +168,7 @@ export function findings(job, layout, calc) {
       if (pons.length) add('flroof', { key: 'flroof-pont', finding: `${pons.length > 1 ? 'Pontoons' : 'Pontoon'} ${pons.map((p) => p.label).join(', ')} ${pons.length > 1 ? 'contain liquid or are leaking' : 'contains liquid or is leaking'}.`, loc: 'Pontoons', action: 'Drain, locate and repair the leaks; re-test the pontoons.', priority: 'P2', ref: 'API 653 4.2.2' });
       if (job.roof.seal) for (const k of activeStds(job.roof.seal)) {
         const ev = sealEval(job, k);
-        if (ev.overall === 'Compliant' || ev.overall === 'Not compliant') { if (f.status === 'none') f.status = 'ok'; f.lines.push(`Rim seal — ${ev.L.short || ev.L.name}: ${ev.overall.toLowerCase()}.`); }
+        if (ev.overall === 'Compliant' || ev.overall === 'Not compliant') { if (f.status === 'none') f.status = 'ok'; f.lines.push(`Rim seal — ${esc(ev.L.short || ev.L.name)}: ${ev.overall.toLowerCase()}.`); }
         if (ev.overall === 'Not compliant') add('flroof', { key: 'flroof-seal-' + k, finding: `Rim seal does not meet ${ev.L.name}: ${ev.rows.filter((r) => r.ok === false).map((r) => r.item).join('; ')}.`, loc: 'Rim seal', action: ev.repair || 'Repair the rim seal.', priority: 'P1', ref: ev.L.refs || '' });
       }
     }
@@ -179,7 +180,7 @@ export function findings(job, layout, calc) {
     if (nz.length) {
       const f = F.nozzles; f.status = 'ok'; f.lines.push(`${nz.length} of ${(job.nozzles || []).length} nozzles UT tested.`);
       const bad = nz.filter((x) => x.r.status === 'Below t-min');
-      f.lines.push(bad.length ? `Below t-min: ${bad.map((x) => x.n.mark + ' (' + t(x.r.min) + ')').join(', ')}.` : 'All tested necks at or above t-min.');
+      f.lines.push(bad.length ? `Below t-min: ${bad.map((x) => esc(x.n.mark) + ' (' + t(x.r.min) + ')').join(', ')}.` : 'All tested necks at or above t-min.');
       for (const x of bad) add('nozzles', { key: 'noz-' + x.n.id, finding: `Nozzle ${x.n.mark} neck minimum ${t(x.r.min)} is below the minimum ${t(nozzleWall(x.n, job).tMin)}.`, loc: `Nozzle ${x.n.mark}${x.n.angle != null ? ' at ' + x.n.angle + '°' : ''}`, action: 'Replace the nozzle neck or evaluate it for the design conditions.', priority: 'P2', ref: 'API 653 4.3.10' });
     }
   } catch { /* */ }
@@ -208,7 +209,7 @@ export function findings(job, layout, calc) {
     const obs = job.secs?.[s.key]?.obs || [];
     if (obs.some((o) => o.cond)) { if (F[s.key].status === 'none') F[s.key].status = 'ok'; }
     const poor = obs.filter((o) => o.cond === 'poor');
-    if (poor.length) F[s.key].lines.push(`${poor.length} observation${poor.length > 1 ? 's' : ''} rated poor: ${poor.map((o) => o.item).join(', ')}.`);
+    if (poor.length) F[s.key].lines.push(`${poor.length} observation${poor.length > 1 ? 's' : ''} rated poor: ${poor.map((o) => esc(o.item)).join(', ')}.`);
     for (const o of poor) add(s.key, { key: 'obs-' + o.id, finding: `${o.item}${o.loc ? ' (' + o.loc + ')' : ''}: ${o.text || 'rated poor'}`, loc: o.loc || '', action: '', priority: 'P3', ref: '' });
   }
   for (const s of SECTIONS) {

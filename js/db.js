@@ -36,16 +36,47 @@ async function tx(store, mode, fn) {
   });
 }
 
+/** One transaction over several stores. fn queues its requests synchronously; resolves when the
+ *  transaction commits, rejects (with everything rolled back) if any request fails. */
+async function txMany(stores, fn) {
+  const db = await open();
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(stores, 'readwrite');
+    try { fn(...stores.map((n) => t.objectStore(n))); } catch (e) { try { t.abort(); } catch { /* already finished */ } reject(e); return; }
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error || new Error('Storage transaction aborted'));
+  });
+}
+
 const reqP = (r) => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
 
 export const db = {
   async allJobs() { return tx('jobs', 'readonly', (s) => reqP(s.getAll())); },
   async getJob(id) { return tx('jobs', 'readonly', (s) => reqP(s.get(id))); },
   async putJob(job) { return tx('jobs', 'readwrite', (s) => reqP(s.put(job))); },
+  /** Delete a job and its photos together: either both go or neither does. */
   async deleteJob(id) {
-    const photos = await this.jobPhotos(id);
-    await tx('photos', 'readwrite', (s) => { photos.forEach((p) => s.delete(p.id)); });
-    return tx('jobs', 'readwrite', (s) => reqP(s.delete(id)));
+    return txMany(['jobs', 'photos'], (J, P) => {
+      const r = P.index('jobId').getAllKeys(id);
+      r.onsuccess = () => r.result.forEach((k) => P.delete(k));
+      J.delete(id);
+    });
+  },
+  /** Write a job and its photos in one transaction. With removeId, that job's existing photos that are
+   *  not in `photos` are removed too (and the job record itself if it has a different id).
+   *  If anything fails, nothing on the device changes. */
+  async replaceJob(job, photos = [], removeId = null) {
+    const keep = new Set(photos.map((p) => p.id));
+    return txMany(['jobs', 'photos'], (J, P) => {
+      if (removeId) {
+        const r = P.index('jobId').getAllKeys(removeId);
+        r.onsuccess = () => r.result.forEach((k) => { if (!keep.has(k)) P.delete(k); });
+        if (removeId !== job.id) J.delete(removeId);
+      }
+      J.put(job);
+      for (const p of photos) P.put({ ...p, jobId: job.id });
+    });
   },
   async jobPhotos(jobId) { return tx('photos', 'readonly', (s) => reqP(s.index('jobId').getAll(jobId))); },
   async getPhoto(id) { return tx('photos', 'readonly', (s) => reqP(s.get(id))); },

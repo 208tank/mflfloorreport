@@ -4,12 +4,14 @@ const CACHE = 'tank-floor-v3.4.2';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/db.js', './js/units.js', './js/geometry.js', './js/calc.js', './js/map.js',
-  './js/export.js', './js/report.js', './js/model.js', './js/demo.js', './js/builder.js', './js/shell.js', './js/roof.js', './js/xlsx.js', './js/loader.js', './js/seal.js', './js/settle.js', './js/tables.js', './js/design.js', './js/sections.js', './js/patches.js', './js/registry.js', './js/equipment.js',
+  './js/export.js', './js/report.js', './js/model.js', './js/demo.js', './js/builder.js', './js/shell.js', './js/roof.js', './js/xlsx.js', './js/loader.js', './js/seal.js', './js/settle.js', './js/tables.js', './js/design.js', './js/sections.js', './js/patches.js', './js/registry.js', './js/equipment.js', './js/util.js',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // cache: 'reload' skips the browser's HTTP cache, so a new release never stores files left over
+  // from the previous one (GitHub Pages lets browsers keep files for up to 10 minutes).
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {

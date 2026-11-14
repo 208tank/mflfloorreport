@@ -8,7 +8,7 @@ import { ROOF_TYPES, FIXED_TYPES, FIXED_SUPPORT, FLOAT_TYPES, PT5, PT5_SHORT, PO
 import { download, indicationsCSV, platesCSV, nozzlesCSV, shellCSV, roofCSV, settleCSV, svgForExport, svgToPng, fileBase } from './export.js';
 import { buildReport, legendHTML, buildDefReport } from './report.js';
 import { patchList, patchOf } from './patches.js';
-import { newJob, migrate, nextNo, uid, getPath, setPath, STAGES, STAGE_LABEL, defaultStatus } from './model.js';
+import { newJob, migrate, nextNo, uid, getPath, setPath, STAGES, STAGE_LABEL, defaultStatus, copyPhotos } from './model.js';
 import { makeDemo } from './demo.js';
 import { defaultShell, defaultZones, autoLocCount, autoPlateCount, utLocations, coursesWithElev, courseAt, coursePlates, shellHeight, courseSummary, readingElevations, zoneCount, getReading, fmtElev, zKey, rolloutSVG, SHELL_SVG_STYLE, SPACING_MM } from './shell.js';
 import { buildLoader, readLoader, loaderAreas } from './loader.js';
@@ -2063,7 +2063,7 @@ function findingsBox(k) {
   const F = findings(S.job, S.layout, S.calc)[k];
   return `<section class="card"><div class="sp-head"><h2>Findings</h2><span class="sres-chip s-${F.status}">${STATUS_TEXT[F.status]}</span></div>
     ${F.lines.length ? `<ul class="flist">${F.lines.map((x) => `<li>${x}</li>`).join('')}</ul>` : '<p class="muted small">No results yet.</p>'}
-    ${F.items.length ? `<h3>Items needing action</h3><ul class="flist bad">${F.items.map((it) => `<li><b>${PRIORITY_LABEL[it.priority] || ''}</b> — ${it.finding}</li>`).join('')}</ul><div class="acts"><button class="btn sm" data-go="recs:${k}">Go to recommendations →</button></div>` : ''}</section>`;
+    ${F.items.length ? `<h3>Items needing action</h3><ul class="flist bad">${F.items.map((it) => `<li><b>${PRIORITY_LABEL[it.priority] || ''}</b> — ${h(it.finding)}</li>`).join('')}</ul><div class="acts"><button class="btn sm" data-go="recs:${k}">Go to recommendations →</button></div>` : ''}</section>`;
 }
 function viewAnalysis() {
   const k = viewPlace(S.view).sec, job = S.job;
@@ -2107,7 +2107,7 @@ function viewRecs() {
     <div class="rec-grid"><label>Finding / deficiency${sxIn('recs', k, r, 'finding', 'area')}</label><label>Recommended action${sxIn('recs', k, r, 'action', 'area')}</label></div>
     <div class="rec-bot">${sxIn('recs', k, r, 'loc', 'text', 'placeholder="Location"')}${sxIn('recs', k, r, 'ref', 'text', 'placeholder="Code reference"')}<select data-sx="recs" data-sec="${k}" data-iid="${r.id}" data-f="photo"><option value="">Photo —</option>${ph.map((p) => `<option value="${p.id}" ${r.photo === p.id ? 'selected' : ''}>${photoNo(p)} ${h(p.caption || '')}</option>`).join('')}</select></div></div>`).join('') || '<p class="muted">No recommendations yet.</p>';
   return `<div class="page wide">${secHead(k, 'Recommendations', 'Recommended repairs and actions. Items ticked as deficiencies get a number (D-001…) and appear in the Deficiencies list and the client deficiency report.')}
-    ${sugg.length ? `<section class="card sugg"><div class="sp-head"><h2>Suggested from the analysis</h2><button class="btn sm primary" data-act="rec-all" data-sec="${k}">Add all</button></div>${sugg.map((it) => `<div class="sugg-row"><span class="pchip p-${it.priority}">${it.priority}</span><span>${it.finding}${it.action ? `<br><small class="muted">${h(it.action)}</small>` : ''}</span><button class="btn sm" data-act="rec-from" data-sec="${k}" data-key="${h(it.key)}">Add</button></div>`).join('')}</section>` : ''}
+    ${sugg.length ? `<section class="card sugg"><div class="sp-head"><h2>Suggested from the analysis</h2><button class="btn sm primary" data-act="rec-all" data-sec="${k}">Add all</button></div>${sugg.map((it) => `<div class="sugg-row"><span class="pchip p-${it.priority}">${it.priority}</span><span>${h(it.finding)}${it.action ? `<br><small class="muted">${h(it.action)}</small>` : ''}</span><button class="btn sm" data-act="rec-from" data-sec="${k}" data-key="${h(it.key)}">Add</button></div>`).join('')}</section>` : ''}
     <section class="card">${rows}<div class="acts row-acts"><button class="btn sm" data-act="sx-add" data-kind="recs" data-sec="${k}">+ Recommendation</button></div></section></div>`;
 }
 
@@ -2269,8 +2269,7 @@ document.addEventListener('click', async (e) => {
     case 'job-dup': {
       const j = migrate(await db.getJob(id)); const old = j.id;
       j.id = uid(); j.created = j.updated = Date.now(); j.info.tankId = (j.info.tankId || 'Tank') + ' (copy)';
-      await db.putJob(j);
-      for (const p of await db.jobPhotos(old)) await db.putPhoto({ ...p, id: uid(), jobId: j.id });
+      await db.replaceJob(j, copyPhotos(j, await db.jobPhotos(old)));
       await loadJobs(); renderView(); toast('Job duplicated'); return;
     }
     case 'job-del': {
@@ -3110,11 +3109,11 @@ async function importJobFile(file) {
       const newer = (job.updated || 0) >= (exists.updated || 0);
       const rv = (j) => (j.rev ? `Rev ${j.rev}` : 'no rev');
       const replace = await askConfirm(`"${job.info.tankId || 'This job'}" is already on this device.\n\nFile: ${rv(job)}, last changed ${when(job.updated)}${newer ? ' (newer)' : ''}\nThis device: ${rv(exists)}, last changed ${when(exists.updated)}${newer ? '' : ' (newer)'}${unsavedSinceRev(exists) ? ' — has changes not saved to a file' : ''}`, { ok: 'Replace with the file', cancel: 'Keep both (open as a copy)' });
-      if (replace) await db.deleteJob(oldId);
-      else { job.id = uid(); job.info.tankId = (job.info.tankId || 'Tank') + ' (copy)'; }
+      if (!replace) { job.id = uid(); job.info.tankId = (job.info.tankId || 'Tank') + ' (copy)'; }
     }
-    await db.putJob(job);
-    for (const p of data.photos || []) await db.putPhoto({ ...p, id: job.id === oldId ? p.id : uid(), jobId: job.id });
+    // One transaction: the device copy is only replaced once the whole file has been written.
+    const photos = job.id === oldId ? data.photos || [] : copyPhotos(job, data.photos || []);
+    await db.replaceJob(job, photos, exists && job.id === oldId ? oldId : null);
     await loadJobs(); toast(`Opened ${file.name}`); await openJob(job.id);
     return job.id;
   } catch (err) { toast('Could not open the file: ' + err.message); return null; }
@@ -3176,7 +3175,15 @@ function toast(msg, action) {
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installEvt = e; renderHeader(); });
 window.addEventListener('online', () => { const n = $('#netState'); if (n) n.textContent = 'Online'; });
 window.addEventListener('offline', () => { const n = $('#netState'); if (n) n.textContent = 'Offline'; });
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && saveTimer) flushSave(); });
+/** Save now: commit the field being typed in (blur fires its change event), then write to the device.
+ *  Runs when the app is hidden or closed, so a reading typed just before switching apps isn't lost. */
+function flushNow() {
+  const a = document.activeElement;
+  if (a && a !== document.body && a.matches?.('input, textarea, select')) a.blur();
+  if (saveTimer) flushSave();
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushNow(); });
+window.addEventListener('pagehide', flushNow);
 window.addEventListener('beforeprint', () => { if (S.view !== 'report' && S.job) { S._prevView = S.view; go('report'); } });
 window.addEventListener('afterprint', () => { if (S._prevView) { const v = S._prevView; S._prevView = null; go(v); } });
 
