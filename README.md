@@ -7,6 +7,22 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Data integrity upgrade — stage 1: reliable automatic saving (v3.8.0)
+
+Every change is still written to the device about a third of a second after it is made, now through a
+save queue (`js/saver.js`):
+
+- **One write at a time.** A change made while a write is in progress is written straight after it, so
+  writes never overlap and the last value always wins.
+- **On disk before "Saved".** Job writes ask the browser for strict durability, so "Saved locally" means
+  the data has reached storage, not just memory.
+- **Never silent.** A failed write shows **Not saved — retrying** in the header (also on small screens) with
+  the reason in plain words (for example a full device), and is retried after 1, 3 and 10 seconds; after
+  that, the next change or **Try again** retries. The change stays on screen and is never dropped.
+- **Nothing is left behind.** While a change is not on the device, opening another job, editing a registry
+  tank, writing a job file and making a UT loader sheet are refused with an explanation, so a job file is
+  never written from out-of-date data.
+
 ## Data integrity upgrade — stage 11: migration management (v3.7.0)
 
 Database and job migrations are now ordered, numbered steps (`js/migrations.js`), logged on the

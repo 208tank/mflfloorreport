@@ -51,10 +51,10 @@ async function tx(store, mode, fn) {
 
 /** One transaction over several stores. fn queues its requests synchronously; resolves when the
  *  transaction commits, rejects (with everything rolled back) if any request fails. */
-async function txMany(stores, fn) {
+async function txMany(stores, fn, opts) {
   const db = await open();
   return new Promise((resolve, reject) => {
-    const t = db.transaction(stores, 'readwrite');
+    const t = db.transaction(stores, 'readwrite', opts);
     try { fn(...stores.map((n) => t.objectStore(n))); } catch (e) { try { t.abort(); } catch { /* already finished */ } reject(e); return; }
     t.oncomplete = () => resolve();
     t.onerror = () => reject(t.error);
@@ -67,7 +67,9 @@ const reqP = (r) => new Promise((res, rej) => { r.onsuccess = () => res(r.result
 export const db = {
   async allJobs() { return tx('jobs', 'readonly', (s) => reqP(s.getAll())); },
   async getJob(id) { return tx('jobs', 'readonly', (s) => reqP(s.get(id))); },
-  async putJob(job) { return txMany(['jobs', 'cards'], (J, C) => { J.put(job); C.put(lite(job)); }); },
+  /** Write a job and its card. 'strict' durability: the browser reports success only once the data is
+   *  on disk, so "Saved" means a crash or power cut a moment later can't undo it. */
+  async putJob(job) { return txMany(['jobs', 'cards'], (J, C) => { J.put(job); C.put(lite(job)); }, { durability: 'strict' }); },
   async allCards() { return tx('cards', 'readonly', (s) => reqP(s.getAll())); },
   /** Delete a job and its photos together: either both go or neither does. */
   async deleteJob(id) {

@@ -185,6 +185,59 @@ export default {
     await page.context().close();
   },
 
+  async 'saving: a device write that fails is shown, retried, and the change still reaches the device'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => window.tfi.go('setup'));
+    // the next two writes of the jobs store fail, as on a full or busy device
+    await page.evaluate(() => { const put = IDBObjectStore.prototype.put; let fails = 2; window.__restorePut = () => { IDBObjectStore.prototype.put = put; }; IDBObjectStore.prototype.put = function (...a) { if (this.name === 'jobs' && fails > 0) { fails--; throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); } return put.apply(this, a); }; });
+    await page.fill('[data-bind="info.client"]', 'Written after a retry');
+    await page.press('[data-bind="info.client"]', 'Tab');
+    await page.waitForFunction(() => document.querySelector('#saveState')?.textContent === 'Not saved — retrying');
+    assert.match(await page.textContent('#toasts, body'), /out of storage space/);
+    await page.waitForFunction(() => document.querySelector('#saveState')?.textContent === 'Saved locally', null, { timeout: 15000 });
+    const stored = await page.evaluate(async () => (await (await import('./js/db.js')).db.getJob(window.tfi.job().id)).info.client);
+    assert.equal(stored, 'Written after a retry');
+    // job writes ask the browser for 'strict' durability (on disk before "Saved")
+    const dur = await page.evaluate(async () => { const t = IDBDatabase.prototype.transaction; let seen = null; IDBDatabase.prototype.transaction = function (st, mode, o) { if ([].concat(st).includes('jobs') && mode === 'readwrite') seen = o?.durability || 'default'; return t.call(this, st, mode, o); }; window.tfi.job().info.site = 'x'; window.tfi.commit(); for (let i = 0; i < 30 && !seen; i++) await new Promise((r) => setTimeout(r, 100)); IDBDatabase.prototype.transaction = t; return seen; });
+    assert.equal(dur, 'strict');
+    assert.deepEqual(page.errors.filter((e) => !/quota/i.test(e)), []);
+    await page.context().close();
+  },
+
+  async 'saving: while a change cannot be saved, switching job and writing a job file are refused'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const first = await page.evaluate(() => window.tfi.job().id);
+    // a second job to switch to
+    await page.evaluate(() => window.tfi.go('jobs'));
+    await page.click('[data-act="job-demo"]');
+    await page.waitForFunction((id) => window.tfi.job()?.id !== id, first);
+    const second = await page.evaluate(() => window.tfi.job().id);
+    await page.waitForFunction(() => window.__app.view === 'map');
+    // every jobs-store write now fails
+    await page.evaluate(() => { const put = IDBObjectStore.prototype.put; window.__restorePut = () => { IDBObjectStore.prototype.put = put; }; IDBObjectStore.prototype.put = function (...a) { if (this.name === 'jobs') throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); return put.apply(this, a); }; });
+    await page.evaluate(() => { window.tfi.job().info.client = 'Unsaved change'; window.tfi.commit(); });
+    await page.waitForFunction(() => /^Not saved/.test(document.querySelector('#saveState')?.textContent || ''));
+    // switching job is refused and the change stays on screen
+    await page.evaluate((id) => { window.tfi.go('jobs'); document.querySelector(`[data-act="job-open"][data-id="${id}"]`).click(); }, first);
+    await page.waitForTimeout(500);
+    assert.equal(await page.evaluate(() => window.tfi.job().id), second);
+    assert.equal(await page.evaluate(() => window.tfi.job().info.client), 'Unsaved change');
+    // saving a job file is refused (nothing downloaded)
+    let downloads = 0; page.on('download', () => downloads++);
+    await page.keyboard.press('Control+s');
+    await page.waitForTimeout(800);
+    assert.equal(downloads, 0);
+    assert.match(await page.textContent('body'), /job file was not written/);
+    // once the device can write again, the change is saved and switching works
+    await page.evaluate(() => window.__restorePut());
+    assert.equal(await page.evaluate(async () => { window.tfi.commit(); for (let i = 0; i < 40; i++) { if (document.querySelector('#saveState').textContent === 'Saved locally') return true; await new Promise((r) => setTimeout(r, 100)); } return false; }), true);
+    assert.equal(await page.evaluate(async (id) => (await (await import('./js/db.js')).db.getJob(id)).info.client, second), 'Unsaved change');
+    await page.evaluate((id) => { window.tfi.go('jobs'); document.querySelector(`[data-act="job-open"][data-id="${id}"]`).click(); }, first);
+    await page.waitForFunction((id) => window.tfi.job()?.id === id, first);
+    assert.deepEqual(page.errors.filter((e) => !/quota/i.test(e)), []);
+    await page.context().close();
+  },
+
   async 'offline: an update never caches stale files from the browser HTTP cache'({ browser, serve }) {
     const { readFile } = await import('node:fs/promises');
     const root = new URL('../../', import.meta.url);

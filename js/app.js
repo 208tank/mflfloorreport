@@ -1,6 +1,7 @@
 // Tank Floor Inspector — main application.
 import { db, requestPersistence, dbConfig } from './db.js';
 import { pendingSteps } from './migrations.js';
+import { createSaver, saveErrorText } from './saver.js';
 import { sha256 } from './util.js';
 import { u, toMm, inVal, fmt, fmtRate, unitLabel, num, UNITS } from './units.js';
 import { buildLayout, stackSections, suggestCount, halfChord, plateAt, toLocal, itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
@@ -28,7 +29,7 @@ import { esc as h } from './util.js';
 import { $, $$, toast, askConfirm, askChoice } from './ui.js';
 import { jobCard, indCount } from './cards.js';
 
-const APP_VERSION = '3.7.0';
+const APP_VERSION = '3.8.0';
 
 const S = {
   jobs: [], tanks: [], reg: { q: '', open: new Set() }, job: null, layout: null, calc: null, photos: [], company: {},
@@ -87,27 +88,40 @@ function recompute() {
   RC.job = j; RC.inds = j.indications;
 }
 
-let saveTimer = null;
-function scheduleSave() {
-  S.job.updated = Date.now();
-  setSaveState('Saving…');
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(flushSave, 350);
-}
-async function flushSave() {
-  clearTimeout(saveTimer); saveTimer = null;
-  if (!S.job) return;
-  if (S.job.regEdit) {
-    const job = S.job;
-    try {
-      const prev = await db.getTank(job.regEdit), t = tankFromJob(job, prev);
-      t.info.location = job.info.location || ''; t.info.notes = job.info.tankNotes || '';
-      await db.putTank(t); await loadTanks(); setSaveState('Saved to registry');
-    } catch (e) { setSaveState('Not saved'); toast('Could not save the tank: ' + e.message); }
+/* Automatic saving (saver.js): one write at a time, retried on failure, never silent. */
+const saver = createSaver({ write: writeCurrent, onState: showSaveState });
+async function writeCurrent() {
+  const job = S.job; if (!job) return;
+  if (job.regEdit) {
+    const prev = await db.getTank(job.regEdit), t = tankFromJob(job, prev);
+    t.info.location = job.info.location || ''; t.info.notes = job.info.tankNotes || '';
+    await db.putTank(t); await loadTanks();
     return;
   }
-  try { await db.putJob(S.job); setSaveState('Saved locally'); renderFileState(); }
-  catch (e) { setSaveState('Not saved'); toast('Could not save to this device: ' + e.message); }
+  await db.putJob(job);
+  renderFileState();
+}
+let saveErrToast = 0;
+function showSaveState(st, err) {
+  const reg = !!S.job?.regEdit;
+  const txt = { idle: '', pending: 'Saving…', saving: 'Saving…', saved: reg ? 'Saved to registry' : 'Saved locally', retrying: 'Not saved — retrying', error: 'Not saved' }[st] ?? '';
+  setSaveState(txt);
+  if ((st === 'retrying' || st === 'error') && Date.now() - saveErrToast > 8000) {
+    saveErrToast = Date.now();
+    toast(`Could not save ${reg ? 'the tank' : 'to this device'}: ${saveErrorText(err)}. ${st === 'retrying' ? 'Trying again…' : 'Your changes are kept on screen; the app tries again with your next change.'}`, st === 'error' ? { label: 'Try again', fn: () => saver.flush() } : undefined);
+  }
+}
+function scheduleSave() { if (!S.job) return; S.job.updated = Date.now(); saver.touch(); }
+/** Write the open job now even if nothing was marked changed (after setting fields that must not
+ *  count as an edit, such as the revision stamp). */
+function writeNow() { if (!S.job) return Promise.resolve(true); saver.touch(); return saver.flush(); }
+/** Write now. Resolves true when every change is on the device. */
+async function flushSave() { return saver.flush(); }
+/** Before leaving the open job: make sure it is on the device; if it can't be saved, say so and stay. */
+async function leaveJobOk() {
+  if (await flushSave()) return true;
+  toast(`Your latest changes could not be saved to this device (${saveErrorText(saver.error)}), so the job stays open. Free some space or close other app windows, then try again.`, { label: 'Try again', fn: () => saver.flush() });
+  return false;
 }
 function renderFileState() { if ($('#fileState')) renderHeader(); }
 function setSaveState(t) { const el = $('#saveState'); if (el) { el.textContent = t; el.dataset.state = t; } }
@@ -150,7 +164,7 @@ function dbFailed(e) {
 }
 
 async function openJob(id, view = 'map') {
-  await flushSave();
+  if (S.job && S.job.id !== id && !(await leaveJobOk())) return;
   const j = await db.getJob(id);
   if (!j) return toast('Job not found');
   const notes = migrationNotes(j), steps = pendingSteps(j).length, log = [];
@@ -188,7 +202,7 @@ async function createJob(job) {
 
 function go(view) {
   if (!S.job && !['jobs', 'dash', 'reg'].includes(view)) view = 'jobs';
-  if (S.job?.regEdit && !REG_VIEWS.includes(view)) { if (saveTimer) flushSave(); S.job = null; recompute(); S.photos = []; }
+  if (S.job?.regEdit && !REG_VIEWS.includes(view)) { if (saver.pending()) flushSave(); S.job = null; recompute(); S.photos = []; }
   if (view === 'roof') view = 'roofF';
   S.view = view;
   const pl = viewPlace(view); if (pl) S.navOpen = new Set([pl.sec]);
@@ -517,7 +531,7 @@ document.addEventListener('input', (e) => { if (e.target.id === 'regQ') { S.reg.
 after.reg = async () => { const before = S.dash.scanned; await dashInit(); if (!before && S.dash.scanned && S.view === 'reg') renderView(); };
 
 async function openTankEdit(tid, view = 'setup') {
-  await flushSave();
+  if (S.job && !(await leaveJobOk())) return;
   const t = await db.getTank(tid); if (!t) return toast('Tank not found');
   S.job = editJobFor(t); S.job.info.location = t.info?.location || ''; S.job.info.tankNotes = t.info?.notes || '';
   S.photos = []; S.fileName = null; S.sel = S.selPlate = S.selFeature = null; S.mode = 'select'; S.vb = null;
@@ -2335,7 +2349,7 @@ document.addEventListener('click', async (e) => {
     case 'job-new': { const j = newJob(); return createJob(j); }
     case 'reg-new': { const t = await addTank(); return openTankEdit(t.id); }
     case 'reg-edit': return openTankEdit(id);
-    case 'reg-done': { await flushSave(); S.job = null; S.photos = []; recompute(); go('reg'); return; }
+    case 'reg-done': { if (!(await leaveJobOk())) return; S.job = null; S.photos = []; recompute(); go('reg'); return; }
     case 'reg-insp': return newInspectionDlg(id);
     case 'reg-toggle': { S.reg.open.has(id) ? S.reg.open.delete(id) : S.reg.open.add(id); renderView(); return; }
     case 'reg-build': return buildRegistry();
@@ -2505,7 +2519,7 @@ document.addEventListener('click', async (e) => {
     case 'utl-down': {
       const areas = loaderAreas(S.job);
       if (!areas.length) { toast('Nothing to load yet — set up the shell courses, nozzles, roof or floor indications first.'); return; }
-      await flushSave();
+      if (!(await flushSave())) { toast('The UT loader was not made: the latest changes could not be saved to this device first.'); return; }
       try { const blob = await buildLoader(S.job); download(fileBase(S.job) + '_UT-loader.xlsx', blob); toast(`UT loader sheet downloaded (${areas.join(', ')}). Give it to the UT technician.`); }
       catch (err) { toast('Could not build the loader sheet: ' + err.message); }
       return;
@@ -3125,7 +3139,8 @@ const canPick = () => 'showSaveFilePicker' in window && window.self === window.t
  *  hundreds of photos never needs one huge string in memory. The bytes are exactly what
  *  JSON.stringify({ format, version, saved, rev, job, photos, tank?, appVersion }) gives. */
 async function jobFile(id) {
-  await flushSave();
+  // never write a file from stale data: every change must be on the device first
+  if (S.job?.id === id && !(await flushSave())) throw Object.assign(new Error(`your latest changes could not be saved to this device (${saveErrorText(saver.error)})`), { name: 'NotSavedError' });
   const stored = await db.getJob(id); const keys = await db.jobPhotoKeys(id);
   const at = Date.now();
   const stamp = { rev: (stored.rev || 0) + 1, savedAt: at };
@@ -3149,7 +3164,7 @@ async function jobFile(id) {
 async function applyStamp(id, job) {
   if (S.job?.id === id) {
     Object.assign(S.job, { rev: job.rev, savedAt: job.savedAt, updated: job.updated, revisions: job.revisions });
-    await flushSave(); renderHeader();
+    await writeNow(); renderHeader();
   } else {
     const stored = await db.getJob(id);
     await db.putJob({ ...stored, rev: job.rev, savedAt: job.savedAt, updated: job.updated, revisions: job.revisions });
@@ -3211,7 +3226,7 @@ async function checkFileBeforeSave(id, hnd) {
   const fh = data.job.status?.history || [], lh = stored.status?.history || [];
   if (data.job.status?.stage && (fh.at(-1)?.at || 0) > (lh.at(-1)?.at || 0)) {
     const status = { ...(stored.status || {}), stage: data.job.status.stage, history: fh };
-    if (S.job?.id === id) { S.job.status = status; await flushSave(); renderHeader(); }
+    if (S.job?.id === id) { S.job.status = status; await writeNow(); renderHeader(); }
     else await db.putJob({ ...stored, status });
   }
   return 'ok';
@@ -3219,7 +3234,7 @@ async function checkFileBeforeSave(id, hnd) {
 
 async function saveJobFile(id = S.job?.id, saveAs = false) {
   if (!id) return;
-  await flushSave();
+  if (S.job?.id === id && !(await flushSave())) { toast(`The job file was not written: your latest changes could not be saved to this device first (${saveErrorText(saver.error)}).`, { label: 'Try again', fn: () => saveJobFile(id, saveAs) }); return; }
   if (canPick()) {
     try {
       let hnd = saveAs ? null : await fileHandle(id, true);
@@ -3241,6 +3256,7 @@ async function saveJobFile(id = S.job?.id, saveAs = false) {
       return;
     } catch (e) {
       if (e.name === 'AbortError') return;
+      if (e.name === 'NotSavedError') { toast('The job file was not written: ' + e.message + '.'); return; }
       console.warn('Save file failed, downloading instead', e);
     }
   }
@@ -3329,7 +3345,7 @@ window.addEventListener('offline', () => { const n = $('#netState'); if (n) n.te
 function flushNow() {
   const a = document.activeElement;
   if (a && a !== document.body && a.matches?.('input, textarea, select')) a.blur();
-  if (saveTimer) flushSave();
+  if (saver.pending()) flushSave();
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushNow(); });
 window.addEventListener('pagehide', flushNow);
@@ -3337,7 +3353,7 @@ window.addEventListener('beforeprint', () => { if (S.view !== 'report' && S.job)
 window.addEventListener('afterprint', () => { if (S._prevView) { const v = S._prevView; S._prevView = null; go(v); } });
 
 /** Reload into the new version, saving first so nothing typed is lost. */
-async function appReload() { flushNow(); if (saveTimer) await flushSave(); location.reload(); }
+async function appReload() { flushNow(); if (saver.pending() && !(await leaveJobOk())) return; location.reload(); }
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('./sw.js').then((reg) => {
