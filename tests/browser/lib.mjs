@@ -49,6 +49,8 @@ export async function appPage(browser, url, { demo = true, ctx } = {}) {
     await page.evaluate(() => window.tfi.go('jobs'));
     await page.click('[data-act="job-demo"]');
     await page.waitForFunction(() => window.tfi.job()?.info?.tankId === 'TK-101');
+    // openJob() finishes by switching to the floor map; wait for that so a test's own go() isn't overtaken
+    await page.waitForFunction(() => window.__app.view === 'map' && document.querySelector('#mapbox svg'));
   }
   return page;
 }
