@@ -724,7 +724,16 @@ every limit is editable.
 | --- | --- |
 | `index.html` | App shell |
 | `css/app.css` | Screen, dark mode and print styles |
-| `js/app.js` | UI, views, events, job files |
+| `js/app.js` | Entry point: loads the screens, wires the core, binds job fields, window events, start-up |
+| `js/app/state.js` | App state `S`, version, shared option lists and small helpers |
+| `js/app/nav.js` | Screen registry, navigation, side menu drawing, the `redraw` registry |
+| `js/app/actions.js` | Button (`data-act`) and input change registries and their document listeners |
+| `js/app/fields.js` | Form fields, reading inputs, keeping focus across redraws |
+| `js/app/persist.js` | Saving the open job: recalculation, save queue, crash journal, change count, `commit` |
+| `js/app/header.js` | Header, job file badge, revision text |
+| `js/app/folder.js` | Linked jobs folder: link, scan, write a stage back |
+| `js/app/images.js`, `js/app/menu.js` | Photo / logo helpers; side menu section button |
+| `js/views/*.js` | One module per screen area: dashboard, registry, jobs, setup, floormap, floorlists, api, shell, nozzles, roof, settle, sections, summary, report, codetables, files, history |
 | `js/ui.js` | Element lookup, toasts and in-app dialogs |
 | `js/cards.js` | Job summary cards for the Jobs list, Dashboard and registry |
 | `js/util.js` | HTML escaping (the one place it is defined) |
