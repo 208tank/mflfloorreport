@@ -3,7 +3,7 @@
 import { S, todayISO } from '../app/state.js';
 import { defineView, go, renderView } from '../app/nav.js';
 import { onAction } from '../app/actions.js';
-import { host } from '../app/host.js';
+import { commit, leaveJobOk, loadJobs, loadTanks, recompute } from '../app/persist.js';
 import { dashInit } from '../app/folder.js';
 import { jobCard } from '../cards.js';
 import { db } from '../db.js';
@@ -13,6 +13,7 @@ import { hasFixed, hasFloating, ROOF_TYPES } from '../roof.js';
 import { $, askConfirm, toast } from '../ui.js';
 import { fmt } from '../units.js';
 import { esc as h } from '../util.js';
+import { createJob } from './jobs.js';
 // Tanks entered once; each inspection starts from a copy of the tank's data.
 
 /** All inspections of a tank: jobs on this device plus job files in the linked folder. */
@@ -61,16 +62,16 @@ document.addEventListener('input', (e) => { if (e.target.id === 'regQ') { S.reg.
 const afterReg = async () => { const before = S.dash.scanned; await dashInit(); if (!before && S.dash.scanned && S.view === 'reg') renderView(); };
 
 async function openTankEdit(tid, view = 'setup') {
-  if (S.job && !(await host.leaveJobOk())) return;
+  if (S.job && !(await leaveJobOk())) return;
   const t = await db.getTank(tid); if (!t) return toast('Tank not found');
   S.job = editJobFor(t); S.job.info.location = t.info?.location || ''; S.job.info.tankNotes = t.info?.notes || '';
   S.photos = []; S.fileName = null; S.sel = S.selPlate = S.selFeature = null; S.mode = 'select'; S.vb = null;
-  host.recompute(); go(view);
+  recompute(); go(view);
 }
 
 async function addTank(fromJob = null) {
   const t = fromJob ? tankFromJob(fromJob) : newTank(S.jobs[0]?.units || 'imperial');
-  await db.putTank(t); await host.loadTanks();
+  await db.putTank(t); await loadTanks();
   return t;
 }
 
@@ -88,7 +89,7 @@ async function buildRegistry() {
     }
     for (const j of js) { const full = await db.getJob(j.id); full.tankRef = t.id; await db.putJob(full); if (S.job?.id === j.id) S.job.tankRef = t.id; linked++; }
   }
-  await host.loadJobs(); await host.loadTanks(); renderView();
+  await loadJobs(); await loadTanks(); renderView();
   toast(`${made} tank${made === 1 ? '' : 's'} added, ${linked} job${linked === 1 ? '' : 's'} linked.`);
 }
 
@@ -132,7 +133,7 @@ async function newInspectionDlg(tid) {
     j.status.planned = fd.get('planned') || ''; j.status.due = fd.get('due') || '';
     if (j.status.planned) j.info.inspDate = j.status.planned;
     dlg.close();
-    await host.createJob(j);
+    await createJob(j);
     toast(`Inspection created for ${t.info?.tankId || 'the tank'} — ${scopeText(scope)}`);
   };
   dlg.showModal();
@@ -146,7 +147,7 @@ async function updateRegistryFromJob() {
   const diff = prev ? diffFromTank(j, prev) : [];
   if (prev && !diff.length) { toast('The registry already matches this inspection.'); return; }
   if (prev && !(await askConfirm(`Update the registry record for ${prev.info?.tankId || 'this tank'} with this inspection's data?\n\nChanges: ${diff.join(', ')}.\n\nEarlier inspections keep their own copies.`, { ok: 'Update registry' }))) return;
-  const t = tankFromJob(j, prev || { id: j.tankRef }); await db.putTank(t); await host.loadTanks(); renderView(); toast('Registry updated.');
+  const t = tankFromJob(j, prev || { id: j.tankRef }); await db.putTank(t); await loadTanks(); renderView(); toast('Registry updated.');
 }
 
 defineView('reg', viewReg, afterReg);
@@ -159,7 +160,7 @@ onAction({
     return openTankEdit(id);
   },
   'reg-done': async (el, id, e, act) => {
-    { if (!(await host.leaveJobOk())) return; S.job = null; S.photos = []; host.recompute(); go('reg'); return; }
+    { if (!(await leaveJobOk())) return; S.job = null; S.photos = []; recompute(); go('reg'); return; }
   },
   'reg-insp': async (el, id, e, act) => {
     return newInspectionDlg(id);
@@ -174,22 +175,22 @@ onAction({
     {
       const t = await db.getTank(id); if (!t) return;
       const c = { ...JSON.parse(JSON.stringify(t)), id: uid(), created: Date.now(), updated: Date.now() };
-      c.info.tankId = (c.info.tankId || 'Tank') + ' (copy)'; await db.putTank(c); await host.loadTanks(); return openTankEdit(c.id);
+      c.info.tankId = (c.info.tankId || 'Tank') + ' (copy)'; await db.putTank(c); await loadTanks(); return openTankEdit(c.id);
     }
   },
   'reg-del': async (el, id, e, act) => {
     {
       const t = S.tanks.find((x) => x.id === id), n = tankInspections(id).length;
       if (!(await askConfirm(`Delete ${t?.info?.tankId || 'this tank'} from the registry?${n ? `\n\nIts ${n} inspection${n > 1 ? 's' : ''} are kept; they just won't be linked to a registry tank.` : ''}`, { ok: 'Delete tank', danger: true }))) return;
-      await db.deleteTank(id); await host.loadTanks(); renderView(); return;
+      await db.deleteTank(id); await loadTanks(); renderView(); return;
     }
   },
   'reg-from-job': async (el, id, e, act) => {
     {
       if (!S.job) return;
       const dupe = S.tanks.find((x) => tankKeyOf(x) === normKey(S.job.info.client, S.job.info.site, S.job.info.tankId));
-      if (dupe && await askConfirm(`${dupe.info.tankId} at ${dupe.info.site || 'this site'} is already in the registry. Link this job to it?`, { ok: 'Link to it', cancel: 'Add as a new tank' })) { S.job.tankRef = dupe.id; host.commit(); renderView(); toast('Linked to the registry tank.'); return; }
-      const t = await addTank(S.job); S.job.tankRef = t.id; host.commit(); renderView(); toast('Tank added to the registry.'); return;
+      if (dupe && await askConfirm(`${dupe.info.tankId} at ${dupe.info.site || 'this site'} is already in the registry. Link this job to it?`, { ok: 'Link to it', cancel: 'Add as a new tank' })) { S.job.tankRef = dupe.id; commit(); renderView(); toast('Linked to the registry tank.'); return; }
+      const t = await addTank(S.job); S.job.tankRef = t.id; commit(); renderView(); toast('Tank added to the registry.'); return;
     }
   },
   'reg-update': async (el, id, e, act) => {

@@ -3,7 +3,7 @@ import { S, secData } from '../app/state.js';
 import { field, sxIn, sxSel } from '../app/fields.js';
 import { defineView, go, renderView } from '../app/nav.js';
 import { onAction } from '../app/actions.js';
-import { host } from '../app/host.js';
+import { commit } from '../app/persist.js';
 import { buildDefReport } from '../report.js';
 import { allDefs, childView, findings, numberDefs, PRIORITIES, SECTIONS, STATUS_TEXT, STATUSES } from '../sections.js';
 import { $, askConfirm, toast } from '../ui.js';
@@ -67,7 +67,7 @@ onAction({
     {
       const f = el.dataset.f;
       if ((S.job.summary[f] || '').trim() && !(await askConfirm('Replace the current text with a new draft?', { ok: 'Replace' }))) return;
-      S.job.summary[f] = draftSummary(f); host.commit(); renderView(); return;
+      S.job.summary[f] = draftSummary(f); commit(); renderView(); return;
     }
   },
   'def-filter': async (el, id, e, act) => {
@@ -75,7 +75,7 @@ onAction({
   },
   'def-issue': async (el, id, e, act) => {
     {
-      const S2 = S.job.summary; S2.defRev = (S2.defRev || 0) + 1; S2.issued = new Date().toISOString().slice(0, 10); host.commit(); toast(`Deficiency report update ${S2.defRev} issued ${S2.issued}.`); go('defrep'); return;
+      const S2 = S.job.summary; S2.defRev = (S2.defRev || 0) + 1; S2.issued = new Date().toISOString().slice(0, 10); commit(); toast(`Deficiency report update ${S2.defRev} issued ${S2.issued}.`); go('defrep'); return;
     }
   }
 });

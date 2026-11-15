@@ -4,7 +4,7 @@ import { S, secData, secPhotos } from '../app/state.js';
 import { sxIn, sxSel } from '../app/fields.js';
 import { after, childViews, defineView, go, renderNav, renderView } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
-import { host } from '../app/host.js';
+import { checkStorage, commit, scheduleSave } from '../app/persist.js';
 import { imgDims, resizeImage } from '../app/images.js';
 import { nozzleUT, nozzleWall } from '../calc.js';
 import { db } from '../db.js';
@@ -17,8 +17,8 @@ import { CHILDREN, CONDITIONS, findings, NDE_METHODS, NDE_RESULTS, newNDE, newOb
 import { $, $$, askConfirm, toast } from '../ui.js';
 import { fmt } from '../units.js';
 import { esc as h } from '../util.js';
-import { rStatus } from '../views/roof.js';
-import { shellEvalHTML } from '../views/shell.js';
+import { rStatus } from './roof.js';
+import { shellEvalHTML } from './shell.js';
 
 export function crumbHTML(pl) {
   const sec = SEC.get(pl.sec), ch = CHILDREN.find(([c]) => c === pl.child)?.[1];
@@ -247,7 +247,7 @@ const _recfrom = async (el, id, e, act) => {
     const k = el.dataset.sec, F = findings(S.job, S.layout, S.calc)[k], d = secData(k), used = new Set(d.recs.map((r) => r.auto));
     const items = F.items.filter((it) => !used.has(it.key) && (act === 'rec-all' || it.key === el.dataset.key));
     for (const it of items) d.recs.push(newRec({ finding: it.finding.replace(/<[^>]+>/g, ''), loc: it.loc, action: it.action, priority: it.priority, ref: it.ref, auto: it.key, def: it.priority !== 'P5' }));
-    numberDefs(S.job); host.commit(); renderView(); renderNav(); return;
+    numberDefs(S.job); commit(); renderView(); renderNav(); return;
   }
 };
 
@@ -262,7 +262,7 @@ onAction({
   'sx-add': async (el, id, e, act) => {
     {
       const k = el.dataset.sec, kind = el.dataset.kind, it = kind === 'nde' ? newNDE() : kind === 'obs' ? newObs() : newRec();
-      secData(k)[kind].push(it); if (kind === 'recs') numberDefs(S.job); host.commit(); renderView(); renderNav();
+      secData(k)[kind].push(it); if (kind === 'recs') numberDefs(S.job); commit(); renderView(); renderNav();
       setTimeout(() => $(`[data-iid="${it.id}"][data-f="${kind === 'nde' ? 'extent' : kind === 'obs' ? 'item' : 'finding'}"]`)?.focus(), 40); return;
     }
   },
@@ -272,7 +272,7 @@ onAction({
       if (kind === 'recs' && !(await askConfirm('Remove this recommendation?', { ok: 'Remove', danger: true }))) return;
       d[kind] = d[kind].filter((x) => x.id !== el.dataset.iid);
       if (kind === 'obs') for (const p of S.photos.filter((p) => p.obs === el.dataset.iid)) { delete p.obs; await db.putPhoto(p); }
-      host.commit(); renderView(); renderNav(); return;
+      commit(); renderView(); renderNav(); return;
     }
   },
   'sx-typ': async (el, id, e, act) => {
@@ -281,7 +281,7 @@ onAction({
       const have = new Set(d[kind].map((x) => (kind === 'nde' ? x.method : x.item)));
       const add = (kind === 'nde' ? typicalNDE(k) : typicalObs(k)).filter((x) => !have.has(kind === 'nde' ? x.method : x.item));
       if (kind === 'nde') for (const x of add) x.equip = suggestEquip(S.job.equipment, x.method);
-      d[kind].push(...add); host.commit(); renderView(); renderNav(); toast(add.length ? `Added ${add.length} item${add.length > 1 ? 's' : ''}.` : 'The typical items are already there.'); return;
+      d[kind].push(...add); commit(); renderView(); renderNav(); toast(add.length ? `Added ${add.length} item${add.length > 1 ? 's' : ''}.` : 'The typical items are already there.'); return;
     }
   },
   'obs-rec': async (el, id, e, act) => {
@@ -289,13 +289,13 @@ onAction({
       const k = el.dataset.sec, o = secData(k).obs.find((x) => x.id === el.dataset.iid); if (!o) return;
       const ph = S.photos.find((p) => p.obs === o.id);
       secData(k).recs.push(newRec({ finding: [o.item, o.text].filter(Boolean).join(': '), loc: o.loc, priority: o.cond === 'poor' ? 'P3' : 'P4', photo: ph?.id || '', obs: o.id }));
-      numberDefs(S.job); host.commit(); go('recs:' + k); return;
+      numberDefs(S.job); commit(); go('recs:' + k); return;
     }
   },
   'ph-del': async (el, id, e, act) => {
     {
       if (!(await askConfirm('Delete this photo and its annotations?', { ok: 'Delete', danger: true }))) return;
-      await db.deletePhoto(id); S.photos = S.photos.filter((p) => p.id !== id); S.job.updated = Date.now(); host.scheduleSave(); renderView(); renderNav(); return;
+      await db.deletePhoto(id); S.photos = S.photos.filter((p) => p.id !== id); S.job.updated = Date.now(); scheduleSave(); renderView(); renderNav(); return;
     }
   },
   'eq-add': async (el, id, e, act) => {
@@ -303,14 +303,14 @@ onAction({
       const e = newEquip(el.dataset.type || 'other'); (S.job.equipment = S.job.equipment || []).push(e);
       // pick it for existing methods that use this type and have nothing of that type yet
       for (const sx of SECTIONS) for (const n of secData(sx.key).nde) if (suggestEquip([e], n.method).length && !(n.equip || []).some((id) => S.job.equipment.find((x) => x.id === id)?.type === e.type)) n.equip = [...(n.equip || []), e.id];
-      host.commit(); renderView(); setTimeout(() => $(`[data-eq="make"][data-id="${e.id}"]`)?.focus(), 30); return;
+      commit(); renderView(); setTimeout(() => $(`[data-eq="make"][data-id="${e.id}"]`)?.focus(), 30); return;
     }
   },
   'eq-dup': async (el, id, e, act) => {
     {
       const src = (S.job.equipment || []).find((x) => x.id === id); if (!src) return;
       const e = newEquip(src.type, { ...src, id: undefined, serial: '' }); e.id = newEquip().id;
-      S.job.equipment.splice(S.job.equipment.indexOf(src) + 1, 0, e); host.commit(); renderView(); setTimeout(() => $(`[data-eq="serial"][data-id="${e.id}"]`)?.focus(), 30); return;
+      S.job.equipment.splice(S.job.equipment.indexOf(src) + 1, 0, e); commit(); renderView(); setTimeout(() => $(`[data-eq="serial"][data-id="${e.id}"]`)?.focus(), 30); return;
     }
   },
   'eq-del': async (el, id, e, act) => {
@@ -320,7 +320,7 @@ onAction({
       if (!(await askConfirm(`Remove ${equipName(e)}${e.serial ? ' (S/N ' + e.serial + ')' : ''} from the equipment list?${used.length ? `\n\nIt is picked for: ${used.join('; ')}.` : ''}`, { ok: 'Remove', danger: true }))) return;
       S.job.equipment = S.job.equipment.filter((x) => x.id !== id);
       for (const sx of SECTIONS) for (const n of secData(sx.key).nde) if (n.equip) n.equip = n.equip.filter((x) => x !== id);
-      host.commit(); renderView(); return;
+      commit(); renderView(); return;
     }
   }
 });
@@ -330,13 +330,13 @@ onChange([
     {
     const p = S.photos.find((x) => x.id === el.dataset.ph); if (!p) return;
     const f = el.dataset.f; p[f] = el.type === 'checkbox' ? el.checked : el.value;
-    await db.putPhoto(p); S.job.updated = Date.now(); host.scheduleSave(); if (f === 'obs') renderView(); return;
+    await db.putPhoto(p); S.job.updated = Date.now(); scheduleSave(); if (f === 'obs') renderView(); return;
   }
   } },
   { order: 300, when: (el, act) => el.matches('[data-eq]'), run: async (el, e, act) => {
     {
     const e = (S.job.equipment || []).find((x) => x.id === el.dataset.id); if (!e) return;
-    e[el.dataset.eq] = el.value.trim(); host.commit();
+    e[el.dataset.eq] = el.value.trim(); commit();
     if (el.tagName === 'SELECT' || el.type === 'date') renderView();
     return;
   }
@@ -345,7 +345,7 @@ onChange([
     {
     const it = secData(el.dataset.sec).nde.find((x) => x.id === el.dataset.iid); if (!it) return;
     const set = new Set(it.equip || []); el.checked ? set.add(el.dataset.eqpick) : set.delete(el.dataset.eqpick);
-    it.equip = (S.job.equipment || []).map((e) => e.id).filter((x) => set.has(x)); host.commit();
+    it.equip = (S.job.equipment || []).map((e) => e.id).filter((x) => set.has(x)); commit();
     const sm = el.closest('details')?.querySelector('summary'); if (sm) sm.innerHTML = eqChips(it);
     return;
   }
@@ -358,7 +358,7 @@ onChange([
     const add = src.equipment.filter((e) => !have.has([e.type, e.serial, e.model].join('|'))).map((e) => ({ ...JSON.parse(JSON.stringify(e)), id: newEquip().id }));
     S.job.equipment = [...(S.job.equipment || []), ...add];
     for (const sx of SECTIONS) for (const n of secData(sx.key).nde) if (!(n.equip || []).length) n.equip = suggestEquip(S.job.equipment, n.method);
-    host.commit(); renderView(); toast(add.length ? `${add.length} item${add.length === 1 ? '' : 's'} copied — check the calibration dates.` : 'Those items are already on the list.'); return;
+    commit(); renderView(); toast(add.length ? `${add.length} item${add.length === 1 ? '' : 's'} copied — check the calibration dates.` : 'Those items are already on the list.'); return;
   }
   } },
   { order: 330, when: (el, act) => el.matches('[data-sx]'), run: async (el, e, act) => {
@@ -369,7 +369,7 @@ onChange([
     if (f === 'status' && it.status !== v) { it.history = it.history || []; const d = new Date().toISOString().slice(0, 10); it.history.push({ date: d, status: v }); if (v === 'Closed') it.closedOn = d; else delete it.closedOn; }
     it[f] = v;
     if (f === 'def' && v) numberDefs(S.job);
-    host.commit();
+    commit();
     if (el.tagName === 'SELECT' || el.type === 'checkbox') { renderView(); renderNav(); }
     return;
   }
@@ -381,7 +381,7 @@ onChange([
       try { const dataUrl = await resizeImage(f, 1800); const [w, hh] = await imgDims(dataUrl); const p = { id: uid(), jobId: S.job.id, sec: k, n: ++n, dataUrl, w, h: hh, caption: '', comment: '', anno: [], created: Date.now() }; await db.putPhoto(p); S.photos.push(p); }
       catch { toast('Could not read ' + f.name); }
     }
-    el.value = ''; S.job.updated = Date.now(); host.scheduleSave(); renderView(); renderNav(); host.checkStorage(); return;
+    el.value = ''; S.job.updated = Date.now(); scheduleSave(); renderView(); renderNav(); checkStorage(); return;
   }
   } }
 ]);

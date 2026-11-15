@@ -1,5 +1,5 @@
 // Runs the same sequence of edits on two copies of the app and compares, after every step, the open job's
-// data, the tank registry records, the photo records and the screen HTML. Used to confirm a refactoring step leaves a screen's behaviour unchanged.
+// data, the tank registry records, the photo records, settings and job list, and the screen HTML. Used to confirm a refactoring step leaves a screen's behaviour unchanged.
 //   node tests/tools/actions-diff.mjs <old app folder> <new app folder> <script name in tests/tools/scripts/>
 // A script is a list of steps: { go }, { fill, value, key? } (typed, then Tab unless key says otherwise), { click }, { select, value } (value may be { index }), { check }, { at, x, y } (click a point on a drawing), { js } (run code in the page, e.g. pick a map item), { drag, to }, { upload } (a small photo into a file input), { press } (a key), { download } (click and compare the downloaded file),
 // { confirm: 'yes' | 'no' }, { confirmIf } (answer only if a confirmation is showing). Ids and times are made repeatable (fixed clock, seeded random numbers).
@@ -48,7 +48,7 @@ async function run(dir) {
     await page.waitForTimeout(300);
     const snap = await page.evaluate(() => {
       const j = structuredClone(window.tfi.job() || { none: true }); delete j.updated; delete j.edits; delete j.editAreas;
-      return { job: JSON.stringify(j), tanks: JSON.stringify((window.__app.tanks || []).map(({ updated, ...t }) => t)), photos: JSON.stringify((window.__app.photos || []).map(({ dataUrl, ...p }) => p)), main: document.querySelector('#main').innerHTML, focus: document.activeElement?.outerHTML?.slice(0, 120) || '' };
+      return { job: JSON.stringify(j), tanks: JSON.stringify((window.__app.tanks || []).map(({ updated, ...t }) => t)), photos: JSON.stringify((window.__app.photos || []).map(({ dataUrl, ...p }) => p)), meta: JSON.stringify({ company: window.__app.company, jobs: (window.__app.jobs || []).map((c) => [c.id, c.info?.tankId, c.status?.stage]) }), main: document.querySelector('#main').innerHTML, focus: document.activeElement?.outerHTML?.slice(0, 120) || '' };
     });
     out.push({ ...snap, file }); file = '';
   }
@@ -59,13 +59,13 @@ const norm = (s) => s.replace(/v3\.\d+\.\d+/g, 'vX');
 const a = await run(oldDir), b = await run(newDir);
 let diffs = 0;
 steps.forEach((s, i) => {
-  for (const part of ['job', 'tanks', 'photos', 'file', 'main', 'focus']) {
+  for (const part of ['job', 'tanks', 'photos', 'meta', 'file', 'main', 'focus']) {
     const x = norm(a.out[i][part]), y = norm(b.out[i][part]);
     if (x !== y) { diffs++; let k = 0; while (x[k] === y[k]) k++; console.log(`DIFF step ${i + 1} ${JSON.stringify(s)} ${part} @${k}\n  old: …${x.slice(Math.max(0, k - 80), k + 120)}\n  new: …${y.slice(Math.max(0, k - 80), k + 120)}`); }
   }
 });
 if (a.errors.length || b.errors.length) { diffs++; console.log('page errors', { old: a.errors, new: b.errors }); }
-const changed = a.out.filter((o, i) => i && (o.job !== a.out[i - 1].job || o.tanks !== a.out[i - 1].tanks || o.photos !== a.out[i - 1].photos)).length;
+const changed = a.out.filter((o, i) => i && (o.job !== a.out[i - 1].job || o.tanks !== a.out[i - 1].tanks || o.photos !== a.out[i - 1].photos || o.meta !== a.out[i - 1].meta)).length;
 console.log(diffs ? `${diffs} difference(s)` : `all ${steps.length} steps identical (${changed} changed the job)`);
-if (process.env.VERBOSE) steps.forEach((s, i) => { if (i && a.out[i].job === a.out[i - 1].job && a.out[i].tanks === a.out[i - 1].tanks && a.out[i].photos === a.out[i - 1].photos) console.log(`  step ${i + 1} left the job unchanged: ${JSON.stringify(s)}`); });
+if (process.env.VERBOSE) steps.forEach((s, i) => { if (i && a.out[i].job === a.out[i - 1].job && a.out[i].tanks === a.out[i - 1].tanks && a.out[i].photos === a.out[i - 1].photos && a.out[i].meta === a.out[i - 1].meta) console.log(`  step ${i + 1} left the job unchanged: ${JSON.stringify(s)}`); });
 process.exit(diffs ? 1 : 0);

@@ -3,20 +3,23 @@
 import { S, todayISO } from '../app/state.js';
 import { defineView, renderView } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
-import { host } from '../app/host.js';
+import { commit, flushSave, loadJobs } from '../app/persist.js';
+import { renderHeader } from '../app/header.js';
 import { canDir, dashInit, linkFolder, scanFolder, writeStageToFile } from '../app/folder.js';
 import { jobCard } from '../cards.js';
 import { db } from '../db.js';
 import { defaultStatus, STAGE_LABEL, STAGES } from '../model.js';
 import { $, $$, toast } from '../ui.js';
 import { esc as h } from '../util.js';
+import { importJobFile, rememberFile } from './files.js';
+import { openJob } from './jobs.js';
 
 export async function setStage(id, stage) {
   const now = Date.now();
   if (S.job?.id === id) {
     if (S.job.status.stage === stage) return;
     S.job.status.stage = stage; (S.job.status.history = S.job.status.history || []).push({ stage, at: now });
-    host.commit(); await host.flushSave(); host.renderHeader();
+    commit(); await flushSave(); renderHeader();
   } else {
     const j = await db.getJob(id);
     if (j) {
@@ -31,18 +34,18 @@ export async function setStage(id, stage) {
     const ok = await writeStageToFile(id, stage, now);
     if (!ok && f) toast('Stage changed on this device; the folder file could not be updated.');
   }
-  await host.loadJobs(); if (S.view === 'dash') renderView();
+  await loadJobs(); if (S.view === 'dash') renderView();
   toast(`${(S.jobs.find((j) => j.id === id)?.info?.tankId) || f?.card.tankId || 'Tank'} → ${STAGE_LABEL[stage]}`);
 }
 
 async function openFromDash(id) {
   const local = S.jobs.find((j) => j.id === id), f = S.dash.files.get(id);
   if (f && (!local || f.card.updated > (local.updated || 0) + 1000)) {
-    const nid = await host.importJobFile(await f.fh.getFile());
-    if (nid) { await host.rememberFile(nid, f.fh, true); if (S.job?.id === nid) { S.fileName = f.name; host.renderHeader(); } }
+    const nid = await importJobFile(await f.fh.getFile());
+    if (nid) { await rememberFile(nid, f.fh, true); if (S.job?.id === nid) { S.fileName = f.name; renderHeader(); } }
     return;
   }
-  if (local) { await host.openJob(id, 'setup'); if (f) { await host.rememberFile(id, f.fh, false); S.fileName = f.name; host.renderHeader(); } }
+  if (local) { await openJob(id, 'setup'); if (f) { await rememberFile(id, f.fh, false); S.fileName = f.name; renderHeader(); } }
 }
 
 function dashRows() {

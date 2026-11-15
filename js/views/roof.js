@@ -4,7 +4,7 @@ import { S } from '../app/state.js';
 import { field, focusSel, readInput } from '../app/fields.js';
 import { defineView } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
-import { host } from '../app/host.js';
+import { commit } from '../app/persist.js';
 import { angleOf, itemFloor, plateAt } from '../geometry.js';
 import { MapController } from '../map.js';
 import { uid } from '../model.js';
@@ -223,7 +223,7 @@ function roofFixedClick(fp, hit) {
     let n = 0; for (const p of pts) { const m = String(p.label || '').match(/^R(\d+)$/); if (m) n = Math.max(n, +m[1]); }
     const pt = { id: uid(), label: 'R' + (n + 1), angle: Math.round(angleOf(fp.x, fp.y) * 2) / 2 % 360, r: Math.round(r / st) * st, t: null };
     pts.push(pt); S.roofPt = pt.id; if (!hit.shift) S.roofAdd = false;
-    host.commit(); refreshRoof(); setTimeout(() => $(`#roofBody input[data-rpt="${pt.id}"][data-f="t"]`)?.focus(), 40); return;
+    commit(); refreshRoof(); setTimeout(() => $(`#roofBody input[data-rpt="${pt.id}"][data-f="t"]`)?.focus(), 40); return;
   }
   S.roofPt = null; refreshRoof();
 }
@@ -244,14 +244,14 @@ onAction({
   'sg-add': async (el, id, e, act) => {
     {
       const sd = el.dataset.sg === 'p' ? S.job.roof.seal.primary : S.job.roof.seal.secondary;
-      const g = newGap(); sd.gaps.push(g); sd.noGaps = false; host.commit(); refreshRoof();
+      const g = newGap(); sd.gaps.push(g); sd.noGaps = false; commit(); refreshRoof();
       setTimeout(() => $(`#roofBody input[data-gid="${g.id}"][data-f="angle"]`)?.focus(), 40); return;
     }
   },
   'sg-del': async (el, id, e, act) => {
     {
       const sd = el.dataset.sg === 'p' ? S.job.roof.seal.primary : S.job.roof.seal.secondary;
-      sd.gaps = sd.gaps.filter((x) => x.id !== el.dataset.gid); host.commit(); refreshRoof(); return;
+      sd.gaps = sd.gaps.filter((x) => x.id !== el.dataset.gid); commit(); refreshRoof(); return;
     }
   },
   'rsel-close': async (el, id, e, act) => {
@@ -275,14 +275,14 @@ onAction({
       const pts = (S.job.roof.fixed.pts = S.job.roof.fixed.pts || []);
       let n = 0; for (const p of pts) { const m = String(p.label || '').match(/^R(\d+)$/); if (m) n = Math.max(n, +m[1]); }
       const pt = { id: uid(), label: 'R' + (n + 1), angle: null, r: null, t: null }; pts.push(pt); S.roofPt = pt.id;
-      host.commit(); refreshRoof(); setTimeout(() => $(`#roofBody input[data-rpt="${pt.id}"][data-f="angle"]`)?.focus(), 40); return;
+      commit(); refreshRoof(); setTimeout(() => $(`#roofBody input[data-rpt="${pt.id}"][data-f="angle"]`)?.focus(), 40); return;
     }
   },
   'rpt-del': async (el, id, e, act) => {
     {
       const Fx = S.job.roof.fixed, pt = (Fx.pts || []).find((x) => x.id === id); if (!pt) return;
       if (pt.t != null && !(await askConfirm(`Delete point ${pt.label || ''} and its reading?`, { ok: 'Delete', danger: true }))) return;
-      Fx.pts = Fx.pts.filter((x) => x.id !== id); if (S.roofPt === id) S.roofPt = null; host.commit(); refreshRoof(); return;
+      Fx.pts = Fx.pts.filter((x) => x.id !== id); if (S.roofPt === id) S.roofPt = null; commit(); refreshRoof(); return;
     }
   },
   'rpt-std': async (el, id, e, act) => {
@@ -293,7 +293,7 @@ onAction({
       const R = D / 2, edge = Math.max(R * 0.5, R - (S.job.units === 'metric' ? 600 : 609.6));
       Fx.pts = [{ id: uid(), label: 'CTR', angle: 0, r: 0, t: null }];
       for (const l of utLocations(S.job)) { Fx.pts.push({ id: uid(), label: `${l.label}-E`, angle: l.angle, r: Math.round(edge), t: null }); Fx.pts.push({ id: uid(), label: `${l.label}-M`, angle: l.angle, r: Math.round(R / 2), t: null }); }
-      host.commit(); refreshRoof(); return;
+      commit(); refreshRoof(); return;
     }
   }
 });
@@ -306,7 +306,7 @@ onChange([
     const k = el.dataset.f; let v = readInput(el);
     if (k !== 'notes' && v !== null && v < 0) { toast('Values can’t be negative.'); return; }
     if (k === 'angle' && v !== null) v = ((v % 360) + 360) % 360;
-    g[k] = v; host.commit(); refreshRoof(); return;
+    g[k] = v; commit(); refreshRoof(); return;
   }
   } },
   { order: 100, when: (el, act) => el.matches('[data-sck]') || el.matches('[data-sckn]'), run: async (el, e, act) => {
@@ -315,7 +315,7 @@ onChange([
     const k = el.dataset.sck || el.dataset.sckn, c = (seal.checks[k] = seal.checks[k] || {});
     if (el.dataset.sck) { if (el.value) c.r = el.value; else delete c.r; } else c.note = el.value;
     if (!c.r && !c.note) delete seal.checks[k];
-    host.commit(); refreshRoof(); return;
+    commit(); refreshRoof(); return;
   }
   } },
   { order: 110, when: (el, act) => el.matches('[data-rut]'), run: async (el, e, act) => {
@@ -324,7 +324,7 @@ onChange([
     const m = (F.ut[el.dataset.rut] = F.ut[el.dataset.rut] || {}), v = readInput(el);
     if (v !== null && v < 0) { toast('Readings can’t be negative.'); return; }
     if (v === null) delete m[el.dataset.pt]; else m[el.dataset.pt] = v;
-    host.commit(); refreshRoof(); return;
+    commit(); refreshRoof(); return;
   }
   } },
   { order: 120, when: (el, act) => el.matches('[data-rpc]'), run: async (el, e, act) => {
@@ -332,7 +332,7 @@ onChange([
     const F = S.job.roof.floating; F.pont = F.pont || {};
     const m = (F.pont[el.dataset.rpc] = F.pont[el.dataset.rpc] || {}), v = readInput(el);
     if (v === null || v === '') delete m[el.dataset.f]; else m[el.dataset.f] = v;
-    host.commit(); refreshRoof(); return;
+    commit(); refreshRoof(); return;
   }
   } },
   { order: 130, when: (el, act) => el.matches('[data-rpt]'), run: async (el, e, act) => {
@@ -342,7 +342,7 @@ onChange([
     if (k !== 'label' && v !== null && v < 0) { toast('Values can’t be negative.'); return; }
     if (k === 'angle' && v !== null) v = ((v % 360) + 360) % 360;
     if (k === 'r' && v !== null && v > (+S.job.tank.diameter || 0) / 2) { toast('That is further from the centre than the shell.'); return; }
-    pt[k] = v; host.commit(); refreshRoof(); return;
+    pt[k] = v; commit(); refreshRoof(); return;
   }
   } }
 ]);

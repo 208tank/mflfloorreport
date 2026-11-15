@@ -2,9 +2,9 @@
 // (refactoring step 5).
 import { nextMark, NZ_TYPES, nzPrefix, S } from '../app/state.js';
 import { readInput } from '../app/fields.js';
-import { defineView, go } from '../app/nav.js';
+import { defineView, go, redraw } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
-import { host } from '../app/host.js';
+import { commit } from '../app/persist.js';
 import { nozzleUT, nozzleWall, NZ_CONN, NZ_CONN_SHORT, UT_CLOCK } from '../calc.js';
 import { uid } from '../model.js';
 import { $, askConfirm, toast } from '../ui.js';
@@ -62,20 +62,20 @@ onAction({
   'utx-add': async (el, id, e, act) => {
     {
       const nz = (S.job.nozzles || []).find((x) => x.id === id); if (!nz) return;
-      nz.utx = nz.utx || []; const r = { id: uid(), loc: '', t: null }; nz.utx.push(r); host.commit(); host.renderSide();
+      nz.utx = nz.utx || []; const r = { id: uid(), loc: '', t: null }; nz.utx.push(r); commit(); redraw.side();
       setTimeout(() => $(`#side [data-nbx="loc"][data-rid="${r.id}"]`)?.focus(), 30); return;
     }
   },
   'utx-del': async (el, id, e, act) => {
     {
       const nz = (S.job.nozzles || []).find((x) => x.id === id); if (!nz) return;
-      nz.utx = (nz.utx || []).filter((x) => x.id !== el.dataset.rid); host.commit(); host.renderSide(); host.drawMap(); return;
+      nz.utx = (nz.utx || []).filter((x) => x.id !== el.dataset.rid); commit(); redraw.side(); redraw.map(); return;
     }
   },
   'nozzle-add': async (el, id, e, act) => {
     {
       const nz = { id: uid(), mark: nextMark('Nozzle'), type: 'Nozzle', angle: null, size: null, elev: null, service: '' };
-      S.job.nozzles = S.job.nozzles || []; S.job.nozzles.push(nz); host.commit();
+      S.job.nozzles = S.job.nozzles || []; S.job.nozzles.push(nz); commit();
       const c = $('#nozzleCard'); if (c) c.innerHTML = nozzleTableHTML(c.dataset.design === '1');
       setTimeout(() => $(`#nozzleCard input[data-nb="angle"][data-id="${nz.id}"]`)?.focus(), 30); return;
     }
@@ -84,16 +84,16 @@ onAction({
     {
       const nz = (S.job.nozzles || []).find((x) => x.id === id); if (!nz) return;
       if (!(await askConfirm(`Delete nozzle ${nz.mark || ''}?`, { ok: 'Delete', danger: true }))) return;
-      S.job.nozzles = S.job.nozzles.filter((x) => x.id !== id); if (S.selNozzle === id) S.selNozzle = null; host.commit();
-      if (S.view === 'map') { host.drawMap(); host.renderSide(); }
-      const c = $('#nozzleCard'); if (c) { c.innerHTML = nozzleTableHTML(c.dataset.design === '1'); if (S.view === 'setup') host.refreshSetupPreview(); }
+      S.job.nozzles = S.job.nozzles.filter((x) => x.id !== id); if (S.selNozzle === id) S.selNozzle = null; commit();
+      if (S.view === 'map') { redraw.map(); redraw.side(); }
+      const c = $('#nozzleCard'); if (c) { c.innerHTML = nozzleTableHTML(c.dataset.design === '1'); if (S.view === 'setup') redraw.setupPreview(); }
       return;
     }
   },
   'nozzle-place': async (el, id, e, act) => {
     {
       if (!(S.job.tank?.diameter > 0)) { toast('Enter the tank diameter first.'); return; }
-      go('map'); host.setMode('nozzle'); toast('Click around the shell to place each nozzle (Shift-click to keep placing). Set its details in the panel.'); return;
+      go('map'); redraw.mapMode('nozzle'); toast('Click around the shell to place each nozzle (Shift-click to keep placing). Set its details in the panel.'); return;
     }
   }
 });
@@ -110,10 +110,10 @@ onChange([
     if (k === 'angle' && v !== null) v = ((v % 360) + 360) % 360;
     if (k === 'type' && (!nz.mark || /^(N|MH|CO)\d+$/.test(nz.mark)) && nzPrefix(v) !== nzPrefix(nz.type)) nz.mark = nextMark(v);
     if (v === null || v === '') delete nz[k]; else nz[k] = v;
-    host.commit();
+    commit();
     refreshNozzleUT(nz);
-    if (S.view === 'map') { host.drawMap(); if (k === 'mark' || k === 'type') host.renderSide(); }
-    if (S.view === 'setup' || S.view === 'nozzles') { const c = $('#nozzleCard'); if (c && (k === 'angle' || k === 'type' || k === 'mark' || el.dataset.nb === 'arc')) setTimeout(() => { c.innerHTML = nozzleTableHTML(c.dataset.design === '1'); }, 0); if (S.view === 'setup') host.refreshSetupPreview(); }
+    if (S.view === 'map') { redraw.map(); if (k === 'mark' || k === 'type') redraw.side(); }
+    if (S.view === 'setup' || S.view === 'nozzles') { const c = $('#nozzleCard'); if (c && (k === 'angle' || k === 'type' || k === 'mark' || el.dataset.nb === 'arc')) setTimeout(() => { c.innerHTML = nozzleTableHTML(c.dataset.design === '1'); }, 0); if (S.view === 'setup') redraw.setupPreview(); }
     return;
   }
   } },
@@ -121,7 +121,7 @@ onChange([
     {
     const nz = (S.job.nozzles || []).find((x) => x.id === el.dataset.id); const r = nz?.utx?.find((x) => x.id === el.dataset.rid); if (!r) return;
     const v = readInput(el); if (v === null || v === '') delete r[el.dataset.nbx]; else r[el.dataset.nbx] = v;
-    host.commit(); refreshNozzleUT(nz); if (S.view === 'map') host.drawMap(); return;
+    commit(); refreshNozzleUT(nz); if (S.view === 'map') redraw.map(); return;
   }
   } }
 ]);

@@ -2,7 +2,7 @@
 import { RESULT_OPTS, S } from '../app/state.js';
 import { defineView, renderView } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
-import { host } from '../app/host.js';
+import { commit } from '../app/persist.js';
 import { RESULT_SHORT, RESULTS } from '../calc.js';
 import { $, askConfirm } from '../ui.js';
 import { fmt, inVal, u } from '../units.js';
@@ -98,7 +98,7 @@ onAction({
     { const k = el.dataset.k; S.sort = { key: k, dir: S.sort.key === k ? -S.sort.dir : 1 }; renderView(); return; }
   },
   'scan-all': async (el, id, e, act) => {
-    { if (!(await askConfirm('Mark every plate as scanned?', { ok: 'Mark all scanned' }))) return; for (const p of S.layout.plates) { S.job.plates[p.key] = { ...(S.job.plates[p.key] || {}), scan: 'scanned' }; } host.commit(); refreshPlateTable(); return; }
+    { if (!(await askConfirm('Mark every plate as scanned?', { ok: 'Mark all scanned' }))) return; for (const p of S.layout.plates) { S.job.plates[p.key] = { ...(S.job.plates[p.key] || {}), scan: 'scanned' }; } commit(); refreshPlateTable(); return; }
   }
 });
 

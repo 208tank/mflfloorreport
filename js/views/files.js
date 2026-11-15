@@ -3,7 +3,8 @@
 import { APP_VERSION, S } from '../app/state.js';
 import { renderAll, renderView } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
-import { host } from '../app/host.js';
+import { checkStorage, commit, fileChanges, flushSave, loadJobs, loadTanks, saver, writeNow } from '../app/persist.js';
+import { renderHeader } from '../app/header.js';
 import { db } from '../db.js';
 import { download, fileBase, indicationsCSV, nozzlesCSV, platesCSV, roofCSV, settleCSV, shellCSV, svgForExport, svgToPng } from '../export.js';
 import { itemFloor } from '../geometry.js';
@@ -14,6 +15,7 @@ import { saveErrorText } from '../saver.js';
 import { allDefs, numberDefs } from '../sections.js';
 import { rolloutSVG, SHELL_SVG_STYLE } from '../shell.js';
 import { $, askChoice, askConfirm, toast } from '../ui.js';
+import { openJob, showMigrationNotes } from './jobs.js';
 
 /* Job files: one .json file per job (data + photos) that can live in OneDrive, SharePoint, a USB stick…
    Chrome / Edge write straight to the chosen file and remember it, so later saves update the same file.
@@ -27,7 +29,7 @@ const canPick = () => 'showSaveFilePicker' in window && window.self === window.t
  *  JSON.stringify({ format, version, saved, rev, job, photos, tank?, appVersion }) gives. */
 async function jobFile(id) {
   // never write a file from stale data: every change must be on the device first
-  if (S.job?.id === id && !(await host.flushSave())) throw Object.assign(new Error(`your latest changes could not be saved to this device (${saveErrorText(host.saver.error)})`), { name: 'NotSavedError' });
+  if (S.job?.id === id && !(await flushSave())) throw Object.assign(new Error(`your latest changes could not be saved to this device (${saveErrorText(saver.error)})`), { name: 'NotSavedError' });
   const stored = await db.getJob(id); const keys = await db.jobPhotoKeys(id);
   const at = Date.now();
   const stamp = { rev: (stored.rev || 0) + 1, savedAt: at };
@@ -58,22 +60,16 @@ async function applyStamp(id, job, counted = { edits: 0, updated: 0 }) {
   };
   if (S.job?.id === id) {
     Object.assign(S.job, keep(S.job));
-    await host.writeNow(); host.renderHeader();
+    await writeNow(); renderHeader();
   } else {
     const stored = await db.getJob(id);
     await db.putJob({ ...stored, ...keep(stored) });
   }
-  await host.loadJobs();
+  await loadJobs();
   if (S.view === 'jobs') renderView();
 }
 
-export function revText(j, long = false) {
-  if (!j?.rev) return long ? 'Not saved to a file yet' : '';
-  const d = new Date(j.savedAt);
-  const when = long ? d.toLocaleString() : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  return `Rev ${j.rev} · saved ${when}`;
-}
-const unsavedSinceRev = (j) => { const c = host.fileChanges(j); return !!j?.rev && (c.n > 0 || !c.known); };
+const unsavedSinceRev = (j) => { const c = fileChanges(j); return !!j?.rev && (c.n > 0 || !c.known); };
 
 async function fileHandle(id, write) {
   const hnd = await db.getMeta('fh:' + id).catch(() => null);
@@ -120,7 +116,7 @@ async function checkFileBeforeSave(id, hnd) {
   const fh = data.job.status?.history || [], lh = stored.status?.history || [];
   if (data.job.status?.stage && (fh.at(-1)?.at || 0) > (lh.at(-1)?.at || 0)) {
     const status = { ...(stored.status || {}), stage: data.job.status.stage, history: fh };
-    if (S.job?.id === id) { S.job.status = status; await host.writeNow(); host.renderHeader(); }
+    if (S.job?.id === id) { S.job.status = status; await writeNow(); renderHeader(); }
     else await db.putJob({ ...stored, status });
   }
   return 'ok';
@@ -128,7 +124,7 @@ async function checkFileBeforeSave(id, hnd) {
 
 export async function saveJobFile(id = S.job?.id, saveAs = false) {
   if (!id) return;
-  if (S.job?.id === id && !(await host.flushSave())) { toast(`The job file was not written: your latest changes could not be saved to this device first (${saveErrorText(host.saver.error)}).`, { label: 'Try again', fn: () => saveJobFile(id, saveAs) }); return; }
+  if (S.job?.id === id && !(await flushSave())) { toast(`The job file was not written: your latest changes could not be saved to this device first (${saveErrorText(saver.error)}).`, { label: 'Try again', fn: () => saveJobFile(id, saveAs) }); return; }
   if (canPick()) {
     try {
       let hnd = saveAs ? null : await fileHandle(id, true);
@@ -167,7 +163,7 @@ async function openJobFile() {
     try {
       const [hnd] = await window.showOpenFilePicker({ id: 'tank-floor-jobs', types: FILE_TYPES, multiple: false });
       const id = await importJobFile(await hnd.getFile());
-      if (id) { await rememberFile(id, hnd, true); if (S.job?.id === id) { S.fileName = hnd.name; host.renderHeader(); } }
+      if (id) { await rememberFile(id, hnd, true); if (S.job?.id === id) { S.fileName = hnd.name; renderHeader(); } }
       return;
     } catch (e) { if (e.name === 'AbortError') return; console.warn(e); }
   }
@@ -182,7 +178,7 @@ export async function importJobFile(file) {
     if ((data.version || 1) > FILE_VERSION || (data.job.schema || 1) > SCHEMA) throw new Error(`it was saved by a newer version of the app${data.appVersion ? ' (v' + data.appVersion + ')' : ''}. Reload the app to update it (this is v${APP_VERSION}), then open the file again.`);
     const notes = migrationNotes(data.job);
     const job = migrate(data.job);
-    if (data.tank?.id && data.tank.id === job.tankRef && !(await db.getTank(data.tank.id))) { await db.putTank(data.tank); await host.loadTanks(); }
+    if (data.tank?.id && data.tank.id === job.tankRef && !(await db.getTank(data.tank.id))) { await db.putTank(data.tank); await loadTanks(); }
     const exists = await db.getJob(job.id);
     const oldId = job.id;
     if (exists) {
@@ -195,8 +191,8 @@ export async function importJobFile(file) {
     // One transaction: the device copy is only replaced once the whole file has been written.
     const photos = job.id === oldId ? data.photos || [] : copyPhotos(job, data.photos || []);
     await db.replaceJob(job, photos, exists && job.id === oldId ? oldId : null);
-    await host.loadJobs(); toast(`Opened ${file.name}`); await host.openJob(job.id); host.checkStorage();
-    if (notes.length) host.showMigrationNotes(notes);
+    await loadJobs(); toast(`Opened ${file.name}`); await openJob(job.id); checkStorage();
+    if (notes.length) showMigrationNotes(notes);
     return job.id;
   } catch (err) { toast('Could not open the file: ' + err.message); return null; }
 }
@@ -218,7 +214,7 @@ async function uploadLoader(file) {
   if (!(await askConfirm(`Update the report from ${file.name}?\n\n${lines.join('\n')}\n\nBlank cells in the sheet do not erase existing readings.`, { ok: `Update ${res.total} reading${res.total === 1 ? '' : 's'}` }))) return;
   res.apply();
   S.job.utLoads = [...(S.job.utLoads || []), { at: Date.now(), file: file.name, count: res.total, tech: res.info.tech || '' }].slice(-50);
-  host.commit(); renderAll();
+  commit(); renderAll();
   toast(`Updated ${res.total} reading${res.total === 1 ? '' : 's'} from ${file.name}.`);
 }
 
@@ -239,7 +235,7 @@ onAction({
     {
       const areas = loaderAreas(S.job);
       if (!areas.length) { toast('Nothing to load yet — set up the shell courses, nozzles, roof or floor indications first.'); return; }
-      if (!(await host.flushSave())) { toast('The UT loader was not made: the latest changes could not be saved to this device first.'); return; }
+      if (!(await flushSave())) { toast('The UT loader was not made: the latest changes could not be saved to this device first.'); return; }
       try { const blob = await buildLoader(S.job); download(fileBase(S.job) + '_UT-loader.xlsx', blob); toast(`UT loader sheet downloaded (${areas.join(', ')}). Give it to the UT technician.`); }
       catch (err) { toast('Could not build the loader sheet: ' + err.message); }
       return;

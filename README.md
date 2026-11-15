@@ -35,10 +35,12 @@ registers its screen with `defineView` and its buttons with `onAction` / `onChan
 | 11 | v3.12.10 | Indication and plate lists (`views/floorlists.js`), API 653 evaluation (`views/api.js`) |
 | 12 | v3.12.11 | Floor map and its editors (`views/floormap.js`) |
 | 13 | v3.12.12 | Job files, exports and the UT loader buttons (`views/files.js`) |
+| 14 | v3.12.13 | Jobs screen and Settings (`views/jobs.js`); saving (`app/persist.js`) and the header (`app/header.js`); `app/host.js` removed |
 
-Screen modules may reuse each other's building blocks (the module tests fail on any import loop), but
-they can't import `app.js`, so the few app-level steps they need that haven't moved yet (saving and loading, the
-recovery journal, opening and importing job files, and the floor map and setup redraws) are handed over at start-up through `js/app/host.js`.
+Screen modules may reuse each other's building blocks (the module tests fail on any import loop, and on any
+module that app.js doesn't load). Saving lives in `js/app/persist.js`, which every screen imports directly. Four
+redraws one screen asks of another — the floor map, its side panel and mode, and the setup preview — go through
+`redraw` in `js/app/nav.js`, registered by the screen that owns them, because a direct import would loop.
 
 ## Data integrity upgrade — stage 4: database integrity check (v3.11.0)
 

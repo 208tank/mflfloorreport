@@ -70,3 +70,10 @@ export function renderView() {
   main.innerHTML = (pl ? hooks.crumb(pl) : '') + fn();
   (after[S.view] || (pl ? after['sec:' + pl.child] : null))?.();
 }
+
+/** Redraws one screen asks of another (refactoring step 14). The screen that owns the redraw registers it here,
+ *  because a direct import would loop: the floor map shows the nozzle panel, and setup shows the shell and
+ *  nozzle tables. map / side / mapMode: floor map (views/floormap.js); setupPreview: tank setup (views/setup.js). */
+export const redraw = {
+  map: () => {}, side: () => {}, mapMode: () => {}, setupPreview: () => {},
+};

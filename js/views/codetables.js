@@ -1,8 +1,8 @@
 // Code tables screen: read-only reference values used by the calculations (refactoring step 2).
 import { S } from '../app/state.js';
 import { defineView } from '../app/nav.js';
+import { CODE_SCHED, CODES, EDGE_BE, EDGE_BEW, EDGE_D, editionsFor, JE_42, JE_43, JE_NOTES, K_TABLE, MATERIALS, NOZZLE_PIPE, NOZZLE_WALL_BY_SHELL, supplementsFor, T45, T51B, TABLES_SOURCE } from '../tables.js';
 import { esc as h } from '../util.js';
-import { MATERIALS, CODES, editionsFor, supplementsFor, JE_42, JE_43, JE_NOTES, EDGE_D, EDGE_BEW, EDGE_BE, K_TABLE, T45, T51B, NOZZLE_PIPE, NOZZLE_WALL_BY_SHELL, CODE_SCHED, TABLES_SOURCE } from '../tables.js';
 
 function viewRef() {
   const met = S.job?.units === 'metric', su = met ? 'MPa' : 'psi';

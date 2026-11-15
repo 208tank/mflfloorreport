@@ -57,3 +57,12 @@ test('no import loops between modules (screen modules may reuse each other, but 
   for (const f of files) visit(f, [f]);
   assert.deepEqual([...new Set(loops)], []);
 });
+
+test('every module under js/ is loaded by app.js, directly or through another (screen modules register themselves)', () => {
+  const seen = new Set(), todo = [join(root, 'js/app.js')];
+  while (todo.length) {
+    const f = todo.pop(); if (seen.has(f)) continue; seen.add(f);
+    for (const m of readFileSync(f, 'utf8').matchAll(/^import\s+(?:[^;]*?\s+from\s+)?'([^']+)'/gm)) todo.push(join(f, '..', m[1]));
+  }
+  assert.deepEqual(jsFiles(join(root, 'js')).filter((f) => !seen.has(f)).map((f) => f.slice(root.length)), []);
+});

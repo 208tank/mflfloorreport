@@ -3,14 +3,14 @@ import { byNo, S } from '../app/state.js';
 import { field } from '../app/fields.js';
 import { defineView, renderView } from '../app/nav.js';
 import { onAction } from '../app/actions.js';
-import { host } from '../app/host.js';
+import { commit } from '../app/persist.js';
 import { czLimitAuto, statusText } from '../calc.js';
 import { annularReq } from '../design.js';
 import { patchList } from '../patches.js';
 import { $ } from '../ui.js';
 import { fmt, fmtRate, inVal, u } from '../units.js';
 import { esc as h } from '../util.js';
-import { findingsBox } from '../views/sections.js';
+import { findingsBox } from './sections.js';
 
 function viewApi() {
   const met = S.job.units === 'metric';
@@ -79,9 +79,9 @@ defineView('api', viewApi, () => refreshApi());
 
 onAction({
   'ann-apply': async (el, id, e, act) => {
-    S.job.calc.mrtAnnular = +el.dataset.v; host.commit(); renderView(); return;
+    S.job.calc.mrtAnnular = +el.dataset.v; commit(); renderView(); return;
   },
   'mrt-preset': async (el, id, e, act) => {
-    S.job.calc.mrtBottom = +el.dataset.v; host.commit(); renderView(); return;
+    S.job.calc.mrtBottom = +el.dataset.v; commit(); renderView(); return;
   }
 });

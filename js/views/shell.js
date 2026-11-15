@@ -1,9 +1,9 @@
 // Shell screen: course build, shell UT readings and the shell evaluation (refactoring step 5).
 import { S } from '../app/state.js';
 import { field, focusSel, readInput, rerenderKeep } from '../app/fields.js';
-import { defineView } from '../app/nav.js';
+import { defineView, redraw } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
-import { host } from '../app/host.js';
+import { commit } from '../app/persist.js';
 import { defaultJoint, designBasis, fillFromT } from '../design.js';
 import { uid } from '../model.js';
 import { autoLocCount, autoPlateCount, courseAt, coursePlates, courseSummary, coursesWithElev, defaultShell, defaultZones, fmtElev, getReading, readingElevations, rolloutSVG, shellHeight, SPACING_MM, utLocations, zKey, zoneCount } from '../shell.js';
@@ -145,7 +145,7 @@ export function shellBuildHTML() {
 
 export function refreshShell() {
   setTimeout(() => {
-    const sb = $('#shellBuild'); if (sb) { rerenderKeep(sb, shellBuildHTML()); host.refreshSetupPreview(); }
+    const sb = $('#shellBuild'); if (sb) { rerenderKeep(sb, shellBuildHTML()); redraw.setupPreview(); }
     const c = $('#shellBody'); if (!c) return;
     const a = document.activeElement, key = a && c.contains(a) ? focusSel(a) : null, typed = a && a.value !== undefined && a.value !== a.defaultValue ? a.value : null;
     c.innerHTML = shellBodyHTML();
@@ -161,14 +161,14 @@ onAction({
       const sh = (S.job.shell = S.job.shell || defaultShell()); sh.courses = sh.courses || [];
       const last = sh.courses[sh.courses.length - 1];
       const c = { id: uid(), h: last?.h ?? (S.job.units === 'metric' ? 2400 : 2438.4), tNom: last?.tNom ?? null, tMin: last?.tMin ?? null };
-      sh.courses.push(c); host.commit(); refreshShell(); return;
+      sh.courses.push(c); commit(); refreshShell(); return;
     }
   },
   'course-del': async (el, id, e, act) => {
     {
       const sh = S.job.shell; const c = sh?.courses?.find((x) => x.id === el.dataset.course); if (!c) return;
       if (!(await askConfirm('Delete this course? The courses above it move down, and readings stay at their elevations.', { ok: 'Delete', danger: true }))) return;
-      sh.courses = sh.courses.filter((x) => x.id !== c.id); host.commit(); refreshShell(); return;
+      sh.courses = sh.courses.filter((x) => x.id !== c.id); commit(); refreshShell(); return;
     }
   },
   'zone-add': async (el, id, e, act) => {
@@ -177,16 +177,16 @@ onAction({
       const last = sh.zones[sh.zones.length - 1];
       const ft = S.job.units === 'metric' ? 300 : 304.8;
       sh.zones.push({ id: uid(), start: last && last.end != null ? +last.end + (+last.step || ft) : 0, end: null, step: last?.step ?? ft });
-      host.commit(); refreshShell(); return;
+      commit(); refreshShell(); return;
     }
   },
   'zone-del': async (el, id, e, act) => {
-    { const sh = S.job.shell; sh.zones = (sh.zones || []).filter((z) => z.id !== el.dataset.zone); host.commit(); refreshShell(); return; }
+    { const sh = S.job.shell; sh.zones = (sh.zones || []).filter((z) => z.id !== el.dataset.zone); commit(); refreshShell(); return; }
   },
   'zones-std': async (el, id, e, act) => {
     {
       if ((S.job.shell.zones || []).length && !(await askConfirm('Replace the reading zones with the standard pattern (every 1 in up to 2 ft, then every 1 ft to the top)? Readings already entered are kept.', { ok: 'Use standard' }))) return;
-      S.job.shell.zones = defaultZones(S.job.units); host.commit(); refreshShell(); return;
+      S.job.shell.zones = defaultZones(S.job.units); commit(); refreshShell(); return;
     }
   },
   'z-add': async (el, id, e, act) => {
@@ -195,7 +195,7 @@ onAction({
       if (v === null || v < 0) { toast('Enter an elevation above the bottom.'); return; }
       const H = shellHeight(S.job); if (H > 0 && v > H) { toast('That is above the top of the shell.'); return; }
       const sh = S.job.shell; sh.extraZ = sh.extraZ || []; if (!sh.extraZ.some((e) => zKey(e) === zKey(v))) sh.extraZ.push(+zKey(v));
-      host.commit(); refreshShell(); return;
+      commit(); refreshShell(); return;
     }
   },
   'z-del': async (el, id, e, act) => {
@@ -204,7 +204,7 @@ onAction({
       const has = Object.values(sh.rd || {}).some((m) => m?.[zk] != null);
       if (has && !(await askConfirm(`Remove the elevation ${fmtElev(+zk, S.job)} and its readings?`, { ok: 'Remove', danger: true }))) return;
       sh.extraZ = (sh.extraZ || []).filter((e) => zKey(e) !== zk); for (const m of Object.values(sh.rd || {})) if (m) delete m[zk];
-      host.commit(); refreshShell(); return;
+      commit(); refreshShell(); return;
     }
   },
   'courses-std': async (el, id, e, act) => {
@@ -212,14 +212,14 @@ onAction({
       const sh = (S.job.shell = S.job.shell || defaultShell());
       const n = Math.max(1, Math.round(+el.dataset.n || 5)), ch = S.job.units === 'metric' ? 2400 : 2438.4;
       if ((sh.courses || []).length && !(await askConfirm('Replace the current courses?', { ok: 'Replace' }))) return;
-      sh.courses = Array.from({ length: n }, () => ({ id: uid(), h: ch, tNom: null, tMin: null })); host.commit(); refreshShell(); return;
+      sh.courses = Array.from({ length: n }, () => ({ id: uid(), h: ch, tNom: null, tMin: null })); commit(); refreshShell(); return;
     }
   },
   'courses-fill': async (el, id, e, act) => {
     {
       const cs = S.job.shell?.courses || [], c1 = cs[0]; if (!c1) return;
       for (const c of cs.slice(1)) { for (const k of ['pn', 'plen']) if ((c[k] === null || c[k] === undefined || c[k] === '') && c1[k] != null) c[k] = c1[k]; }
-      host.commit(); refreshShell(); toast('Course 1 plates copied to the courses above (where empty).'); return;
+      commit(); refreshShell(); toast('Course 1 plates copied to the courses above (where empty).'); return;
     }
   }
 });
@@ -231,14 +231,14 @@ onChange([
     const v = num(el.value), k = el.dataset.shs;
     if (v !== null && v <= 0) { toast('Enter a positive stress.'); return; }
     if (v === null) delete c[k]; else c[k] = S.job.units === 'metric' ? v * PSI_MPA : v;
-    host.commit(); refreshShell(); return;
+    commit(); refreshShell(); return;
   }
   } },
   { order: 150, when: (el, act) => el.matches('[data-shc="matl"]') || el.matches('[data-shc="joint"]'), run: async (el, e, act) => {
     {
     const c = S.job.shell?.courses?.find((x) => x.id === el.dataset.course); if (!c) return;
     if (el.value) c[el.dataset.shc] = el.value; else delete c[el.dataset.shc];
-    host.commit(); refreshShell(); return;
+    commit(); refreshShell(); return;
   }
   } },
   { order: 160, when: (el, act) => el.matches('[data-shc]'), run: async (el, e, act) => {
@@ -249,12 +249,12 @@ onChange([
     if (k === 'seam0arc') {
       const Cc = Math.PI * (+S.job.tank?.diameter || 0); if (!(Cc > 0)) return;
       if (v === null) delete c.seam0; else c.seam0 = Math.round(((((v / Cc) * 360) % 360 + 360) % 360) * 100) / 100;
-      host.commit(); refreshShell(); return;
+      commit(); refreshShell(); return;
     }
     if (k === 'seam0' && v !== null) v = ((v % 360) + 360) % 360;
     if (k === 'pn' && v !== null) v = Math.max(1, Math.round(v));
     if (v === null) { if (k === 'h') return; delete c[k]; } else c[k] = v;
-    host.commit(); refreshShell(); return;
+    commit(); refreshShell(); return;
   }
   } },
   { order: 170, when: (el, act) => el.matches('[data-shut]'), run: async (el, e, act) => {
@@ -264,7 +264,7 @@ onChange([
     const v = readInput(el);
     if (v !== null && v < 0) { toast('Readings can’t be negative.'); return; }
     if (v === null) delete m[el.dataset.z]; else m[el.dataset.z] = v;
-    host.commit(); refreshShell(); return;
+    commit(); refreshShell(); return;
   }
   } },
   { order: 180, when: (el, act) => el.matches('[data-zf]'), run: async (el, e, act) => {
@@ -276,7 +276,7 @@ onChange([
     zn[k] = v;
     const n = readingElevations(S.job).length;
     if (n > 1500) toast(`That gives ${n} elevations per station — check the step.`);
-    host.commit(); refreshShell(); return;
+    commit(); refreshShell(); return;
   }
   } }
 ]);

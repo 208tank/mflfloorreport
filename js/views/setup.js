@@ -2,9 +2,9 @@
 // nozzle modules), and the floor builders — grid, row by row and plate by plate (refactoring step 10).
 import { S } from '../app/state.js';
 import { field, focusSel, readInput } from '../app/fields.js';
-import { defineView, renderNav } from '../app/nav.js';
+import { defineView, redraw, renderNav } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
-import { host } from '../app/host.js';
+import { commit, recompute, scheduleSave } from '../app/persist.js';
 import { coverage, measuredFromDrawing, newMeasuredSection, newPlate, newRow, rowsCentreBlock, rowsFromGrid } from '../builder.js';
 import { equipName } from '../equipment.js';
 import { halfChord, itemFloor, plateAt, refCornerName, stackSections, suggestCount, toLocal } from '../geometry.js';
@@ -16,8 +16,8 @@ import { CODES, editionsFor, jointOptions, supplementsFor } from '../tables.js';
 import { $, askConfirm, toast } from '../ui.js';
 import { fmt, inVal, u, UNITS } from '../units.js';
 import { esc as h } from '../util.js';
-import { nozzleTableHTML } from '../views/nozzles.js';
-import { shellBuildHTML } from '../views/shell.js';
+import { nozzleTableHTML } from './nozzles.js';
+import { shellBuildHTML } from './shell.js';
 
 function viewSetup() {
   const j = S.job, L = j.layout, hasInd = j.indications.length > 0, reg = !!j.regEdit;
@@ -204,10 +204,10 @@ const missingPlates = () => (S.job.layout.mrows || []).reduce((a, sec) => a + (s
 function measuredChange(fn) {
   const before = S.layout, miss0 = S.job.layout.mode === 'measured' ? missingPlates() : 0;
   fn(S.job.layout.mrows = S.job.layout.mrows || []);
-  host.commit(); relocateOrphans(before);
+  commit(); relocateOrphans(before);
   if (S.job.layout.mode === 'measured' && missingPlates() > miss0) toast('The plates in that row are now longer than the floor, so a plate at the end falls outside the shell. Check the lengths or remove a plate.');
   if (S.view === 'setup') refreshBuilder();
-  if (S.view === 'map') { host.drawMap(); host.renderSide(); }
+  if (S.view === 'map') { redraw.map(); redraw.side(); }
   renderNav();
 }
 export const findSec = (id) => (S.job.layout.mrows || []).find((x) => x.id === id);
@@ -224,7 +224,7 @@ export function relocateOrphans(before) {
     const l = toLocal(S.layout, p, f.x, f.y);
     it.plate = p.key; it.x = Math.round(Math.max(0, l.X) * 10) / 10; it.y = Math.round(Math.max(0, l.Y) * 10) / 10; moved++;
   }
-  if (moved) { host.recompute(); host.scheduleSave(); }
+  if (moved) { recompute(); scheduleSave(); }
   if (moved || lost) toast(`${moved ? `${moved} item${moved > 1 ? 's' : ''} moved to the plate now at ${moved > 1 ? 'their' : 'its'} location (X/Y recalculated).` : ''}${lost ? ` ${lost} could not be placed — check them.` : ''}`);
   return moved;
 }
@@ -232,9 +232,9 @@ export function relocateOrphans(before) {
 function builderChange(fn) {
   const before = S.layout;
   fn(S.job.layout.rows = S.job.layout.rows || []);
-  host.commit(); relocateOrphans(before);
+  commit(); relocateOrphans(before);
   if (S.view === 'setup') refreshBuilder();
-  if (S.view === 'map') { host.drawMap(); host.renderSide(); }
+  if (S.view === 'map') { redraw.map(); redraw.side(); }
   renderNav();
 }
 export function refreshSetupPreview() {
@@ -246,6 +246,7 @@ export function refreshSetupPreview() {
 }
 
 defineView('setup', viewSetup, () => refreshSetupPreview());
+redraw.setupPreview = refreshSetupPreview;
 
 onAction({
   'scope-tog': async (el, id, e, act) => {
@@ -254,7 +255,7 @@ onAction({
       const all = SCOPE.map(([k]) => k), cur = new Set(Array.isArray(S.job.scope) ? S.job.scope : all);
       el.checked ? cur.add(el.dataset.k) : cur.delete(el.dataset.k);
       if (!cur.size) { el.checked = true; toast('Keep at least one item in scope.'); return; }
-      S.job.scope = all.filter((k) => cur.has(k)); host.commit(); renderNav(); return;
+      S.job.scope = all.filter((k) => cur.has(k)); commit(); renderNav(); return;
     }
   },
   'mp-add': async (el, id, e, act) => {

@@ -3,7 +3,7 @@
 import { APP_VERSION, S } from '../app/state.js';
 import { go } from '../app/nav.js';
 import { onAction } from '../app/actions.js';
-import { host } from '../app/host.js';
+import { journal, loadJobs } from '../app/persist.js';
 import { db, lite } from '../db.js';
 import { checkIntegrity, SAFE_REPAIRS } from '../integrity.js';
 import { recoveryDiff } from '../journal.js';
@@ -11,6 +11,8 @@ import { migrate, uid } from '../model.js';
 import { $, askChoice, askConfirm, toast } from '../ui.js';
 import { esc as h, sha256 } from '../util.js';
 
+/** Who is making changes on this device: the inspector name from Settings and a per-install id.
+ *  Shaped so a signed-in identity (Microsoft Entra ID) can replace it later. */
 export async function whoAmI() {
   let id = await db.getMeta('installId').catch(() => null);
   if (!id) { id = 'dev-' + uid(); await db.setMeta('installId', id).catch(() => {}); }
@@ -37,10 +39,10 @@ export async function baselineRevisions() {
 /** Changes left in the recovery journal by a tab that closed before they reached the device. */
 export async function recoverAfterCrash() {
   let restored = 0;
-  for (const e of host.journal.orphans()) {
-    if (e.broken) { host.journal.remove(e.key.slice('tfi-journal:'.length)); continue; }
+  for (const e of journal.orphans()) {
+    if (e.broken) { journal.remove(e.key.slice('tfi-journal:'.length)); continue; }
     const stored = await db.getJob(e.job.id), d = recoveryDiff(e, stored);
-    if (d.action !== 'offer') { host.journal.remove(e.job.id); continue; }
+    if (d.action !== 'offer') { journal.remove(e.job.id); continue; }
     const name = e.job.info?.tankId || 'Untitled tank';
     const choice = await askChoice(`The app closed before some changes reached this device.\n\n${name}${e.job.info?.client ? ' — ' + e.job.info.client : ''}\n${d.n} change${d.n === 1 ? '' : 's'}${d.areas.length ? ' (' + d.areas.join(', ') + ')' : ''}, last made ${new Date(d.at).toLocaleString()}.\n\nRestore them? The job as it is on the device now is kept as a revision either way.`, [['discard', 'Discard these changes', 'danger'], ['restore', 'Restore them', 'primary']]);
     if (choice === 'restore') {
@@ -48,11 +50,13 @@ export async function recoverAfterCrash() {
       await db.putJob(migrate(e.job));
       restored++;
     }
-    if (choice === 'restore' || choice === 'discard') host.journal.remove(e.job.id); // no answer (dialog dismissed): ask again next time
+    if (choice === 'restore' || choice === 'discard') journal.remove(e.job.id); // no answer (dialog dismissed): ask again next time
   }
-  if (restored) { await host.loadJobs(); toast(`Restored the changes to ${restored} job${restored > 1 ? 's' : ''}.`); }
+  if (restored) { await loadJobs(); toast(`Restored the changes to ${restored} job${restored > 1 ? 's' : ''}.`); }
 }
 
+/** Check the device database. full = also open every photo and verify every revision checksum.
+ *  quiet = the background check at start-up: only speaks up if something is wrong. Never changes data. */
 export async function runIntegrity(full = true, quiet = false) {
   S.integrity = { ...(S.integrity || {}), running: true }; renderIntegrity();
   try {
@@ -98,9 +102,9 @@ onAction({
     await runIntegrity(true); return;
   },
   'integrity-fix': async (el, id, e, act) => {
-    { const p = S.integrity?.problems?.[+el.dataset.i]; if (p && (await repairProblem(p))) { await host.loadJobs(); await runIntegrity(true); } return; }
+    { const p = S.integrity?.problems?.[+el.dataset.i]; if (p && (await repairProblem(p))) { await loadJobs(); await runIntegrity(true); } return; }
   },
   'integrity-fix-safe': async (el, id, e, act) => {
-    { for (const p of (S.integrity?.problems || []).filter((x) => SAFE_REPAIRS.has(x.repair))) await repairProblem(p); await host.loadJobs(); await runIntegrity(true); toast('Safe repairs done.'); return; }
+    { for (const p of (S.integrity?.problems || []).filter((x) => SAFE_REPAIRS.has(x.repair))) await repairProblem(p); await loadJobs(); await runIntegrity(true); toast('Safe repairs done.'); return; }
   }
 });

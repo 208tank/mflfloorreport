@@ -2,9 +2,9 @@
 // features, plates and nozzles, and the indication editor dialog (refactoring step 12).
 import { byNo, COATING, FT_TYPES, nextMark, NZ_TYPES, REPAIR_METHOD, RESULT_OPTS, S, UT_METHOD, VT_COND } from '../app/state.js';
 import { field, readInput } from '../app/fields.js';
-import { defineView, go, renderNav } from '../app/nav.js';
+import { defineView, go, redraw, renderNav } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
-import { host } from '../app/host.js';
+import { checkStorage, commit } from '../app/persist.js';
 import { resizeImage } from '../app/images.js';
 import { nozzleWall, NZ_CONN, plateNominal, RESULT_SHORT, statusText, UT_CLOCK } from '../calc.js';
 import { db } from '../db.js';
@@ -16,10 +16,10 @@ import { legendHTML } from '../report.js';
 import { $, $$, askConfirm, toast } from '../ui.js';
 import { fmt, inVal, toMm, u } from '../units.js';
 import { esc as h } from '../util.js';
-import { refreshApi } from '../views/api.js';
-import { refreshIndTable, refreshPlateTable } from '../views/floorlists.js';
-import { nozzleUTBox } from '../views/nozzles.js';
-import { findSec, rowLetter } from '../views/setup.js';
+import { refreshApi } from './api.js';
+import { refreshIndTable, refreshPlateTable } from './floorlists.js';
+import { nozzleUTBox } from './nozzles.js';
+import { findSec, rowLetter } from './setup.js';
 
 function viewMap() {
   const chips = RESULT_OPTS.map(([k, v]) => `<button class="chip r-${k}${S.filter.has(k) ? ' on' : ''}" data-act="filter" data-r="${k}" title="${v}">${RESULT_SHORT[k]}<em>${S.job.indications.filter((i) => (i.result || 'pending') === k).length}</em></button>`).join('');
@@ -103,7 +103,7 @@ function mapClick(fp, hit) {
     S.selNozzle = nz.id; S.sel = S.selPlate = S.selFeature = null;
     if (!hit.shift) S.mode = 'select';
     $$('[data-act="mode"]').forEach((b) => b.classList.toggle('on', b.dataset.mode === S.mode));
-    host.commit(); drawMap(); renderSide();
+    commit(); drawMap(); renderSide();
     setTimeout(() => $('#side [data-nb="type"]')?.focus(), 30);
     return;
   }
@@ -129,14 +129,14 @@ function mapClick(fp, hit) {
       S.job.indications.push(ind);
       S.sel = ind.id; S.selPlate = S.selFeature = null;
       if (!hit.shift) S.mode = 'select';
-      host.commit(); renderNav();
+      commit(); renderNav();
       $$('[data-act="mode"]').forEach((b) => b.classList.toggle('on', b.dataset.mode === S.mode));
       drawMap(); renderSide(true);
       return;
     }
     if (S.mode === 'place') {
       const ind = curInd(); if (ind) Object.assign(ind, loc);
-      S.mode = 'select'; host.commit(); drawMap(); renderSide();
+      S.mode = 'select'; commit(); drawMap(); renderSide();
       return;
     }
     const ft = { id: uid(), type: S.ftType, label: '', ...loc, sizeA: S.ftType === 'sump' ? toMm(36, 'small', { units: 'imperial' }) : S.ftType === 'column' ? 254 : 609.6 };
@@ -144,7 +144,7 @@ function mapClick(fp, hit) {
     S.job.features.push(ft);
     S.selFeature = ft.id; S.sel = S.selPlate = null; S.mode = 'select';
     $$('[data-act="mode"]').forEach((b) => b.classList.toggle('on', b.dataset.mode === S.mode));
-    host.commit(); drawMap(); renderSide();
+    commit(); drawMap(); renderSide();
     return;
   }
   S.sel = hit.ind || null;
@@ -164,7 +164,7 @@ function applyDatum(key, c) {
   delete o.datumX; delete o.datumY;
   if (!c || c === 'default' || c === 'start' || c === (S.job.layout.refCorner || 'BL')) delete o.datumC; else o.datumC = c;
   if (prev === o.datumC) return;
-  host.commit();
+  commit();
   if (S.view === 'plates') refreshPlateTable();
   const p = S.layout.byKey.get(key);
   toast(`Datum for ${p.label}: ${datumName(p)}`);
@@ -427,7 +427,7 @@ function onIndField(el) {
     if (v === null || v === '') delete ind[k]; else ind[k] = v;
   }
   ind.updated = Date.now();
-  host.commit();
+  commit();
   refreshEditorParts(root);
   if (S.view === 'map') { drawMap(); if (k === 'no' || k === 'result') { const ov = $('#side .ind-list'); if (ov) renderSide(); } }
   if (S.view === 'inds') refreshIndTable();
@@ -436,6 +436,7 @@ function onIndField(el) {
 }
 
 defineView('map', viewMap, afterMap);
+Object.assign(redraw, { map: drawMap, side: renderSide, mapMode: setMode });
 
 onAction({
   'mode': async (el, id, e, act) => {
@@ -454,7 +455,7 @@ onAction({
   'plate-size-reset': async (el, id, e, act) => {
     {
       const o = S.job.plates[el.dataset.key]; if (o) { delete o.len; delete o.wid; delete o.orient; }
-      host.commit(); if (S.view === 'map') { drawMap(); renderSide(); } else refreshPlateTable(); return;
+      commit(); if (S.view === 'map') { drawMap(); renderSide(); } else refreshPlateTable(); return;
     }
   },
   'filter': async (el, id, e, act) => {
@@ -508,7 +509,7 @@ onAction({
     {
       const ind = curInd(); if (!ind) return;
       const c = { ...structuredClone(ind), id: uid(), no: nextNo(S.job), created: Date.now() };
-      S.job.indications.push(c); S.sel = c.id; host.commit(); renderNav();
+      S.job.indications.push(c); S.sel = c.id; commit(); renderNav();
       if (el.closest('dialog')) { openIndDialog(c.id); refreshIndTable(); } else { drawMap(); renderSide(); }
       toast(`Duplicated as ${c.no}`); return;
     }
@@ -519,7 +520,7 @@ onAction({
       S.job.indications = S.job.indications.filter((i) => i.id !== ind.id);
       for (const p of S.photos.filter((p) => p.indId === ind.id)) await db.deletePhoto(p.id);
       S.photos = S.photos.filter((p) => p.indId !== ind.id);
-      S.sel = null; host.commit(); renderNav();
+      S.sel = null; commit(); renderNav();
       if (el.closest('dialog')) { $('#dlg').close(); refreshIndTable(); } else { drawMap(); renderSide(); }
       return;
     }
@@ -527,13 +528,13 @@ onAction({
   'ind-new': async (el, id, e, act) => {
     {
       const ind = { id: uid(), no: nextNo(S.job), plate: '', x: null, y: null, result: 'pending', repair: 'auto', created: Date.now() };
-      S.job.indications.push(ind); host.commit(); renderNav(); refreshIndTable(); openIndDialog(ind.id);
+      S.job.indications.push(ind); commit(); renderNav(); refreshIndTable(); openIndDialog(ind.id);
       setTimeout(() => $('#dlg [data-ib="plate"]')?.focus(), 50); return;
     }
   },
   'feature-del': async (el, id, e, act) => {
     {
-      S.job.features = S.job.features.filter((f) => f.id !== S.selFeature); S.selFeature = null; host.commit(); drawMap(); renderSide(); return;
+      S.job.features = S.job.features.filter((f) => f.id !== S.selFeature); S.selFeature = null; commit(); drawMap(); renderSide(); return;
     }
   },
   'photo-del': async (el, id, e, act) => {
@@ -557,7 +558,7 @@ onChange([
     const o = (S.job.plates[key] = { ...(S.job.plates[key] || {}) });
     const v = readInput(el);
     if (v === null || v === '') delete o[k]; else o[k] = v;
-    host.commit();
+    commit();
     const big = k === 'label' || k === 'len' || k === 'wid' || k === 'orient';
     if (S.view === 'map') { drawMap(); if (big) renderSide(); }
     if (big && S.view === 'plates') refreshPlateTable();
@@ -570,7 +571,7 @@ onChange([
     const k = el.dataset.fb;
     if (k === 'plate') { const p = findPlate(el.value); el.closest('.fld').classList.toggle('invalid', !p); if (!p) return; ft.plate = p.key; }
     else { const v = readInput(el); if ((k === 'x' || k === 'y') && v !== null && v < 0) { toast(`${k.toUpperCase()} can't be negative.`); return; } ft[k] = v; }
-    host.commit(); drawMap(); if (k === 'type') renderSide(); return;
+    commit(); drawMap(); if (k === 'type') renderSide(); return;
   }
   } },
   { order: 340, when: (el, act) => el.matches('[data-photo-cap]'), run: async (el, e, act) => {
@@ -592,7 +593,7 @@ onChange([
       try { const dataUrl = await resizeImage(f, 1600); const p = { id: uid(), jobId: S.job.id, indId: ind.id, dataUrl, caption: '', created: Date.now() }; await db.putPhoto(p); S.photos.push(p); }
       catch (err) { toast('Could not read ' + f.name); }
     }
-    rerenderEditor(el); host.checkStorage(); return;
+    rerenderEditor(el); checkStorage(); return;
   }
   } }
 ]);

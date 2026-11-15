@@ -1,17 +1,17 @@
 // Settlement screen: API 653 Annex B shell survey, edge settlement survey, edge areas and bottom depressions
 // (refactoring step 3). Calculations are in settle.js; this module draws the screen and handles its inputs.
 import { S } from '../app/state.js';
-import { field, readInput, focusSel } from '../app/fields.js';
+import { field, focusSel, readInput } from '../app/fields.js';
 import { defineView } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
-import { host } from '../app/host.js';
-import { u, inVal, fmt, num } from '../units.js';
+import { commit } from '../app/persist.js';
 import { uid } from '../model.js';
+import { autoN, depEval, EDGE_NOTE, edgeCurve, edgeEval, ELEV_UNITS, epOffsets, kRoofFixed, newDep, newEdge, profileEval, profileSVG, PSI_PER_MPA, settleCalc, settleChartSVG, settlePlanSVG, slopeText, stations, WELDS, xKey } from '../settle.js';
 import { shellHeight } from '../shell.js';
-import { kRoofFixed, edgeCurve, WELDS, ELEV_UNITS, PSI_PER_MPA, newEdge, newDep, epOffsets, xKey, profileEval, profileSVG, stations, autoN, settleCalc, slopeText, edgeEval, depEval, EDGE_NOTE, settlePlanSVG, settleChartSVG } from '../settle.js';
 import { edgeAllow as edgeAllowT } from '../tables.js';
+import { $, $$, askConfirm, toast } from '../ui.js';
+import { fmt, inVal, num, u } from '../units.js';
 import { esc as h } from '../util.js';
-import { $, $$, toast, askConfirm } from '../ui.js';
 
 function viewSettle() {
   return `<div class="page wide settle-page"><div class="page-head"><div><h1>Settlement</h1><p class="muted">API 653 Annex B: shell settlement survey (planar tilt and out-of-plane settlement), edge settlement and bottom depressions.</p></div>
@@ -170,25 +170,25 @@ onAction({
     S.epSel = +el.dataset.i; refreshSettle(); return;
   },
   'epz-add': async (el, id, e, act) => {
-    { const zs = S.job.settle.ep.zones; const last = zs[zs.length - 1]; const st = +(last?.step) || (S.job.units === 'metric' ? 300 : 304.8); const a = last?.end != null ? +last.end + st : 0; zs.push({ id: uid(), start: a, end: a + st * 4, step: st }); host.commit(); refreshSettle(); return; }
+    { const zs = S.job.settle.ep.zones; const last = zs[zs.length - 1]; const st = +(last?.step) || (S.job.units === 'metric' ? 300 : 304.8); const a = last?.end != null ? +last.end + st : 0; zs.push({ id: uid(), start: a, end: a + st * 4, step: st }); commit(); refreshSettle(); return; }
   },
   'epz-del': async (el, id, e, act) => {
-    { const ep = S.job.settle.ep; ep.zones = ep.zones.filter((z) => z.id !== el.dataset.zid); host.commit(); refreshSettle(); return; }
+    { const ep = S.job.settle.ep; ep.zones = ep.zones.filter((z) => z.id !== el.dataset.zid); commit(); refreshSettle(); return; }
   },
   'cv-add': async (el, id, e, act) => {
-    { const cv = (S.job.settle.curve = S.job.settle.curve || []); const r = { id: uid(), R: null, Bew: null, Be: null }; cv.push(r); host.commit(); refreshSettle(); setTimeout(() => $(`#settleBody input[data-cv="${r.id}"][data-f="R"]`)?.focus(), 40); return; }
+    { const cv = (S.job.settle.curve = S.job.settle.curve || []); const r = { id: uid(), R: null, Bew: null, Be: null }; cv.push(r); commit(); refreshSettle(); setTimeout(() => $(`#settleBody input[data-cv="${r.id}"][data-f="R"]`)?.focus(), 40); return; }
   },
   'cv-del': async (el, id, e, act) => {
-    { S.job.settle.curve = S.job.settle.curve.filter((r) => r.id !== el.dataset.cid); host.commit(); refreshSettle(); return; }
+    { S.job.settle.curve = S.job.settle.curve.filter((r) => r.id !== el.dataset.cid); commit(); refreshSettle(); return; }
   },
   'se-add': async (el, id, e, act) => {
-    { const L = el.dataset.k === 'edge' ? S.job.settle.edge : S.job.settle.dep; const x = el.dataset.k === 'edge' ? newEdge() : newDep(); L.push(x); host.commit(); refreshSettle(); setTimeout(() => $(`#settleBody input[data-eid="${x.id}"][data-f="angle"]`)?.focus(), 40); return; }
+    { const L = el.dataset.k === 'edge' ? S.job.settle.edge : S.job.settle.dep; const x = el.dataset.k === 'edge' ? newEdge() : newDep(); L.push(x); commit(); refreshSettle(); setTimeout(() => $(`#settleBody input[data-eid="${x.id}"][data-f="angle"]`)?.focus(), 40); return; }
   },
   'se-del': async (el, id, e, act) => {
-    { const k = el.dataset.k; S.job.settle[k] = S.job.settle[k].filter((x) => x.id !== el.dataset.eid); host.commit(); refreshSettle(); return; }
+    { const k = el.dataset.k; S.job.settle[k] = S.job.settle[k].filter((x) => x.id !== el.dataset.eid); commit(); refreshSettle(); return; }
   },
   'st-clear': async (el, id, e, act) => {
-    { if (!(await askConfirm('Clear all settlement station readings?', { ok: 'Clear', danger: true }))) return; S.job.settle.el = {}; host.commit(); refreshSettle(); return; }
+    { if (!(await askConfirm('Clear all settlement station readings?', { ok: 'Clear', danger: true }))) return; S.job.settle.el = {}; commit(); refreshSettle(); return; }
   }
 });
 
@@ -198,7 +198,7 @@ onChange([
     const ep = S.job.settle.ep; ep.rd = ep.rd || {};
     const v = num(el.value), fct = (ELEV_UNITS[S.job.settle.eu] || ELEV_UNITS.in)[0], m = (ep.rd[el.dataset.ep] = ep.rd[el.dataset.ep] || {});
     if (v === null) delete m[el.dataset.x]; else m[el.dataset.x] = v * fct;
-    S.epSel = +el.dataset.ep; host.commit(); refreshSettle(); return;
+    S.epSel = +el.dataset.ep; commit(); refreshSettle(); return;
   }
   } },
   { order: 30, when: (el, act) => el.matches('[data-eps]'), run: async (el, e, act) => {
@@ -209,7 +209,7 @@ onChange([
     if (['alpha', 'Bew', 'Be'].includes(k) && v !== null && v < 0) { toast('Values can’t be negative.'); return; }
     if (k === 'alpha' && v !== null && v > 90) { toast('Weld angle α is 0–90°.'); return; }
     if (v === null || v === '') delete o[k]; else o[k] = v;
-    S.epSel = +el.dataset.eps; host.commit(); refreshSettle(); return;
+    S.epSel = +el.dataset.eps; commit(); refreshSettle(); return;
   }
   } },
   { order: 40, when: (el, act) => el.matches('[data-epz]'), run: async (el, e, act) => {
@@ -217,14 +217,14 @@ onChange([
     const z = (S.job.settle.ep.zones || []).find((q) => q.id === el.dataset.zid); if (!z) return;
     const v = readInput(el); if (v !== null && v < 0) { toast('Values can’t be negative.'); return; }
     if (el.dataset.f === 'step' && v !== null && v <= 0) { toast('Spacing must be more than 0.'); return; }
-    z[el.dataset.f] = v; host.commit(); refreshSettle(); return;
+    z[el.dataset.f] = v; commit(); refreshSettle(); return;
   }
   } },
   { order: 50, when: (el, act) => el.matches('[data-cv]'), run: async (el, e, act) => {
     {
     const r = (S.job.settle.curve || []).find((q) => q.id === el.dataset.cv); if (!r) return;
     const v = readInput(el); if (v !== null && v < 0) { toast('Values can’t be negative.'); return; }
-    r[el.dataset.f] = v; host.commit(); refreshSettle(); return;
+    r[el.dataset.f] = v; commit(); refreshSettle(); return;
   }
   } },
   { order: 60, when: (el, act) => el.matches('[data-st]'), run: async (el, e, act) => {
@@ -232,14 +232,14 @@ onChange([
     const st = S.job.settle; st.el = st.el || {};
     const v = num(el.value), fct = (ELEV_UNITS[st.eu] || ELEV_UNITS.in)[0];
     if (v === null) delete st.el[el.dataset.st]; else st.el[el.dataset.st] = v * fct;
-    host.commit(); refreshSettle(); return;
+    commit(); refreshSettle(); return;
   }
   } },
   { order: 70, when: (el, act) => el.matches('[data-sts]'), run: async (el, e, act) => {
     {
     const v = num(el.value); const k = el.dataset.sts;
     S.job.settle[k] = v === null ? null : S.job.units === 'metric' ? v : v / PSI_PER_MPA;
-    host.commit(); refreshSettle(); return;
+    commit(); refreshSettle(); return;
   }
   } },
   { order: 80, when: (el, act) => el.matches('[data-se]'), run: async (el, e, act) => {
@@ -250,7 +250,7 @@ onChange([
     if (!['notes', 'weld'].includes(k) && v !== null && v < 0) { toast('Values can’t be negative.'); return; }
     if (k === 'angle' && v !== null) v = ((v % 360) + 360) % 360;
     if (k === 'alpha' && v !== null && v > 90) { toast('Weld angle α is 0–90°.'); return; }
-    x[k] = v; host.commit(); refreshSettle(); return;
+    x[k] = v; commit(); refreshSettle(); return;
   }
   } }
 ]);
