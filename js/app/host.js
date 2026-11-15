@@ -1,12 +1,18 @@
 // App-level steps that still live in app.js, for screen modules (refactoring step 3).
 // A screen module can't import app.js (app.js imports the screens), so app.js hands these over once at
-// start-up with configureHost. Each moves to its own core module later (commit, loadJobs → step 14, persistence; map and setup redraws → steps 10 and 12),
+// start-up with configureHost. Each moves to its own core module later (commit, recompute, loading and saving jobs → step 14; map and setup redraws → steps 10 and 12),
 // and the screens then import it directly.
 export const host = {
   /** Record a change to the open job: recalculate, schedule the save, count the edit. */
   commit: () => { throw new Error('host.commit used before configureHost'); },
-  /** Reload the jobs list from the device (after crash recovery or a data repair). */
+  /** Recalculate the open job's layout and results (no save). */
+  recompute: () => { throw new Error('host.recompute used before configureHost'); },
+  /** Reload the jobs list / tank registry from the device. */
   loadJobs: () => { throw new Error('host.loadJobs used before configureHost'); },
+  loadTanks: () => { throw new Error('host.loadTanks used before configureHost'); },
+  /** Store a new job and open it; ask before leaving a job with unsaved changes. */
+  createJob: () => { throw new Error('host.createJob used before configureHost'); },
+  leaveJobOk: () => { throw new Error('host.leaveJobOk used before configureHost'); },
   /** The recovery journal of unsaved changes (created with the save queue). */
   journal: null,
   /** Job file and save steps (steps 13–14): write now, header, open, import a file, remember its file handle. */
