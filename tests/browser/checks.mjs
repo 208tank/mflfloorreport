@@ -214,7 +214,8 @@ export default {
       const job = window.tfi.job(), id = job.id;
       job.secs.floor.recs.push({ id: 'rec1', finding: 'Linked', loc: '', action: '', priority: 'P3', due: '', def: true, status: 'Open', client: '', photo: 'ph1' });
       await db.replaceJob(job, [{ id: 'ph1', jobId: id, sec: 'floor', n: 1, dataUrl: 'data:image/png;base64,iVBORw0KGgo=', caption: 'c' }]);
-      return JSON.stringify({ format: 'tank-floor-inspector', version: 1, rev: 1, job, photos: await db.jobPhotos(id) });
+      // a different version of the job (identical content would be "already on this device", stage 7)
+      return JSON.stringify({ format: 'tank-floor-inspector', version: 1, rev: 1, job: { ...job, info: { ...job.info, notes: 'Saved on another computer' } }, photos: await db.jobPhotos(id) });
     });
     const upload = async (choice) => {
       await page.evaluate(() => window.tfi.go('jobs'));
@@ -1067,6 +1068,75 @@ export default {
     assert.equal(stored.mfl, 130);
     assert.equal(typeof stored.d, 'number', 'diameter stored as a number');
     assert.deepEqual(await importRecords(page), [['cancelled', 0, 2], ['opened', 0, 2]]);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'duplicates: importing the same file twice changes nothing, and the second time says so'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    // let the start-up tasks finish first (baseline revisions are added a moment after the app opens)
+    await page.evaluate(async () => { const { db } = await import('./js/db.js'); for (let i = 0; i < 100 && !(await db.getMeta('baseline:v4')); i++) await new Promise((r) => setTimeout(r, 100)); });
+    await page.evaluate(() => window.tfi.go('jobs'));
+    const file = await demoFile(page);
+    await page.setInputFiles('input[data-act="job-import"]', file);
+    await page.waitForFunction(() => window.tfi.job()?.id === 'imported-job');
+    await page.waitForTimeout(800); // the open job settles (its card is written)
+    await page.evaluate(() => window.tfi.go('jobs'));
+    const before = await storeSnapshot(page);
+    await page.setInputFiles('input[data-act="job-import"]', file);
+    await page.waitForSelector('#confirmDlg[open]');
+    const msg = await page.textContent('#confirmDlg');
+    assert.match(msg, /tk-import\.json is already on this device: “TK-IMPORT” here has the same data and photos, so there is nothing to import\. You opened this file on this device before/);
+    await page.click('#confirmDlg [data-cf="ok"]');
+    await page.waitForTimeout(400);
+    const after = await storeSnapshot(page);
+    for (const k of Object.keys(before)) assert.equal(after[k], before[k], `store ${k} changed`);
+    assert.deepEqual(await importRecords(page), [['opened', 0, 0], ['already-on-device', 0, 0]]);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'duplicates: the same tank and inspection date under another id is flagged; each choice does what it says'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const deviceId = await page.evaluate(() => window.tfi.job().id);
+    await page.evaluate(() => window.tfi.go('jobs'));
+    const file = await demoFile(page, (d) => { d.job.info.tankId = 'TK-101'; });
+    const ask = async (choice) => {
+      await page.evaluate(() => window.tfi.go('jobs'));
+      await page.setInputFiles('input[data-act="job-import"]', file);
+      await page.waitForSelector('#confirmDlg[open]');
+      const msg = await page.textContent('#confirmDlg');
+      await page.click(`#confirmDlg [data-cf="${choice}"]`);
+      await page.waitForTimeout(500);
+      return msg;
+    };
+    const msg = await ask('cancel');
+    assert.match(msg, /tk-import\.json may be an inspection that is already on this device\. This job has the same tank and inspection date, but it is a separate job:.*TK-101 — Demo Energy Ltd\., Example Terminal — inspection/s);
+    assert.deepEqual(await jobIds(page), [deviceId]);
+    await ask('existing');
+    assert.equal(await page.evaluate(() => window.tfi.job().id), deviceId);
+    assert.deepEqual(await jobIds(page), [deviceId]);
+    await ask('import');
+    await page.waitForFunction(() => window.tfi.job()?.id === 'imported-job');
+    assert.deepEqual(await jobIds(page), [deviceId, 'imported-job'].sort());
+    assert.deepEqual((await importRecords(page)).map((r) => r[0]), ['cancelled', 'opened-existing', 'added-separately']);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'duplicates: a different version of a job on this device goes to Replace / Keep both; Replace keeps a revision first'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const id = await page.evaluate(() => window.tfi.job().id);
+    await page.evaluate(() => window.tfi.go('jobs'));
+    const file = await demoFile(page, (d) => { d.job.id = id; d.job.info.tankId = 'TK-101'; d.job.info.client = 'Edited elsewhere'; });
+    await page.setInputFiles('input[data-act="job-import"]', file);
+    await page.waitForSelector('#confirmDlg[open]');
+    assert.match(await page.textContent('#confirmDlg'), /is already on this device\.\s*File:/);
+    await page.click('#confirmDlg [data-cf="yes"]');
+    await page.waitForFunction(() => window.tfi.job()?.info.client === 'Edited elsewhere');
+    const revs = JSON.parse((await storeSnapshot(page)).revisions).filter((r) => r.jobId === id);
+    assert.ok(revs.some((r) => r.reason === 'before-replace' && r.job.info.client === 'Demo Energy Ltd.' && /tk-import\.json/.test(r.note)), 'device copy kept as a revision');
+    assert.deepEqual(await importRecords(page), [['replaced', 0, 0]]);
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },

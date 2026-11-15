@@ -7,6 +7,20 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Data integrity upgrade — stage 7: duplicate imports (v3.16.0)
+
+After its checks (stage 6), a job file is compared with what is already on this device:
+
+- **Already on this device** — the same job with the same data and photos: nothing is imported, and the dialog says so
+  (with *Open the job*). If this exact file was opened here before, it says when.
+- **A different version of a job that is here** — the same job with different data or photos: the existing question,
+  **Replace** (this device's copy is kept as a revision first) or **Keep both**.
+- **Possibly the same inspection twice** — no job with this id, but one for the same tank (client, site and tank ID,
+  ignoring case and spacing) and the same inspection date: **Add as a separate job**, **Open the one on this device** or
+  **Cancel**. Jobs without an inspection date aren't compared.
+- Each import is recorded with the file's checksum and what was done: opened, replaced, kept both, added separately,
+  opened the existing job, already on this device, cancelled or refused.
+
 ## Data integrity upgrade — stage 6: job file checks (v3.15.0)
 
 Every job file is checked before it changes anything on this device (**Open job file…**, the Dashboard's **Open**
@@ -780,6 +794,7 @@ every limit is editable.
 | `js/views/*.js` | One module per screen area: dashboard, registry, jobs, setup, floormap, floorlists, api, shell, nozzles, roof, settle, sections, summary, report, codetables, files, history, backup |
 | `js/backup.js` | Backup file: written in pieces with a checksum, verified, compared with the device |
 | `js/validate.js` | Job file checks before an import: problems and things to check |
+| `js/duplicates.js` | Is an imported job already here, a different version, or possibly the same inspection twice |
 | `js/ui.js` | Element lookup, toasts and in-app dialogs |
 | `js/cards.js` | Job summary cards for the Jobs list, Dashboard and registry |
 | `js/util.js` | HTML escaping (the one place it is defined) |

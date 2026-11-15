@@ -6,6 +6,7 @@ import { onAction, onChange } from '../app/actions.js';
 import { checkStorage, commit, fileChanges, flushSave, loadJobs, loadTanks, saver, writeNow } from '../app/persist.js';
 import { renderHeader } from '../app/header.js';
 import { db } from '../db.js';
+import { classifyImport } from '../duplicates.js';
 import { download, fileBase, indicationsCSV, nozzlesCSV, platesCSV, roofCSV, settleCSV, shellCSV, svgForExport, svgToPng } from '../export.js';
 import { itemFloor } from '../geometry.js';
 import { buildLoader, loaderAreas, readLoader } from '../loader.js';
@@ -15,8 +16,9 @@ import { saveErrorText } from '../saver.js';
 import { allDefs, numberDefs } from '../sections.js';
 import { rolloutSVG, SHELL_SVG_STYLE } from '../shell.js';
 import { $, askChoice, askConfirm, toast } from '../ui.js';
+import { sha256 } from '../util.js';
 import { validateJobFile } from '../validate.js';
-import { whoAmI } from './history.js';
+import { addRevision, whoAmI } from './history.js';
 import { openJob, showMigrationNotes } from './jobs.js';
 
 /* Job files: one .json file per job (data + photos) that can live in OneDrive, SharePoint, a USB stick…
@@ -178,22 +180,36 @@ const problemList = (a) => a.slice(0, 12).map((x) => '• ' + x).join('\n') + (a
 export async function importJobFile(file) {
   if (!file) return null;
   try {
-    const data = JSON.parse(await file.text());
+    const text = await file.text(), data = JSON.parse(text), fileHash = await sha256(text);
     if (data.format !== 'tank-floor-inspector' || !data.job) throw new Error('This is not a Tank Floor Inspector job file.');
     if ((data.version || 1) > FILE_VERSION || (data.job.schema || 1) > SCHEMA) throw new Error(`it was saved by a newer version of the app${data.appVersion ? ' (v' + data.appVersion + ')' : ''}. Reload the app to update it (this is v${APP_VERSION}), then open the file again.`);
     // data integrity stage 6: check the whole file before anything on the device changes
     const v = await validateJobFile(data, { schema: SCHEMA, fileVersion: FILE_VERSION });
-    const record = async (result) => db.addImport({ at: Date.now(), by: await whoAmI().catch(() => null), kind: 'job-file', fileName: file.name, jobId: data.job.id || null, result, counts: { errors: v.errors.length, warnings: v.warnings.length }, decisions: v.warnings.length && result === 'opened' ? ['warnings accepted'] : [] }).catch(() => {});
+    const record = async (result, jobId = data.job.id || null) => db.addImport({ at: Date.now(), by: await whoAmI().catch(() => null), kind: 'job-file', fileName: file.name, hash: fileHash, jobId, result, counts: { errors: v.errors.length, warnings: v.warnings.length }, decisions: v.warnings.length && !['refused', 'cancelled'].includes(result) ? ['warnings accepted'] : [] }).catch(() => {});
     if (v.errors.length) {
       await askChoice(`${file.name} was not opened: it has ${v.errors.length === 1 ? 'a problem' : v.errors.length + ' problems'} that would stop the app working with it. Nothing on this device was changed.\n\n${problemList(v.errors)}`, [['ok', 'OK', 'primary']]);
       record('refused'); return null;
     }
     if (v.warnings.length && (await askChoice(`${file.name} has ${v.warnings.length === 1 ? 'one thing' : v.warnings.length + ' things'} to check:\n\n${problemList(v.warnings)}\n\nOpen it anyway? You can correct these in the app.`, [['cancel', 'Cancel'], ['open', 'Open anyway', 'primary']])) !== 'open') { record('cancelled'); return null; }
-    record('opened');
     const notes = migrationNotes(data.job);
     const job = v.job; // migrated, with numbers stored as text converted (validate.js)
+    // data integrity stage 7: already here, a different version of a job that is, or possibly the same inspection twice?
+    const dup = await classifyImport({ job, photoIds: (data.photos || []).map((p) => p.id) }, { getJob: (id) => db.getJob(id), photoKeys: (id) => db.jobPhotoKeys(id), cards: S.jobs }, await db.importsByHash(fileHash).catch(() => []));
+    const before = dup.opened.length ? ` You opened this file on this device before (${new Date(dup.opened[0].at).toLocaleString()}).` : '';
+    if (dup.kind === 'same') {
+      const go = await askChoice(`${file.name} is already on this device: “${job.info.tankId || 'this job'}” here has the same data and photos, so there is nothing to import.${before}`, [['ok', 'OK'], ['open', 'Open the job', 'primary']]);
+      record('already-on-device');
+      if (go === 'open') await openJob(job.id);
+      return job.id;
+    }
+    if (dup.kind === 'possible') {
+      const m = dup.matches, list = m.map((c) => `• ${c.info?.tankId || 'Untitled'} — ${[c.info?.client, c.info?.site].filter(Boolean).join(', ')} — inspection ${c.info?.inspDate}${c.rev ? ', Rev ' + c.rev : ''}`).join('\n');
+      const go = await askChoice(`${file.name} may be an inspection that is already on this device. ${m.length === 1 ? 'This job has' : 'These jobs have'} the same tank and inspection date, but ${m.length === 1 ? 'it is a separate job' : 'they are separate jobs'}:\n\n${list}\n\nIt could be a copy started on another device, or the same inspection entered twice.${before}`, [['cancel', 'Cancel'], ['existing', m.length === 1 ? 'Open the one on this device' : 'Open the first one here'], ['import', 'Add as a separate job', 'primary']]);
+      if (go === 'existing') { record('opened-existing', m[0].id); await openJob(m[0].id); return m[0].id; }
+      if (go !== 'import') { record('cancelled'); return null; }
+    }
     if (data.tank?.id && data.tank.id === job.tankRef && !(await db.getTank(data.tank.id))) { await db.putTank(data.tank); await loadTanks(); }
-    const exists = await db.getJob(job.id);
+    const exists = dup.kind === 'differs' ? dup.device : null;
     const oldId = job.id;
     if (exists) {
       const when = (t) => (t ? new Date(t).toLocaleString() : 'unknown');
@@ -204,7 +220,9 @@ export async function importJobFile(file) {
     }
     // One transaction: the device copy is only replaced once the whole file has been written.
     const photos = job.id === oldId ? data.photos || [] : copyPhotos(job, data.photos || []);
+    if (exists && job.id === oldId) await addRevision(exists, 'before-replace', `Before opening ${file.name} over it`);
     await db.replaceJob(job, photos, exists && job.id === oldId ? oldId : null);
+    record(exists ? (job.id === oldId ? 'replaced' : 'kept-both') : dup.kind === 'possible' ? 'added-separately' : 'opened', job.id);
     await loadJobs(); toast(`Opened ${file.name}`); await openJob(job.id); checkStorage();
     if (notes.length) showMigrationNotes(notes);
     return job.id;

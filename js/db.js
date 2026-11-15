@@ -125,6 +125,8 @@ export const db = {
   /** Record an import (job file, loader sheet, backup restore): append-only. */
   async addImport(rec) { return tx('imports', 'readwrite', (s) => reqP(s.add(rec))); },
   async allImports() { return tx('imports', 'readonly', (s) => reqP(s.getAll())); },
+  /** Earlier imports of a file with this checksum (data integrity stage 7). */
+  async importsByHash(hash) { return tx('imports', 'readonly', (s) => reqP(s.index('hash').getAll(hash))); },
   /**
    * Restore one job from a backup in a single transaction (job, card, photos, revisions, audit): if anything
    * fails, nothing on the device changes. replace = the device copy is replaced: its photos that are not in the
