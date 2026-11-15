@@ -7,7 +7,7 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
-## Report improvements — R1: the report frame (v3.21.0)
+## Report improvements — R1: the report frame (v3.21.0 – v3.21.1)
 
 The printed report is now a numbered engineering document. Every table, note, drawing and photo it had before is
 still in it, and no calculation result changed (the engineering golden tests are unchanged).
@@ -27,7 +27,13 @@ still in it, and no calculation result changed (the engineering golden tests are
 - **Pages:** Letter, or A4 (Jobs → Company → Report page size). A running header (company, tank, report number) and
   footer (revision, DRAFT / ISSUED, "Page n of N") on every page but the cover; chapters start on a new page.
 - **Drawings** (floor map, shell roll-out, roof plans, settlement plan and chart) each get their own page with a
-  numbered figure caption, **landscape** by default or **portrait** (Report sections and layout → Drawing pages).
+  numbered figure caption, **landscape** by default or **portrait** (Report sections and layout → Drawing pages), and
+  **fill the page**: the drawing takes all the height its heading, legend, caption and notes leave (v3.21.1). The
+  floor, shell and roof drawings can go on **11 × 17** (Tabloid / Ledger) pages instead of the report paper; the
+  settlement drawing stays on the report paper. Choose 11 × 17 (or Tabloid) in the printer or PDF settings only if
+  the printer asks; the PDF carries the page sizes.
+- **Full-size print (v3.21.1):** tables now wrap their text to the page width. Before, a table wider than the page
+  made the browser shrink the whole report to about 75 %; text and drawings now print at their intended size.
 - **DRAFT** watermark until the job is Complete; the issued report has none.
 - The page set-up and frame styles are carried inside the report, so an issued report keeps them.
 

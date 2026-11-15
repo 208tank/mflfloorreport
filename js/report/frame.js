@@ -25,7 +25,7 @@ export const APPENDICES = [
 export const FRONT = [['cover', 'Cover page'], ['control', 'Document control'], ['contents', 'Contents'], ['key', 'Value types and abbreviations']];
 
 /** The report options that are about the layout, with their defaults. */
-export const LAYOUT_DEFAULTS = { order: CHAPTERS.map(([k]) => k), appOrder: APPENDICES.map(([k]) => k), off: ['plates'], drawOrient: 'landscape' };
+export const LAYOUT_DEFAULTS = { order: CHAPTERS.map(([k]) => k), appOrder: APPENDICES.map(([k]) => k), off: ['plates'], drawOrient: 'landscape', drawPaper: 'report' };
 
 /** Sections switched off. A saved layout decides; without one, today's switches do (exec, defs, sections, plates). */
 function offSet(opts) {
@@ -55,6 +55,7 @@ export function layoutOf(opts = {}) {
     chapters: settleOrder(L.order, CHAPTERS).map(item(CHAPTERS)),
     appendices: settleOrder(L.appOrder, APPENDICES).map(item(APPENDICES)),
     drawOrient: L.drawOrient === 'portrait' ? 'portrait' : 'landscape',
+    drawPaper: L.drawPaper === 'tabloid' ? 'tabloid' : 'report',
   };
 }
 
@@ -91,18 +92,36 @@ export function numbering() {
 
 const css = (s) => `"${String(s ?? '').replace(/[\\"]/g, (c) => '\\' + c).replace(/[\n\r]+/g, ' ').replace(/</g, '\\3c ')}"`;
 
+/** Paper sizes in inches (portrait). */
+export const PAPER = { letter: [8.5, 11, 'letter'], a4: [8.27, 11.69, 'A4'], tabloid: [11, 17, ''] }; // tabloid: sized in inches below
+const DRAW_MARGIN = 0.6;
+
+/** The printable area of a drawing page, in inches: [width, height]. */
+export function drawArea(paper, orient) {
+  const [w, h] = PAPER[paper] || PAPER.letter, [W, H] = orient === 'portrait' ? [w, h] : [h, w];
+  return [W - 2 * DRAW_MARGIN, H - 2 * DRAW_MARGIN];
+}
+
 /** Page set-up and running header / footer for print, carried inside the report so an issued report keeps them.
- *  Drawing pages are a named page, landscape unless the report option says portrait. */
-export function pageCSS({ size = 'letter', company = '', tankId = '', reportNo = '', revText = '', status = '', drawOrient = 'landscape' }) {
-  const S = size === 'a4' ? 'A4' : 'letter', font = 'font: 8pt Arial, Helvetica, sans-serif; color: #5b6470;';
+ *  Drawing pages are named pages: 'drawing' at the report's paper size, 'drawing-lg' on 11 × 17 when that option is
+ *  chosen for the floor, shell and roof drawings; landscape unless the option says portrait. Each drawing page is
+ *  given the exact height of its printable area, so the drawing can fill what its heading, legend and notes leave. */
+export function pageCSS({ size = 'letter', company = '', tankId = '', reportNo = '', revText = '', status = '', drawOrient = 'landscape', drawPaper = 'report' }) {
+  const paper = size === 'a4' ? 'a4' : 'letter', S = PAPER[paper][2], o = drawOrient === 'portrait' ? 'portrait' : 'landscape';
+  const font = 'font: 8pt Arial, Helvetica, sans-serif; color: #5b6470;';
   const right = [tankId && 'Tank ' + tankId, reportNo && 'Report ' + reportNo].filter(Boolean).join(' · ');
   const boxes = `@top-left { content: ${css(company)}; ${font} } @top-right { content: ${css(right)}; ${font} }
       @bottom-left { content: ${css([revText, status].filter(Boolean).join(' · '))}; ${font} }
       @bottom-right { content: "Page " counter(page) " of " counter(pages); ${font} }`;
+  const big = drawPaper === 'tabloid' ? 'tabloid' : paper;
+  const [, hs] = drawArea(paper, o), [, hb] = drawArea(big, o);
   return `@media print {
-    @page { size: ${S} portrait; margin: 0.75in 0.7in 0.7in; ${boxes} }
-    @page cover { size: ${S} portrait; margin: 0.75in 0.7in; @top-left { content: none; } @top-right { content: none; } @bottom-left { content: none; } @bottom-right { content: none; } }
-    @page drawing { size: ${S} ${drawOrient === 'portrait' ? 'portrait' : 'landscape'}; margin: 0.6in 0.6in 0.6in; ${boxes} }
+    @page { size: ${S} portrait; margin: 0.75in 0.6in 0.7in; ${boxes} }
+    @page cover { size: ${S} portrait; margin: 0.75in 0.6in; @top-left { content: none; } @top-right { content: none; } @bottom-left { content: none; } @bottom-right { content: none; } }
+    @page drawing { size: ${S} ${o}; margin: ${DRAW_MARGIN}in; ${boxes} }
+    @page drawing-lg { size: ${big === 'tabloid' ? (o === 'landscape' ? '17in 11in' : '11in 17in') : PAPER[big][2] + ' ' + o}; margin: ${DRAW_MARGIN}in; ${boxes} }
+    .report .rp-draw { height: ${(hs - 0.05).toFixed(2)}in; }
+    .report .rp-draw.lg { height: ${(hb - 0.05).toFixed(2)}in; }
   }`;
 }
 
@@ -137,10 +156,22 @@ export const FRAME_CSS = `
 @media print {
   .report .rp-cover { page: cover; min-height: 0; }
   .report .rp-front, .report .rp-chap, .report .rp-app { break-before: page; }
-  .report .rp-draw { page: drawing; break-before: page; break-after: page; }
-  .report .rp-draw.land .map-wrap svg { max-height: 6.1in; }
-  .report .rp-draw.land .ro-print svg, .report .rp-draw.land .roof-print svg, .report .rp-draw.land .set-print svg { max-height: 5.7in; width: auto; max-width: 100%; margin: 0 auto; }
-  .report .rp-draw.port .map-wrap svg { max-height: 8.2in; }
+  .report .rp-draw { page: drawing; break-before: page; break-after: page; display: flex; flex-direction: column; overflow: hidden; }
+  .report .rp-draw.lg { page: drawing-lg; }
+  .report .rp-draw > * { flex: 0 0 auto; }
+  .report .rp-draw h3.rp-s { margin-top: 0; }
+  .report .rp-draw .map-wrap, .report .rp-draw .ro-print, .report .rp-draw .roof-print, .report .rp-draw .set-print { flex: 1 1 0; min-height: 0; }
+  .report .rp-draw .map-wrap svg, .report .rp-draw .ro-print svg, .report .rp-draw .roof-print svg { width: 100%; height: 100%; max-height: none; max-width: none; margin: 0; }
+  .report .rp-draw .set-print { display: grid; grid-template-columns: 1fr 1.6fr; grid-template-rows: 100%; align-items: stretch; }
+  .report .rp-draw.port .set-print { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  .report .rp-draw .set-print > div { min-height: 0; } .report .rp-draw .set-print svg { width: 100%; height: 100%; }
+  .report .rp-draw .legend { margin: 4px 0; }
+  .report .rp-draw .note { margin: 2px 0 0; }
+  /* every table fits the page width: a table wider than the page makes the browser shrink the whole report */
+  .report .grid { width: 100%; max-width: 100%; }
+  .report .grid th, .report .grid td { white-space: normal; overflow-wrap: break-word; }
+  .report .grid td.n { white-space: nowrap; overflow-wrap: normal; }
+  .report .grid th { font-size: 8.5px; padding: 3px 3px; } .report .grid.small td { font-size: 9.5px; padding: 3px 3px; }
   .report h2.rp-ch, .report h3.rp-s, .report .rp-tcap { break-after: avoid; }
   .report .rp-fcap { break-before: avoid; }
   .report .rp-draft { display: block; position: fixed; top: 42%; left: 0; right: 0; text-align: center; font: 700 110px Arial, sans-serif; color: rgba(0, 0, 0, .06); transform: rotate(-30deg); pointer-events: none; z-index: 0; }
@@ -231,7 +262,7 @@ export function assembleReport({ job, company, opts, layout, N, chapterBody, app
   if (on('contents')) front.push(`<section class="rp-front"><h2>Contents</h2>${contentsHTML(items, N)}</section>`);
   if (on('key')) front.push(`<section class="rp-front"><h2>Value types and abbreviations</h2>${keyHTML()}</section>`);
   const revText = job.rev ? `Rev ${job.rev} · ${dateOf(job.savedAt)}` : 'Not saved to a job file';
-  const style = FRAME_CSS + pageCSS({ size: company.pageSize, company: company.name, tankId: I.tankId, reportNo: I.reportNo, revText, status: issued ? 'ISSUED' : 'DRAFT', drawOrient: layout.drawOrient });
+  const style = FRAME_CSS + pageCSS({ size: company.pageSize, company: company.name, tankId: I.tankId, reportNo: I.reportNo, revText, status: issued ? 'ISSUED' : 'DRAFT', drawOrient: layout.drawOrient, drawPaper: layout.drawPaper });
   return `<article class="report rp2"><style>${style}</style>${issued ? '' : '<div class="rp-draft" aria-hidden="true">DRAFT</div>'}
   ${front.join('\n')}
   ${chapters.join('\n')}

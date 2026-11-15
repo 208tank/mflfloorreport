@@ -85,7 +85,7 @@ export function buildReport(job, layout, calc, company, photos, opts) {
   }).join('')}</tbody></table><p class="note"><sup>m</sup> measured size entered for that plate; others use the standard plate size.</p></section>`;
 
   // ---- report improvements R1: numbered chapters in the chosen order, inside the report frame
-  const N = numbering(), LY = layoutOf(opts), drawCls = LY.drawOrient === 'portrait' ? 'port' : 'land';
+  const N = numbering(), LY = layoutOf(opts), drawCls = LY.drawOrient === 'portrait' ? 'port' : 'land', drawBig = drawCls + (LY.drawPaper === 'tabloid' ? ' lg' : ''); // floor, shell and roof drawings may go on 11 × 17
     const tankCh = () => `<section>
     ${N.sub('Identification and design data')}
     <div class="cols">
@@ -142,7 +142,7 @@ export function buildReport(job, layout, calc, company, photos, opts) {
     <p class="note">Rates are linear: wall loss of each proven-up location divided by the tank age (StP<sub>r</sub>: the StP<sub>r</sub> basis if entered). Locations with a welded repair are excluded from RT (§4.4.5.5); repaired soil-side locations keep their rate in UP<sub>r</sub> unless the cause of corrosion was removed (§4.4.5.1 Note 1); non-welded repairs stay in the evaluation (§4.4.5.6). "t required today" is the thickness a remaining location needs now to stay above the minimum for O<sub>r</sub> years. Thickness values in ${U.small}.</p>
   </section>
 
-  <section class="rp-draw ${drawCls} map-sec">
+  <section class="rp-draw ${drawBig} map-sec">
     ${N.sub('Floor map')}
     <div class="map-wrap">${map}</div>
     ${legendHTML()}
@@ -182,7 +182,7 @@ ${patches.some((pp) => pp.checks.length) ? `${N.table('Critical zone patch plate
         return `${N.table('Shell evaluation — API 653 §4.3.3')}<table class="grid small"><thead><tr><th>Course</th><th>Material</th><th>Joint</th><th class="n">E</th><th class="n">Y (psi)</th><th class="n">Sd (psi)</th><th class="n">St (psi)</th><th class="n">Liquid above (${U.big})</th><th class="n">t-min calc</th><th class="n">t-min used</th><th class="n">Min reading</th><th class="n">Max fill (${U.big})</th><th class="n">Hydrotest Ht (${U.big})</th></tr></thead><tbody>${rr}</tbody></table>
         <p class="note">t-min = 2.6 (H − 1) D G / (S E), not less than 0.100 in (SI form for metric jobs) (API 653 §4.3.3.1 a); single readings compared with the t-min at their elevation (§4.3.3.1 b) and evaluated per §4.3.2 when below it, D = ${fmt(B.D, 'big', job)}, G = ${B.G}, maximum fill height ${fmt(B.fill, 'big', job)}; S from API 653 Table 4.1 (lower two courses / upper courses), E from Table 4.2 / 4.3 for ${h([job.tank.code, job.tank.edition].filter(Boolean).join(', ') || 'unknown code')}. <sup>E</sup> t-min entered by the inspector. ${[...new Set(courses.map((c) => c.d?.matl))].filter((m) => MAT_NOTES[m]).map((m) => h(m) + ': ' + h(MAT_NOTES[m])).join(' ')} Fill and hydrostatic test heights (Ht = St E t / (2.6 D) + 1) from each course's minimum reading, measured from the tank bottom${pm ? `: maximum product fill <b>${fmt(pm.v, 'big', job)}</b> (course ${pm.c})` : ''}${hm ? `, hydrostatic test height <b>${fmt(hm.v, 'big', job)}</b> (course ${hm.c})` : ''}.</p>`; })()}
       </section>
-    <section class="rp-draw ${drawCls}">${N.sub('Shell roll-out')}<div class="ro-print">${rolloutSVG(job, { print: true })}</div>${N.figure('Shell roll-out — courses, plates, UT stations and nozzles, viewed from outside')}</section>
+    <section class="rp-draw ${drawBig}">${N.sub('Shell roll-out')}<div class="ro-print">${rolloutSVG(job, { print: true })}</div>${N.figure('Shell roll-out — courses, plates, UT stations and nozzles, viewed from outside')}</section>
     <section class="pb">${N.sub('Shell UT readings')}
       ${N.table('Shell UT readings by elevation and station')}<table class="grid small readings-rp"><thead><tr><th>Elevation</th>${locs.map((l) => `<th class="n">${l.label}<br>${l.angle.toFixed(0)}°</th>`).join('')}<th class="n">Min</th></tr></thead><tbody>${rows.join('') || `<tr><td colspan="${locs.length + 2}">No readings recorded.</td></tr>`}</tbody></table>
       <p class="note">Elevation above the bottom of the shell. Readings below the course t-min in bold. Thickness in ${U.small}.</p></section>`;
@@ -195,7 +195,7 @@ ${patches.some((pp) => pp.checks.length) ? `${N.table('Critical zone patch plate
       const vals = pts.map((p) => pointStatus(job, p)).filter((x) => x.t !== null);
       out.push(`<h3 class="rp-h3">Fixed roof</h3><div class="cols">${kv([['Roof', h(Fx.kind)], ['Support', h(Fx.support)], ['Slope / radius', h(Fx.slope)]])}${kv([['Nominal plate t', t(Fx.tNom)], ['t-min', t(Fx.tMin)], ['Minimum reading', vals.length ? t(Math.min(...vals.map((x) => x.t))) : '—']])}</div>
         ${Fx.notes ? `<p class="note">${h(Fx.notes)}</p>` : ''}
-        <div class="rp-draw ${drawCls}"><div class="roof-print">${fixedSVG(job, { stations: utLocations(job), fmtT: (v) => fmt(v, 't', job, false) })}</div>${N.figure('Fixed roof plan — UT points and shell UT station lines')}</div>
+        <div class="rp-draw ${drawBig}"><div class="roof-print">${fixedSVG(job, { stations: utLocations(job), fmtT: (v) => fmt(v, 't', job, false) })}</div>${N.figure('Fixed roof plan — UT points and shell UT station lines')}</div>
         ${N.table('Fixed roof UT readings')}<table class="grid small"><thead><tr><th>Point</th><th class="n">Angle</th><th class="n">From centre</th><th class="n">Reading</th><th class="n">Loss</th><th>Status</th></tr></thead><tbody>
         ${pts.map((pt) => { const st = pointStatus(job, pt); return `<tr class="${roofBad(st.status) ? 'is-bad' : ''}"><td><b>${h(pt.label)}</b></td><td class="n">${pt.angle != null ? (+pt.angle).toFixed(1) + '°' : '—'}</td><td class="n">${fmt(pt.r, 'big', job)}</td><td class="n">${fmt(pt.t, 't', job, false)}</td><td class="n">${st.lossPct != null ? st.lossPct.toFixed(0) + '%' : '—'}</td><td>${st.status === 'Below t-min' ? '<b>Below t-min</b>' : h(st.status)}</td></tr>`; }).join('') || '<tr><td colspan="6">No readings.</td></tr>'}
         </tbody></table><p class="note">Thickness in ${U.small}. Angles clockwise from 0° ${h(I.zeroRef || '')}.</p>`);
@@ -207,7 +207,7 @@ ${patches.some((pp) => pp.checks.length) ? `${N.table('Critical zone patch plate
       out.push(`${hasFixed(job) && inScope(job, 'froof') ? '</section><section class="pb">' : ''}<h3 class="rp-h3">${job.roof.type === 'fixed-ifr' ? 'Internal' : 'External'} floating roof</h3>
         <div class="cols">${kv([['Roof', h(F.kind)], ['Roof diameter', fmt(roofDiameter(job), 'big', job)], ['Rim gap', fmt(F.rimGap, 'small', job)], ['Pontoons', `${lay.nPont} × ${fmt(F.pontW, 'big', job)} wide`]])}${kv([['Deck plates', `${lay.plates.filter((p) => p.kind !== 'annular').length} (${fmt(F.plateW, 'big', job, false)} × ${fmt(F.plateL, 'big', job)})`], ['Deck nominal / t-min', `${t(F.deckNom)} / ${t(F.deckMin)}`], ['Pontoons with liquid / leaking', String(pons.filter((p) => ['Liquid present', 'Leaking'].includes(F.pont?.[p.key]?.cond)).length)], ['Minimum reading', vals.length ? t(Math.min(...vals.map((x) => x.s.min))) : '—']])}</div>
         ${F.notes ? `<p class="note">${h(F.notes)}</p>` : ''}
-        <div class="rp-draw ${drawCls}"><div class="roof-print">${floatingSVG(job, lay)}</div>${N.figure('Floating roof plan — deck plates, pontoons and UT readings')}
+        <div class="rp-draw ${drawBig}"><div class="roof-print">${floatingSVG(job, lay)}</div>${N.figure('Floating roof plan — deck plates, pontoons and UT readings')}
         <p class="note">Each deck plate has 5 UT readings (four corners and centre): ● OK ● below t-min ○ not read. Shaded pontoons have liquid present or are leaking.</p></div></section>
         <section class="pb">${N.sub('Floating roof deck UT readings')}
         ${N.table('Floating roof deck UT readings')}<table class="grid small"><thead><tr><th>Plate</th>${PT5.map(([k]) => `<th class="n">${PT5_SHORT[k]}</th>`).join('')}<th class="n">Min</th><th class="n">Loss</th><th>Status</th></tr></thead><tbody>

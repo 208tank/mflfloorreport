@@ -1805,6 +1805,13 @@ export default {
     await page.waitForSelector('#reportRoot .rp-draw.port');
     p = await pdfPages();
     assert.ok(p.length > 10 && p.every((x) => x === 'port:595x842'), `all A4 portrait: ${[...new Set(p)].join(' ')}`);
+    // floor, shell and roof drawings on 11 × 17, landscape; the settlement drawing stays on the report paper
+    await page.selectOption('[data-act="rdraw"]', 'landscape');
+    await page.selectOption('[data-act="rpaper"]', 'tabloid');
+    await page.waitForSelector('#reportRoot .rp-draw.lg');
+    p = await pdfPages();
+    assert.equal(p.filter((x) => x === 'land:1224x792').length, 4, `four 11 × 17 drawings: ${p.join(' ')}`);
+    assert.equal(p.filter((x) => x === 'land:842x595').length, 1, 'the settlement drawing on A4 landscape');
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },
@@ -1824,6 +1831,24 @@ export default {
     const rep = await page.textContent('#issuedReport');
     assert.match(rep, /Revision history\s*Rev\s*Date\s*By\s*Description\s*1\s*\d{4}-\d\d-\d\d/, 'the file save is in the revision history');
     assert.match(rep, /ISSUED/); assert.equal(await page.$('#issuedReport .rp-draft'), null, 'no draft mark on the issued report');
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'report frame: nothing is wider than the printed page (which would shrink the whole report), and drawings fill their page'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => window.tfi.go('report'));
+    await page.waitForSelector('#reportRoot .report h2.rp-ch');
+    await page.emulateMedia({ media: 'print' });
+    for (const [paper, px] of [['Letter', Math.floor((8.5 - 1.2) * 96)], ['A4', Math.floor((8.27 - 1.2) * 96)]]) {
+      await page.setViewportSize({ width: px, height: 900 });
+      await page.waitForTimeout(200);
+      const wide = await page.evaluate(() => { const W = document.documentElement.clientWidth; return [...document.querySelectorAll('#reportRoot .report *')].filter((e) => !e.closest('.rp-draw') && e.getBoundingClientRect().right > W + 1).slice(0, 5).map((e) => `${e.tagName}.${e.className} ${Math.round(e.getBoundingClientRect().width)}px`); });
+      assert.deepEqual(wide, [], `${paper}: elements wider than the printable width`);
+    }
+    // a drawing page: the floor map takes most of the page height left by its heading, legend and caption
+    const r = await page.evaluate(() => { const d = document.querySelector('.rp-draw.map-sec'), s = d.querySelector('.map-wrap svg'); return { page: d.getBoundingClientRect().height, svg: s.getBoundingClientRect().height }; });
+    assert.ok(r.svg > 0.7 * r.page, `floor map ${Math.round(r.svg)} px of ${Math.round(r.page)} px`);
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },

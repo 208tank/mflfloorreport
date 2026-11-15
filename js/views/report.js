@@ -17,7 +17,7 @@ const issuedOf = (j) => (j?.status?.stage === 'complete' && j.issued ? j.issued 
 const optsLoaded = db.getMeta('report:opts').then((o) => { if (o && typeof o === 'object') Object.assign(S.reportOpts, o); }).catch(() => {});
 function storedLayout() {
   const L = layoutOf(S.reportOpts);
-  return { order: L.chapters.map((c) => c.id), appOrder: L.appendices.map((a) => a.id), off: [...L.front, ...L.chapters, ...L.appendices].filter((x) => !x.on).map((x) => x.id), drawOrient: L.drawOrient };
+  return { order: L.chapters.map((c) => c.id), appOrder: L.appendices.map((a) => a.id), off: [...L.front, ...L.chapters, ...L.appendices].filter((x) => !x.on).map((x) => x.id), drawOrient: L.drawOrient, drawPaper: L.drawPaper };
 }
 async function saveOpts() { await db.setMeta('report:opts', S.reportOpts).catch(() => {}); }
 
@@ -27,7 +27,8 @@ function sectionsPanel() {
   return `<details class="rsec" ${S.reportSecOpen ? 'open' : ''}><summary data-act="rsec-toggle">Report sections and layout</summary><div class="rsec-cols">
     <div><h4>Front matter</h4><ul>${L.front.map((x) => row(x, '', 0, 0)).join('')}</ul>
       <h4>Drawings</h4><label class="fld"><span class="lbl">Drawing pages</span><select data-act="rdraw"><option value="landscape" ${L.drawOrient === 'landscape' ? 'selected' : ''}>Landscape</option><option value="portrait" ${L.drawOrient === 'portrait' ? 'selected' : ''}>Portrait</option></select></label>
-      <p class="muted small">Page size: ${S.company.pageSize === 'a4' ? 'A4' : 'Letter'} (Jobs → Company).</p></div>
+      <label class="fld"><span class="lbl">Floor, shell and roof drawings on</span><select data-act="rpaper"><option value="report" ${L.drawPaper === 'report' ? 'selected' : ''}>Report paper (${S.company.pageSize === 'a4' ? 'A4' : 'Letter'})</option><option value="tabloid" ${L.drawPaper === 'tabloid' ? 'selected' : ''}>11 × 17 in (Tabloid / Ledger)</option></select></label>
+      <p class="muted small">Report paper: ${S.company.pageSize === 'a4' ? 'A4' : 'Letter'} (Jobs → Company). Drawings fill their page.</p></div>
     <div><h4>Chapters</h4><ul class="rsec-list">${L.chapters.map((x, i, a) => row(x, 'order', i, a.length, i + 1 + '.')).join('')}</ul></div>
     <div><h4>Appendices</h4><ul class="rsec-list">${L.appendices.map((x, i, a) => row(x, 'appOrder', i, a.length, String.fromCharCode(65 + i) + '.')).join('')}</ul>
       <h4>Content</h4>${[['photos', 'Photos'], ['indSize', 'Indication sizes'], ['provenOnly', 'Hide false calls'], ['plateLabels', 'Plate labels on map'], ['datums', 'Datum marks']].map(([k, l]) => `<label class="chk sm"><input type="checkbox" data-act="ropt" data-k="${k}" ${S.reportOpts[k] ? 'checked' : ''}><span>${l}</span></label>`).join('')}
@@ -103,4 +104,5 @@ onChange([
   } },
   { order: 365, when: (el, act) => act === 'rsec', run: async (el) => relayout((L) => { L.off = L.off.filter((x) => x !== el.dataset.id); if (!el.checked) L.off.push(el.dataset.id); }) },
   { order: 366, when: (el, act) => act === 'rdraw', run: async (el) => relayout((L) => { L.drawOrient = el.value; }) },
+  { order: 367, when: (el, act) => act === 'rpaper', run: async (el) => relayout((L) => { L.drawPaper = el.value; }) },
 ]);
