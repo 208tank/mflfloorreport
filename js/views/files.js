@@ -10,11 +10,13 @@ import { download, fileBase, indicationsCSV, nozzlesCSV, platesCSV, roofCSV, set
 import { itemFloor } from '../geometry.js';
 import { buildLoader, loaderAreas, readLoader } from '../loader.js';
 import { renderMapSVG } from '../map.js';
-import { copyPhotos, FILE_VERSION, migrate, migrationNotes, SCHEMA, uid } from '../model.js';
+import { copyPhotos, FILE_VERSION, migrationNotes, SCHEMA, uid } from '../model.js';
 import { saveErrorText } from '../saver.js';
 import { allDefs, numberDefs } from '../sections.js';
 import { rolloutSVG, SHELL_SVG_STYLE } from '../shell.js';
 import { $, askChoice, askConfirm, toast } from '../ui.js';
+import { validateJobFile } from '../validate.js';
+import { whoAmI } from './history.js';
 import { openJob, showMigrationNotes } from './jobs.js';
 
 /* Job files: one .json file per job (data + photos) that can live in OneDrive, SharePoint, a USB stick…
@@ -170,14 +172,26 @@ async function openJobFile() {
   $('#openFileInput').click();
 }
 
+/** A list of problems for a dialog: the first 12, then how many more. */
+const problemList = (a) => a.slice(0, 12).map((x) => '• ' + x).join('\n') + (a.length > 12 ? `\n• … and ${a.length - 12} more` : '');
+
 export async function importJobFile(file) {
   if (!file) return null;
   try {
     const data = JSON.parse(await file.text());
     if (data.format !== 'tank-floor-inspector' || !data.job) throw new Error('This is not a Tank Floor Inspector job file.');
     if ((data.version || 1) > FILE_VERSION || (data.job.schema || 1) > SCHEMA) throw new Error(`it was saved by a newer version of the app${data.appVersion ? ' (v' + data.appVersion + ')' : ''}. Reload the app to update it (this is v${APP_VERSION}), then open the file again.`);
+    // data integrity stage 6: check the whole file before anything on the device changes
+    const v = await validateJobFile(data, { schema: SCHEMA, fileVersion: FILE_VERSION });
+    const record = async (result) => db.addImport({ at: Date.now(), by: await whoAmI().catch(() => null), kind: 'job-file', fileName: file.name, jobId: data.job.id || null, result, counts: { errors: v.errors.length, warnings: v.warnings.length }, decisions: v.warnings.length && result === 'opened' ? ['warnings accepted'] : [] }).catch(() => {});
+    if (v.errors.length) {
+      await askChoice(`${file.name} was not opened: it has ${v.errors.length === 1 ? 'a problem' : v.errors.length + ' problems'} that would stop the app working with it. Nothing on this device was changed.\n\n${problemList(v.errors)}`, [['ok', 'OK', 'primary']]);
+      record('refused'); return null;
+    }
+    if (v.warnings.length && (await askChoice(`${file.name} has ${v.warnings.length === 1 ? 'one thing' : v.warnings.length + ' things'} to check:\n\n${problemList(v.warnings)}\n\nOpen it anyway? You can correct these in the app.`, [['cancel', 'Cancel'], ['open', 'Open anyway', 'primary']])) !== 'open') { record('cancelled'); return null; }
+    record('opened');
     const notes = migrationNotes(data.job);
-    const job = migrate(data.job);
+    const job = v.job; // migrated, with numbers stored as text converted (validate.js)
     if (data.tank?.id && data.tank.id === job.tankRef && !(await db.getTank(data.tank.id))) { await db.putTank(data.tank); await loadTanks(); }
     const exists = await db.getJob(job.id);
     const oldId = job.id;

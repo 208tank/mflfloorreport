@@ -86,6 +86,21 @@ async function richDevice(page) {
   await page.waitForTimeout(800); // let the open job's save settle
 }
 
+/* ---- job file validation (data integrity stage 6) ---- */
+/** The open demo job as a job file, changed by fn. */
+async function demoFile(page, fn) {
+  const data = await page.evaluate(() => ({ format: 'tank-floor-inspector', version: 1, saved: new Date().toISOString(), rev: 1, job: structuredClone(window.tfi.job()), photos: [] }));
+  data.job.id = 'imported-job'; data.job.info.tankId = 'TK-IMPORT';
+  fn?.(data);
+  return { name: 'tk-import.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(data)) };
+}
+const jobIds = (page) => page.evaluate(() => window.__app.jobs.map((j) => j.id).sort());
+const importRecords = (page) => page.evaluate(async () => {
+  const db = await new Promise((res) => { const r = indexedDB.open('tank-floor-inspector'); r.onsuccess = () => res(r.result); });
+  const all = await new Promise((res) => { const r = db.transaction('imports').objectStore('imports').getAll(); r.onsuccess = () => res(r.result); });
+  db.close(); return all.filter((x) => x.kind === 'job-file').map((x) => [x.result, x.counts.errors, x.counts.warnings]);
+});
+
 export default {
   async 'security: user text from a job file never runs as script on any page'({ browser, url, appPage }) {
     const page = await appPage(browser, url);
@@ -774,6 +789,11 @@ export default {
     const page = await appPage(browser, url, { demo: false });
     await page.evaluate(() => window.tfi.go('jobs'));
     await page.setInputFiles('#openFileInput', { name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ format: 'tank-floor-inspector', version: 1, job: JSON.parse(legacy), photos: [] })) });
+    // this test job was made from a newer one, so its NDE methods point at equipment ids the update replaces:
+    // the import check lists that (stage 6), and the job opens once the user chooses Open anyway
+    await page.waitForSelector('#confirmDlg[open]');
+    assert.match(await page.textContent('#confirmDlg'), /uses equipment that is not in the job’s equipment list/);
+    await page.click('#confirmDlg [data-cf="open"]');
     await page.waitForTimeout(500);
     const t = await page.textContent('#toast');
     assert.match(t, /updated from an older version/);
@@ -1001,6 +1021,52 @@ export default {
     await page.selectOption('select[data-backup-days]', '30');
     await page.waitForFunction(() => /automatic backup is due/i.test(document.querySelector('#backupLast').textContent));
     assert.equal((await backups()).length, 5);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'import validation: a job file with an error is refused with the reason, and nothing changes'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => window.tfi.go('jobs'));
+    const before = await jobIds(page);
+    const file = await demoFile(page, (d) => { d.job.indications[1].id = d.job.indications[0].id; d.job.indications[2].mflPct = 'deep'; });
+    await page.setInputFiles('input[data-act="job-import"]', file);
+    await page.waitForSelector('#confirmDlg[open]');
+    const msg = await page.textContent('#confirmDlg');
+    assert.match(msg, /tk-import\.json was not opened: it has 2 problems.*Nothing on this device was changed/s);
+    assert.match(msg, /share the id .*edits would change both/);
+    assert.match(msg, /MFL % is “deep”, which is not a number/);
+    assert.equal(await page.locator('#confirmDlg [data-cf]').count(), 1, 'no way to open it anyway');
+    await page.click('#confirmDlg [data-cf="ok"]');
+    await page.waitForTimeout(300);
+    assert.deepEqual(await jobIds(page), before);
+    assert.deepEqual(await importRecords(page), [['refused', 2, 0]]);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'import validation: warnings are listed; Cancel changes nothing, Open anyway opens the job'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => window.tfi.go('jobs'));
+    const before = await jobIds(page);
+    const file = await demoFile(page, (d) => { d.job.indications[0].mflPct = 130; d.job.tank.diameter = String(d.job.tank.diameter); });
+    await page.setInputFiles('input[data-act="job-import"]', file);
+    await page.waitForSelector('#confirmDlg[open]');
+    const msg = await page.textContent('#confirmDlg');
+    assert.match(msg, /tk-import\.json has 2 things to check/);
+    assert.match(msg, /MFL % is 130 — expected 0 to 100/);
+    assert.match(msg, /Diameter was stored as the text/);
+    await page.click('#confirmDlg [data-cf="cancel"]');
+    await page.waitForTimeout(300);
+    assert.deepEqual(await jobIds(page), before);
+    await page.setInputFiles('input[data-act="job-import"]', file);
+    await page.waitForSelector('#confirmDlg[open]');
+    await page.click('#confirmDlg [data-cf="open"]');
+    await page.waitForFunction(() => window.tfi.job()?.id === 'imported-job');
+    const stored = await page.evaluate(() => ({ mfl: window.tfi.job().indications[0].mflPct, d: window.tfi.job().tank.diameter }));
+    assert.equal(stored.mfl, 130);
+    assert.equal(typeof stored.d, 'number', 'diameter stored as a number');
+    assert.deepEqual(await importRecords(page), [['cancelled', 0, 2], ['opened', 0, 2]]);
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },

@@ -7,6 +7,24 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Data integrity upgrade — stage 6: job file checks (v3.15.0)
+
+Every job file is checked before it changes anything on this device (**Open job file…**, the Dashboard's **Open**
+for a newer folder copy). The checks run on a copy updated to this version, so an older file is judged the same way.
+
+- **Problems — the file is not opened** (the dialog lists them; nothing on the device changes): not a job file or a
+  newer one; missing or wrong-typed parts; an item without an id; two items sharing an id (indications, features,
+  nozzles, equipment, shell courses, settlement areas, roof points, seal gaps, NDE methods, observations,
+  recommendations, photos) — an edit would change both; text where a number is needed (e.g. MFL % “deep”);
+  a photo without image data; a checksum that doesn't match (when the file carries one); a job that can't be
+  updated to this version.
+- **Things to check — Open anyway or Cancel:** values outside their normal range (MFL % outside 0–100, a thickness or
+  size of 0 or less, a negative X / Y, an angle outside 0–360°); an indication or feature on a plate that isn't in
+  the floor layout; a photo linked to an indication, section or observation that isn't there; a recommendation
+  showing a missing photo; an NDE method using equipment that isn't in the list; two indications with one number;
+  a number stored as text (it is converted to a number when the job is stored, because the calculations need one).
+- Every attempt is recorded in the device's import log: opened, cancelled or refused, with the number of problems.
+
 ## Data integrity upgrade — stage 5: backup and restore (v3.14.0)
 
 **Jobs → Backups** (below the settings):
@@ -761,6 +779,7 @@ every limit is editable.
 | `js/app/images.js`, `js/app/menu.js` | Photo / logo helpers; side menu section button |
 | `js/views/*.js` | One module per screen area: dashboard, registry, jobs, setup, floormap, floorlists, api, shell, nozzles, roof, settle, sections, summary, report, codetables, files, history, backup |
 | `js/backup.js` | Backup file: written in pieces with a checksum, verified, compared with the device |
+| `js/validate.js` | Job file checks before an import: problems and things to check |
 | `js/ui.js` | Element lookup, toasts and in-app dialogs |
 | `js/cards.js` | Job summary cards for the Jobs list, Dashboard and registry |
 | `js/util.js` | HTML escaping (the one place it is defined) |
