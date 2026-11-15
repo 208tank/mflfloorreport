@@ -75,6 +75,19 @@ export function numbering() {
       toc.push({ level: 2, no, title, id });
       return `<h3 class="rp-s" id="${id}"><span class="rp-no">${no}</span>${h(title)}</h3>`;
     },
+    /** A numbered section with no visible heading (a drawing sheet shows its title in the title block): an anchor
+     *  for the contents. */
+    anchor(title) {
+      const no = `${ch}.${++s}`, id = 'sec-' + slug(no);
+      toc.push({ level: 2, no, title, id });
+      return `<a class="rp-anchor" id="${id}"></a>`;
+    },
+    /** A figure number without a caption (drawing sheets carry it in their title block). */
+    figureRef(title) {
+      const no = `${ch}-${++nf}`, id = 'fig-' + slug(no);
+      figures.push({ no, title, id });
+      return { no, id };
+    },
     /** A numbered table title, placed above the table. */
     table(title) {
       const no = `${ch}-${++nt}`, id = 'tbl-' + slug(no);
@@ -263,7 +276,7 @@ export function assembleReport({ job, company, opts, layout, N, chapterBody, app
   if (on('contents')) front.push(`<section class="rp-front"><h2>Contents</h2>${contentsHTML(items, N)}</section>`);
   if (on('key')) front.push(`<section class="rp-front"><h2>Value types and abbreviations</h2>${keyHTML()}</section>`);
   const revText = job.rev ? `Rev ${job.rev} · ${dateOf(job.savedAt)}` : 'Not saved to a job file';
-  const style = FRAME_CSS + pageCSS({ size: company.pageSize, company: company.name, tankId: I.tankId, reportNo: I.reportNo, revText, status: issued ? 'ISSUED' : 'DRAFT', drawOrient: layout.drawOrient, drawPaper: layout.drawPaper });
+  const style = FRAME_CSS + SHEET_CSS + pageCSS({ size: company.pageSize, company: company.name, tankId: I.tankId, reportNo: I.reportNo, revText, status: issued ? 'ISSUED' : 'DRAFT', drawOrient: layout.drawOrient, drawPaper: layout.drawPaper });
   return `<article class="report rp2"><style>${style}</style>${issued ? '' : '<div class="rp-draft" aria-hidden="true">DRAFT</div>'}
   ${front.join('\n')}
   ${chapters.join('\n')}
@@ -271,3 +284,91 @@ export function assembleReport({ job, company, opts, layout, N, chapterBody, app
   ${footer}
 </article>`;
 }
+
+/* ------------------------------------------------------------------ drawing sheets ---
+   Floor, shell and roof drawings print as engineering drawing sheets: a double border with grid references, the
+   drawing with its view title on the left, and on the right the design data, legend, numbered notes and a title
+   block (report improvements, after R1). */
+const ZONES_X = 8, ZONES_Y = 6;
+
+/** info: { company: {name, logo}, client, site, tankId, reportNo, rev, revDate, status, drawnBy, checkedBy } */
+export function sheetHTML(N, info, { cls = '', section, figure, view, scale = 'Not to scale', drawing, wrap = 'map-wrap', data = [], legend = '', notes = [] }) {
+  const anchor = section ? N.anchor(section) : '';
+  const f = N.figureRef(figure);
+  const dwgNo = `${info.reportNo || info.tankId || 'DWG'}-F${f.no}`;
+  const zx = (pos) => `<div class="z z${pos}">${Array.from({ length: ZONES_X }, (_, i) => `<span>${i + 1}</span>`).join('')}</div>`;
+  const zy = (pos) => `<div class="z z${pos}">${Array.from({ length: ZONES_Y }, (_, i) => `<span>${String.fromCharCode(65 + i)}</span>`).join('')}</div>`;
+  const kv = (rows) => `<table class="dwg-kv">${rows.filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => `<tr><th>${h(k)}</th><td>${v}</td></tr>`).join('')}</table>`;
+  const block = (title, body) => (body ? `<div class="dwg-blk"><div class="dwg-bh">${title}</div>${body}</div>` : '');
+  const tb = `<table class="dwg-tb">
+      <tr><td colspan="2" class="tb-co">${info.company?.logo ? `<img src="${info.company.logo}" alt="">` : ''}<b>${h(info.company?.name || '')}</b></td></tr>
+      <tr><td colspan="2" class="tb-title"><span>Title</span>${h(figure)}</td></tr>
+      <tr><td><span>Client</span>${h(info.client || '—')}</td><td><span>Site</span>${h(info.site || '—')}</td></tr>
+      <tr><td><span>Tank</span>${h(info.tankId || '—')}</td><td><span>Report no.</span>${h(info.reportNo || '—')}</td></tr>
+      <tr><td><span>Drawn</span>${h(info.drawnBy || '—')}</td><td><span>Checked</span>${h(info.checkedBy || '—')}</td></tr>
+      <tr><td><span>Scale</span>${h(scale)}</td><td><span>Date</span>${h(info.revDate || '—')}</td></tr>
+      <tr><td class="tb-no"><span>Drawing no.</span>${h(dwgNo)}</td><td class="tb-rev"><span>Rev</span>${h(info.rev ?? '—')}</td></tr>
+      <tr><td><span>Figure</span>${h(f.no)}</td><td class="tb-st">${h(info.status || '')}</td></tr>
+    </table>`;
+  return `<section class="rp-draw dwg ${cls}" id="${f.id}">${anchor}
+    <div class="dwg-frame">${zx('t')}${zy('l')}
+      <div class="dwg-in">
+        <div class="dwg-area"><div class="${wrap}">${drawing}</div><div class="dwg-view"><b>${h(view)}</b><span>${h(scale)}</span></div></div>
+        <aside class="dwg-side">
+          ${block('Design data', data.length ? kv(data) : '')}
+          ${block('Legend', legend)}
+          ${block('Notes', notes.length ? `<ol class="dwg-notes">${notes.map((n) => `<li>${n}</li>`).join('')}</ol>` : '')}
+          ${tb}
+        </aside>
+      </div>${zy('r')}${zx('b')}
+    </div>
+  </section>`;
+}
+
+/** Swatches for drawing legends. */
+export const swatch = {
+  dot: (fill, stroke = fill) => `<svg viewBox="-6 -6 12 12" width="12" height="12"><circle r="4.2" fill="${fill}" stroke="${stroke}" stroke-width="1.4"/></svg>`,
+  line: (stroke, dash = '') => `<svg viewBox="0 -6 18 12" width="18" height="12"><path d="M1 0H17" stroke="${stroke}" stroke-width="1.6" ${dash ? `stroke-dasharray="${dash}"` : ''}/></svg>`,
+  box: (fill, stroke) => `<svg viewBox="-6 -6 12 12" width="12" height="12"><rect x="-5" y="-4" width="10" height="8" fill="${fill}" stroke="${stroke}" stroke-width="1"/></svg>`,
+};
+export const legendList = (items) => `<ul class="dwg-legend">${items.map(([sw, label]) => `<li>${sw}<span>${label}</span></li>`).join('')}</ul>`;
+
+export const SHEET_CSS = `
+.report .dwg-frame { display: grid; grid-template-columns: 14px minmax(0, 1fr) 14px; grid-template-rows: 14px minmax(0, 1fr) 14px; grid-template-areas: ". t ." "l in r" ". b ."; border: 2px solid #1d232b; outline: 0.5px solid #1d232b; outline-offset: -5px; margin: 6px 0 12px; }
+.report .dwg-frame .z { display: flex; font: 8px Arial, Helvetica, sans-serif; color: #3a434e; }
+.report .dwg-frame .z span { flex: 1; display: flex; align-items: center; justify-content: center; }
+.report .dwg-frame .zt { grid-area: t; } .report .dwg-frame .zb { grid-area: b; }
+.report .dwg-frame .zt span + span, .report .dwg-frame .zb span + span { border-left: 0.5px solid #1d232b; }
+.report .dwg-frame .zl, .report .dwg-frame .zr { flex-direction: column; } .report .dwg-frame .zl { grid-area: l; } .report .dwg-frame .zr { grid-area: r; }
+.report .dwg-frame .zl span + span, .report .dwg-frame .zr span + span { border-top: 0.5px solid #1d232b; }
+.report .dwg-in { grid-area: in; display: grid; grid-template-columns: minmax(0, 1fr) 2.15in; border: 1px solid #1d232b; min-height: 0; }
+.report .dwg-area { display: flex; flex-direction: column; padding: 6px; min-width: 0; min-height: 0; }
+.report .dwg-area > div:first-child { flex: 1 1 auto; min-height: 0; }
+.report .dwg-area svg { width: 100%; height: auto; display: block; }
+.report .dwg-view { text-align: center; margin-top: 4px; font-size: 10px; }
+.report .dwg-view b { display: block; text-transform: uppercase; letter-spacing: .06em; text-decoration: underline; text-underline-offset: 2px; }
+.report .dwg-view span { color: #3a434e; font-size: 8.5px; }
+.report .dwg-side { border-left: 1px solid #1d232b; display: flex; flex-direction: column; font-size: 8px; min-height: 0; }
+.report .dwg-blk { border-bottom: 1px solid #1d232b; padding: 3px 5px 4px; }
+.report .dwg-bh { font-weight: 700; text-transform: uppercase; letter-spacing: .05em; text-align: center; border-bottom: 0.5px solid #1d232b; margin: 0 -5px 3px; padding-bottom: 2px; font-size: 8px; }
+.report .dwg-kv { width: 100%; border-collapse: collapse; } .report .dwg-kv th { text-align: left; font-weight: 400; color: #3a434e; padding: 1px 4px 1px 0; vertical-align: top; } .report .dwg-kv td { padding: 1px 0; font-weight: 600; }
+.report .dwg-legend { list-style: none; margin: 0; padding: 0; } .report .dwg-legend li { display: flex; align-items: center; gap: 5px; padding: 1px 0; } .report .dwg-legend svg { flex: none; }
+.report .dwg-notes { margin: 0; padding-left: 14px; } .report .dwg-notes li { margin: 0 0 2px; line-height: 1.3; }
+.report .dwg-tb { margin-top: auto; width: 100%; border-collapse: collapse; border-top: 1.5px solid #1d232b; }
+.report .dwg-tb td { border-bottom: 0.5px solid #1d232b; padding: 2px 4px; vertical-align: top; font-weight: 600; font-size: 8px; } .report .dwg-tb td + td { border-left: 0.5px solid #1d232b; }
+.report .dwg-tb td span { display: block; font-weight: 400; color: #5b6470; font-size: 6.5px; text-transform: uppercase; letter-spacing: .04em; }
+.report .dwg-tb .tb-co { text-align: center; font-size: 10px; padding: 4px; } .report .dwg-tb .tb-co img { display: block; max-height: 28px; max-width: 100%; margin: 0 auto 2px; }
+.report .dwg-tb .tb-title { font-size: 9px; }
+.report .dwg-tb .tb-no { font-size: 10px; } .report .dwg-tb .tb-rev { font-size: 10px; width: 30%; }
+.report .dwg-tb .tb-st { text-align: center; vertical-align: middle; font-size: 10px; letter-spacing: .12em; }
+.report .dwg.port .dwg-in { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+.report .dwg.port .dwg-side { border-left: 0; border-top: 1px solid #1d232b; display: grid; grid-template-columns: 1fr 1fr; }
+.report .dwg.port .dwg-side .dwg-tb { grid-column: 1 / -1; }
+.report .rp-anchor { display: block; height: 0; }
+.report .dwg-side .legend { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; margin: 0; font-size: 8px; } .report .dwg-side .legend .lg { display: flex; align-items: center; gap: 5px; }
+@media print {
+  .report .rp-draw.dwg { display: block; }
+  .report .rp-draw.dwg .dwg-frame { height: 100%; margin: 0; box-sizing: border-box; }
+  .report .dwg-area .map-wrap svg, .report .dwg-area .ro-print svg, .report .dwg-area .roof-print svg { width: 100%; height: 100%; max-height: none; }
+  .report .dwg-area > div:first-child { flex: 1 1 0; }
+}`;

@@ -7,6 +7,22 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Report — drawing sheets (v3.22.0)
+
+The floor plan, shell roll-out and roof plans print as **engineering drawing sheets**:
+
+- a double border with grid references (1–8 across, A–F down);
+- the drawing on the left, filling the sheet, with its view title and scale underneath (for example *FLOOR PLAN —
+  VIEWED FROM ABOVE*, as shown by the scale bar);
+- on the right: **design data** for the view (diameter, thicknesses, plate size, counts, minimum reading …), the
+  **legend**, numbered **notes** (the explanatory notes that were under each drawing), and a **title block** at the
+  bottom: company and logo, drawing title, client, site, tank, report number, drawn (inspector) and checked (peer
+  reviewer), scale, date, **drawing number** (report number + figure, e.g. DEMO-001-F4-1), revision, figure number,
+  and DRAFT or ISSUED.
+
+They follow the drawing options: landscape (panel on the right) or portrait (panel below the drawing), on the report
+paper or 11 × 17. The settlement plan and chart keep their figure layout.
+
 ## Report improvements — R1: the report frame (v3.21.0 – v3.21.1)
 
 The printed report is now a numbered engineering document. Every table, note, drawing and photo it had before is

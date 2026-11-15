@@ -1754,7 +1754,7 @@ export default {
     assert.deepEqual(ch.slice(0, 4), ['1Executive summary', '2Tank identification and design', '3Personnel, equipment and calibration', '4Floor — MFL inspection']);
     assert.ok(await page.$('#reportRoot .rp-cover'), 'cover'); assert.ok(await page.$('#reportRoot .rp-toc'), 'contents');
     assert.match(await page.textContent('#reportRoot'), /Table 4-1 API 653 bottom evaluation by area/);
-    assert.match(await page.textContent('#reportRoot'), /Figure 4-1 Floor plan/);
+    assert.match(await page.textContent('#reportRoot'), /Figure 4-1\s*Floor plan/);
     // contents lists each numbered section with a link to it
     const toc = await page.$$eval('#reportRoot .rp-toc a', (as) => as.map((a) => [a.textContent, document.querySelector(a.getAttribute('href')) ? 'ok' : 'missing']));
     assert.ok(toc.length > 20 && toc.every(([, ok]) => ok === 'ok'), 'every contents entry links to its heading');
@@ -1847,8 +1847,13 @@ export default {
       assert.deepEqual(wide, [], `${paper}: elements wider than the printable width`);
     }
     // a drawing page: the floor map takes most of the page height left by its heading, legend and caption
-    const r = await page.evaluate(() => { const d = document.querySelector('.rp-draw.map-sec'), s = d.querySelector('.map-wrap svg'); return { page: d.getBoundingClientRect().height, svg: s.getBoundingClientRect().height }; });
+    const r = await page.evaluate(() => { const d = document.querySelector('.rp-draw.dwg'), s = d.querySelector('.map-wrap svg'); return { page: d.getBoundingClientRect().height, svg: s.getBoundingClientRect().height }; });
     assert.ok(r.svg > 0.7 * r.page, `floor map ${Math.round(r.svg)} px of ${Math.round(r.page)} px`);
+    // drawing sheets: border with grid references, design data, legend, notes and a title block for floor, shell and roof
+    const sheets = await page.$$eval('#reportRoot .rp-draw.dwg', (ds) => ds.map((d) => ({ zones: d.querySelectorAll('.zt span').length + d.querySelectorAll('.zl span').length, title: d.querySelector('.tb-title')?.textContent.replace('Title', '').trim(), no: d.querySelector('.tb-no')?.textContent.replace('Drawing no.', '').trim(), notes: d.querySelectorAll('.dwg-notes li').length, data: d.querySelectorAll('.dwg-kv tr').length, legend: !!d.querySelector('.dwg-side .legend, .dwg-side .dwg-legend') })));
+    assert.deepEqual(sheets.map((x) => x.title.split(' — ')[0]), ['Floor plan', 'Shell roll-out', 'Fixed roof plan', 'Floating roof plan']);
+    assert.ok(sheets.every((x) => x.zones === 14 && x.notes >= 2 && x.data >= 4 && /^DEMO-001-F\d+-\d+$/.test(x.no)), JSON.stringify(sheets));
+    assert.deepEqual(sheets.map((x) => x.legend), [true, false, true, true]);
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },
