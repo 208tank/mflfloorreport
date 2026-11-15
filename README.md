@@ -34,6 +34,7 @@ registers its screen with `defineView` and its buttons with `onAction` / `onChan
 | 10 | v3.12.9 | Tank setup and the floor builders (`views/setup.js`) |
 | 11 | v3.12.10 | Indication and plate lists (`views/floorlists.js`), API 653 evaluation (`views/api.js`) |
 | 12 | v3.12.11 | Floor map and its editors (`views/floormap.js`) |
+| 13 | v3.12.12 | Job files, exports and the UT loader buttons (`views/files.js`) |
 
 Screen modules may reuse each other's building blocks (the module tests fail on any import loop), but
 they can't import `app.js`, so the few app-level steps they need that haven't moved yet (saving and loading, the
@@ -258,7 +259,8 @@ Nothing in `tests/` or `package.json` is used by the app, which still has no dep
   two copies of the app and reports any difference in the HTML. Used to confirm a refactoring step
   changes nothing on screen.
 - `node tests/tools/actions-diff.mjs <old copy> <new copy> <script>` — runs a scripted sequence of edits
-  (`tests/tools/scripts/`) on both copies and compares the job data, registry and photo records, screen and focus after every step.
+  (`tests/tools/scripts/`) on both copies and compares the job data, registry and photo records, downloaded files, screen and focus after every step
+  (fixed clock, repeatable ids). `for t in $(ls tests/tools/scripts | sed 's/.mjs//'); do …; done` runs them all.
 - After a deliberate, reviewed change to a calculation or the report, re-record the golden outputs
   with `UPDATE_GOLDEN=1 node --test tests/*.test.mjs` and review the diff before committing.
 

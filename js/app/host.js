@@ -5,6 +5,11 @@
 export const host = {
   /** Record a change to the open job: recalculate, schedule the save, count the edit. */
   commit: () => { throw new Error('host.commit used before configureHost'); },
+  /** The save queue, an immediate write, changes not yet in the job file, and the notice after an older job is updated. */
+  saver: null,
+  writeNow: () => { throw new Error('host.writeNow used before configureHost'); },
+  fileChanges: () => { throw new Error('host.fileChanges used before configureHost'); },
+  showMigrationNotes: () => { throw new Error('host.showMigrationNotes used before configureHost'); },
   /** Schedule a save of the open job without recalculating; check device storage after adding photos. */
   scheduleSave: () => { throw new Error('host.scheduleSave used before configureHost'); },
   checkStorage: () => { throw new Error('host.checkStorage used before configureHost'); },
