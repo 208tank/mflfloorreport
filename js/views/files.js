@@ -6,12 +6,13 @@ import { onAction, onChange } from '../app/actions.js';
 import { checkStorage, commit, fileChanges, flushSave, loadJobs, loadTanks, saver, writeNow } from '../app/persist.js';
 import { renderHeader } from '../app/header.js';
 import { addRevision, whoAmI } from '../app/revisions.js';
-import { auditSource, logChange, mergeAudit } from '../app/auditlog.js';
+import { logChange, mergeAudit } from '../app/auditlog.js';
 import { db } from '../db.js';
 import { classifyImport } from '../duplicates.js';
 import { download, fileBase, indicationsCSV, nozzlesCSV, platesCSV, roofCSV, settleCSV, shellCSV, svgForExport, svgToPng } from '../export.js';
 import { itemFloor } from '../geometry.js';
-import { buildLoader, loaderAreas, readLoader } from '../loader.js';
+import { buildLoader, loaderAreas } from '../loader.js';
+import { previewLoader } from './loaderpreview.js';
 import { renderMapSVG } from '../map.js';
 import { copyPhotos, FILE_VERSION, migrate, migrationNotes, SCHEMA, uid } from '../model.js';
 import { packPhoto } from '../issuedfile.js';
@@ -125,7 +126,10 @@ async function checkFileBeforeSave(id, hnd) {
     const msg = `Someone else has saved ${hnd.name} since this device last opened or saved it.\n\n`
       + `File: Rev ${fr}, saved ${when(data.job.savedAt)}\nThis device: based on Rev ${lr}${stored.savedAt ? ', saved ' + when(stored.savedAt) : ''}, last changed ${when(stored.updated)}\n\n`
       + 'Overwriting would replace their changes with yours. Saving a copy keeps both.';
-    return (await askChoice(msg, [['cancel', 'Cancel'], ['open', 'Open their version'], ['ok', 'Overwrite their changes', 'danger-solid'], ['copy', 'Save mine as a copy…', 'primary']])) || 'cancel';
+    const v = (await askChoice(msg, [['cancel', 'Cancel'], ['open', 'Open their version'], ['ok', 'Overwrite their changes', 'danger-solid'], ['copy', 'Save mine as a copy…', 'primary']])) || 'cancel';
+    // stage 10: their version is kept on this device before the file is overwritten, so it can be restored
+    if (v === 'ok') await addRevision(migrate(structuredClone(data.job)), 'before-replace', `Their version in ${hnd.name} (Rev ${fr}), overwritten from this device`).catch((e) => console.warn('Revision', e));
+    return v;
   }
   // Same revision: only a Dashboard stage change can differ. Keep whichever stage was set last.
   const fh = data.job.status?.history || [], lh = stored.status?.history || [];
@@ -263,26 +267,8 @@ export async function importJobFile(file) {
 
 function printMap() { return renderMapSVG(S.job, S.layout, { calc: S.calc, print: true, floorOf: (ft) => itemFloor(S.layout, ft) }); }
 
-async function uploadLoader(file) {
-  let res;
-  try { res = await readLoader(S.job, await file.arrayBuffer()); }
-  catch (err) { toast('Could not read the loader sheet: ' + err.message); return; }
-  const lines = [];
-  if (!res.jobMatch) lines.push(`This sheet was made for ${res.info.tank || 'another tank'} (a different job). Readings are matched by ID, so only items that exist in this job will be updated.`, '');
-  if (res.info.tech) lines.push(`UT technician: ${res.info.tech}${res.info.date ? ' · ' + res.info.date : ''}`);
-  for (const s of res.summary) lines.push(`${s.area}: ${s.added} new, ${s.changed} changed`);
-  if (res.infoChanges) lines.push(`UT technician / instrument details: ${res.infoChanges} update${res.infoChanges > 1 ? 's' : ''}`);
-  if (res.unmatched) lines.push(`${res.unmatched} row${res.unmatched > 1 ? 's' : ''} skipped — the item no longer exists in this job`);
-  if (res.errors.length) lines.push('', `${res.errors.length} cell${res.errors.length > 1 ? 's' : ''} could not be read and will be skipped:`, ...res.errors.slice(0, 8).map((e) => '• ' + e), ...(res.errors.length > 8 ? [`• … and ${res.errors.length - 8} more`] : []));
-  if (!res.total && !res.infoChanges) { toast(`${file.name}: no new or changed readings${res.errors.length ? ` (${res.errors.length} cell${res.errors.length > 1 ? 's' : ''} could not be read)` : ''}.`); return; }
-  if (!(await askConfirm(`Update the report from ${file.name}?\n\n${lines.join('\n')}\n\nBlank cells in the sheet do not erase existing readings.`, { ok: `Update ${res.total} reading${res.total === 1 ? '' : 's'}` }))) return;
-  if (!(await flushSave())) { toast('Nothing was updated: the latest changes could not be saved to this device first.'); return; }
-  auditSource('loader', file.name); // stage 9: these changes are logged as coming from the sheet
-  res.apply();
-  S.job.utLoads = [...(S.job.utLoads || []), { at: Date.now(), file: file.name, count: res.total, tech: res.info.tech || '' }].slice(-50);
-  commit(); await flushSave(); renderAll();
-  toast(`Updated ${res.total} reading${res.total === 1 ? '' : 's'} from ${file.name}.`);
-}
+/** A returned UT loader sheet: preview and decide before anything changes (stage 10, loaderpreview.js). */
+const uploadLoader = (file) => previewLoader(file);
 
 onAction({
   'job-save': async (el, id, e, act) => {

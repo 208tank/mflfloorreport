@@ -162,11 +162,18 @@ function keyed(sheet) {
   return { colKeys, rows };
 }
 
+/** Loader statuses (data integrity stage 10). */
+export const LOADER_STATUS = { new: 'New', same: 'Same', changed: 'Changed', conflict: 'Conflict', unmatched: 'Not in this job', unreadable: 'Unreadable' };
+
 /**
- * Read a completed loader sheet and work out what would change. Nothing is changed until apply() runs.
- * Returns { info, jobMatch, summary: [{area, added, changed}], errors: [text], unmatched, total, apply }.
+ * Read a completed loader sheet and list every reading in it against the job. Nothing is changed until apply().
+ * opts.verified(item) → is the job's current value a verified measurement? A sheet value that differs from a verified
+ * one is a 'conflict' and needs a decision; one that differs from an unverified value is 'changed'.
+ * Returns { info, jobMatch, units, items, errors, apply(decisions) }.
+ *  item: { id, area, where, old, value, kind: 'num' | 'text', status, get(job) → the value in any version of the job }
+ *  decisions: Map(item id → 'sheet' | 'keep' | 'skip'); only 'sheet' changes the job. Blank cells are never listed.
  */
-export async function readLoader(job, buf) {
+export async function readLoader(job, buf, { verified = () => false } = {}) {
   const book = await readXlsx(buf);
   const by = new Map(book.map((s) => [s.name, s]));
   const infoS = by.get('Info');
@@ -176,10 +183,9 @@ export async function readLoader(job, buf) {
   if (info.ver !== LOADER_VER) throw new Error('This is not a UT loader sheet from this app (or it is from a different version).');
   const units = String(info.units || '').startsWith('metric') ? 'metric' : 'imperial';
   const lu = { units };
-  const errors = [], ops = [], summary = new Map();
-  let unmatched = 0;
-  const tally = (area, kind) => { const s = summary.get(area) || { area, added: 0, changed: 0 }; s[kind]++; summary.set(area, s); };
-  const same = (a, b) => a !== null && a !== undefined && b !== null && b !== undefined && Math.abs(+a - +b) < 1e-6;
+  const errors = [], items = [], sets = new Map();
+  const empty = (v) => v === null || v === undefined || v === '';
+  const same = (a, b, kind) => (kind === 'text' ? String(a ?? '') === String(b ?? '') : !empty(a) && !empty(b) && Math.abs(+a - +b) < 1e-6);
 
   const readT = (raw, where) => {
     if (raw === null || raw === undefined || raw === '') return null;
@@ -189,13 +195,19 @@ export async function readLoader(job, buf) {
     if (v < 0) { errors.push(`${where}: negative reading ${v}`); return undefined; }
     return toMm(v, 't', lu);
   };
-  const stage = (area, where, oldV, raw, set) => {
-    const v = readT(raw, where); if (v === null || v === undefined) return;
-    const nv = Math.round(v * 10000) / 10000;
-    if (same(oldV, nv)) return;
-    tally(area, oldV === null || oldV === undefined || oldV === '' ? 'added' : 'changed');
-    ops.push(() => set(nv));
+  const push = (it, set) => {
+    const old = it.get(job);
+    it.old = empty(old) ? null : old;
+    it.status = it.old === null ? 'new' : same(it.old, it.value, it.kind) ? 'same' : verified(it) ? 'conflict' : 'changed';
+    items.push(it); sets.set(it.id, set);
   };
+  const stage = (id, area, where, get, raw, set) => {
+    const v = readT(raw, where);
+    if (v === null) return; // blank: never erases a reading
+    if (v === undefined) { items.push({ id, area, where, old: get(job) ?? null, value: raw, kind: 'num', status: 'unreadable', message: errors.at(-1), get }); return; }
+    push({ id, area, where, value: Math.round(v * 10000) / 10000, kind: 'num', get }, set);
+  };
+  const unmatched = (area, row) => items.push({ id: `${area}|${row.key}`, area, where: String(row.cells.get(1) ?? row.key).trim() || row.key, old: null, value: null, kind: 'num', status: 'unmatched', get: () => null });
 
   /* Shell */
   const sh = keyed(by.get('Shell'));
@@ -209,7 +221,7 @@ export async function readLoader(job, buf) {
         const ak = ck.slice(2), raw = row.cells.get(c);
         if (raw === undefined) continue;
         const where = `Shell ${locs.get(ak)?.label || ak + '°'} at ${fmtElevKey(+zk, job)}`;
-        stage('Shell', where, job.shell?.rd?.[ak]?.[zk], raw, (v) => { const rd = (job.shell.rd = job.shell.rd || {}); (rd[ak] = rd[ak] || {})[zk] = v; });
+        stage(`sh:${ak}:${zk}`, 'Shell', where, (j) => j.shell?.rd?.[ak]?.[zk], raw, (v) => { const rd = (job.shell.rd = job.shell.rd || {}); (rd[ak] = rd[ak] || {})[zk] = v; });
       }
     }
   }
@@ -219,9 +231,12 @@ export async function readLoader(job, buf) {
   if (nz) {
     for (const row of nz.rows) {
       if (!row.key.startsWith('nz:')) continue;
-      const n = (job.nozzles || []).find((x) => x.id === row.key.slice(3));
-      if (!n) { unmatched++; continue; }
-      for (const [c, k] of nz.colKeys) { const raw = row.cells.get(c); if (raw === undefined) continue; stage('Nozzles', `Nozzle ${n.mark || ''} ${k.replace('ut', '')} o'clock`, n[k], raw, (v) => { n[k] = v; }); }
+      const nid = row.key.slice(3), n = (job.nozzles || []).find((x) => x.id === nid);
+      if (!n) { unmatched('Nozzles', row); continue; }
+      for (const [c, k] of nz.colKeys) {
+        const raw = row.cells.get(c); if (raw === undefined) continue;
+        stage(`nz:${nid}:${k}`, 'Nozzles', `Nozzle ${n.mark || ''} ${k.replace('ut', '')} o'clock`, (j) => (j.nozzles || []).find((x) => x.id === nid)?.[k], raw, (v) => { n[k] = v; });
+      }
     }
   }
 
@@ -230,9 +245,12 @@ export async function readLoader(job, buf) {
   if (fx) {
     for (const row of fx.rows) {
       if (!row.key.startsWith('fp:')) continue;
-      const p = (job.roof?.fixed?.pts || []).find((x) => x.id === row.key.slice(3));
-      if (!p) { unmatched++; continue; }
-      for (const [c] of fx.colKeys) { const raw = row.cells.get(c); if (raw === undefined) continue; stage('Fixed roof', `Fixed roof ${p.label || ''}`, p.t, raw, (v) => { p.t = v; }); }
+      const pid = row.key.slice(3), p = (job.roof?.fixed?.pts || []).find((x) => x.id === pid);
+      if (!p) { unmatched('Fixed roof', row); continue; }
+      for (const [c] of fx.colKeys) {
+        const raw = row.cells.get(c); if (raw === undefined) continue;
+        stage(`fp:${pid}`, 'Fixed roof', `Fixed roof ${p.label || ''}`, (j) => (j.roof?.fixed?.pts || []).find((x) => x.id === pid)?.t, raw, (v) => { p.t = v; });
+      }
     }
   }
 
@@ -243,10 +261,10 @@ export async function readLoader(job, buf) {
     for (const row of fl.rows) {
       if (!row.key.startsWith('fl:')) continue;
       const key = row.key.slice(3), p = lay.byKey.get(key);
-      if (!p || p.kind === 'annular') { unmatched++; continue; }
+      if (!p || p.kind === 'annular') { unmatched('Floating roof', row); continue; }
       for (const [c, k] of fl.colKeys) {
         const raw = row.cells.get(c); if (raw === undefined) continue;
-        stage('Floating roof', `Deck plate ${p.label} ${k.toUpperCase()}`, job.roof.floating.ut?.[key]?.[k], raw, (v) => { const ut = (job.roof.floating.ut = job.roof.floating.ut || {}); (ut[key] = ut[key] || {})[k] = v; });
+        stage(`fl:${key}:${k}`, 'Floating roof', `Deck plate ${p.label} ${k.toUpperCase()}`, (j) => j.roof?.floating?.ut?.[key]?.[k], raw, (v) => { const ut = (job.roof.floating.ut = job.roof.floating.ut || {}); (ut[key] = ut[key] || {})[k] = v; });
       }
     }
   }
@@ -256,36 +274,44 @@ export async function readLoader(job, buf) {
   if (fp) {
     for (const row of fp.rows) {
       if (!row.key.startsWith('ind:')) continue;
-      const ind = (job.indications || []).find((x) => x.id === row.key.slice(4));
-      if (!ind) { unmatched++; continue; }
+      const iid = row.key.slice(4), ind = (job.indications || []).find((x) => x.id === iid);
+      if (!ind) { unmatched('Floor prove-up', row); continue; }
+      const getI = (j) => (j.indications || []).find((x) => x.id === iid);
       for (const [c, k] of fp.colKeys) {
         const raw = row.cells.get(c); if (raw === undefined) continue;
         if (k === 'utMethod') {
-          const s = String(raw).trim();
-          if (s && s !== (ind.utMethod || '')) { tally('Floor prove-up', ind.utMethod ? 'changed' : 'added'); ops.push(() => { ind.utMethod = s; }); }
-        } else stage('Floor prove-up', `Indication ${ind.no}`, ind.utMin, raw, (v) => { ind.utMin = v; });
+          const t = String(raw).trim();
+          if (t) push({ id: `ind:${iid}:utMethod`, area: 'Floor prove-up', where: `Indication ${ind.no} method`, value: t, kind: 'text', get: (j) => getI(j)?.utMethod || '' }, (v) => { ind.utMethod = v; });
+        } else stage(`ind:${iid}:utMin`, 'Floor prove-up', `Indication ${ind.no}`, (j) => getI(j)?.utMin, raw, (v) => { ind.utMin = v; });
       }
     }
   }
 
-  /* technician details from the Info sheet */
+  /* technician and instrument details from the Info sheet */
   const txt = (v) => (v === null || v === undefined ? '' : String(v).trim());
-  const infoOps = [];
-  if (txt(info.tech) && txt(info.tech) !== (job.info.utTech || '')) infoOps.push(() => { job.info.utTech = txt(info.tech); });
-  if (txt(info.date) && txt(info.date) !== (job.info.utDate || '')) infoOps.push(() => { job.info.utDate = txt(info.date); });
-  const kit0 = utKit(job);
-  if (txt(info.serial) && txt(info.serial) !== (kit0.ut?.serial || '')) infoOps.push(() => { utKit(job, true).ut.serial = txt(info.serial); });
-  const pcur = [kit0.probe?.make, kit0.probe?.model, kit0.probe?.details].filter(Boolean).join(' ');
-  if (txt(info.probe) && txt(info.probe) !== pcur) infoOps.push(() => { const p = utKit(job, true).probe; p.make = ''; p.model = txt(info.probe); p.details = ''; });
-  const instr = txt(info.instr), cur = [kit0.ut?.make, kit0.ut?.model].filter(Boolean).join(' ');
-  if (instr && instr !== cur) infoOps.push(() => { const u = utKit(job, true).ut; u.make = ''; u.model = instr; });
+  const AREA = 'UT technician and instrument';
+  const text = (id, where, raw, get, set) => { const t = txt(raw); if (t) push({ id, area: AREA, where, value: t, kind: 'text', get: (j) => get(j) || '' }, set); };
+  text('info:tech', 'UT technician', info.tech, (j) => j.info?.utTech, (v) => { job.info.utTech = v; });
+  text('info:date', 'UT date', info.date, (j) => j.info?.utDate, (v) => { job.info.utDate = v; });
+  text('info:serial', 'Instrument serial', info.serial, (j) => utKit(j).ut?.serial, (v) => { utKit(job, true).ut.serial = v; });
+  text('info:probe', 'Probe', info.probe, (j) => { const k = utKit(j).probe; return [k?.make, k?.model, k?.details].filter(Boolean).join(' '); }, (v) => { const p = utKit(job, true).probe; p.make = ''; p.model = v; p.details = ''; });
+  text('info:instr', 'Instrument', info.instr, (j) => { const k = utKit(j).ut; return [k?.make, k?.model].filter(Boolean).join(' '); }, (v) => { const u = utKit(job, true).ut; u.make = ''; u.model = v; });
 
-  const list = [...summary.values()];
   return {
-    info, jobMatch: info.job === job.id, units,
-    summary: list, total: list.reduce((a, s) => a + s.added + s.changed, 0), errors, unmatched, infoChanges: infoOps.length,
-    apply() { ops.forEach((f) => f()); infoOps.forEach((f) => f()); }
+    info, jobMatch: info.job === job.id, units, items, errors,
+    /** Apply the readings decided 'sheet'. Resolves the number changed. */
+    apply(decisions) {
+      let n = 0;
+      for (const it of items) if (decisions.get(it.id) === 'sheet' && sets.has(it.id)) { sets.get(it.id)(it.value); n++; }
+      return n;
+    },
   };
+}
+
+/** The decision each item starts with: new and changed readings use the sheet (they can be unticked), a conflict
+ *  waits for a choice, everything else is left alone. */
+export function defaultDecisions(items) {
+  return new Map(items.map((it) => [it.id, it.status === 'new' || it.status === 'changed' ? 'sheet' : it.status === 'conflict' ? '' : 'skip']));
 }
 
 const fmtElevKey = (z, job) => fmtElev(z, job);

@@ -823,3 +823,18 @@ dialog.wide-dlg { max-width: 96vw; }
 .aud-filters .grow { flex: 1; min-width: 220px; }
 .grid.aud td { vertical-align: top; }
 .grid.aud td.nw { white-space: nowrap; }
+
+/* Data integrity stage 10: the loader sheet preview */
+.lp h3 { margin: 16px 0 6px; font-size: 14px; }
+.lp-t td.c, .lp-t th.c { text-align: center; width: 48px; }
+.lp-t tr.st-same td { color: var(--muted); }
+.lp-t tr.undecided td { background: #f9eeda; }
+.lp-pill { display: inline-block; padding: 1px 8px; margin: 0 4px 4px 0; border-radius: 10px; border: 1px solid var(--line); font-size: 12px; }
+.lp-pill.st-conflict { border-color: #d97706; font-weight: 600; }
+.lp-pill.st-unreadable, .lp-pill.st-unmatched { color: var(--muted); }
+.lp-seen { padding: 6px 10px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line); }
+.lp-skip { font-size: 13px; }
+.lp-acts { position: sticky; bottom: 0; background: var(--bg, #fff); padding-top: 8px; align-items: center; }
+.lp-acts #lpWhy { margin-right: auto; }
+#dlgBody .lp, #dlgBody .lp-acts, #dlgBody .ed-head:has(+ .lp) { padding-left: 16px; padding-right: 16px; }
+#dlgBody .lp-acts { padding-bottom: 12px; }

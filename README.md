@@ -7,6 +7,33 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Data integrity upgrade — stage 10: overwrite protection and the loader sheet preview (v3.19.0)
+
+**A returned UT loader sheet is previewed before anything changes.** Every reading in the sheet is listed against the
+job, grouped by area, with a status:
+
+- **New:** the job has no reading there yet.
+- **Changed:** it differs from a reading that isn't verified yet.
+- **Conflict:** it differs from a **verified** reading. A reading is verified when the job is at Peer review or
+  Complete, or when that value was in a job file saved from this device.
+- **Same:** hidden unless you ask to see them.
+- **Not in this job:** the item was removed after the sheet was made.
+- **Unreadable:** the cell isn't a usable number.
+
+New and changed readings start ticked, and you can untick them. Each conflict needs a choice: keep this job's reading,
+use the sheet, or skip for now. **Apply** stays disabled until every conflict has one. "Use the sheet for all
+conflicts" asks again first. Blank cells never erase a reading.
+
+On Apply, the app keeps a revision of the job as it was, applies the chosen readings and logs them in the audit trail
+(source: Excel loader sheet). It also records the sheet's checksum and every decision. Loading the same sheet again
+says when it was loaded before and lists only what still differs.
+
+**Overwrite protection.** Every way a job can be replaced keeps the job as it was in a revision first: opening a file
+over it, restoring a backup or a revision, recovering after a close, and applying a loader sheet. Now
+**"Overwrite their changes"** (when someone else saved the job file since you last did) also keeps their version on
+this device as a revision before the file is overwritten. Their photos are only in their file, so a restored copy of
+their version lists any photos that are missing.
+
 ## Data integrity upgrade — stage 9: the change audit trail (v3.18.0)
 
 Every change to a job is recorded when it reaches the device: **who** (the inspector name from Settings and this
@@ -876,7 +903,7 @@ every limit is editable.
 | `js/app/auditlog.js` | Recording the audit trail: each write of the open job, other sources, merging a file's entries |
 | `js/app/revisions.js` | Keeping revisions: on file save, stage change, import, restore; the daily checkpoint; content checksum; the Complete lock test |
 | `js/app/images.js`, `js/app/menu.js` | Photo / logo helpers; side menu section button |
-| `js/views/*.js` | One module per screen area: dashboard, registry, jobs, setup, floormap, floorlists, api, shell, nozzles, roof, settle, sections, summary, report, codetables, files, history, backup, revisions, audit |
+| `js/views/*.js` | One module per screen area: dashboard, registry, jobs, setup, floormap, floorlists, api, shell, nozzles, roof, settle, sections, summary, report, codetables, files, history, backup, revisions, audit, loaderpreview |
 | `js/backup.js` | Backup file: written in pieces with a checksum, verified, compared with the device |
 | `js/validate.js` | Job file checks before an import: problems and things to check |
 | `js/audit.js` | Audit entries: changed fields, the checksum chain and its check, rows and filters for the screen |

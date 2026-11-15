@@ -1441,7 +1441,7 @@ export default {
     const ind = await page.evaluate(() => { const i = window.tfi.job().indications.find((x) => x.no); return { id: i.id, no: i.no, ut: i.utMin }; });
     const bytes = await page.evaluate(async (iid) => { const { buildLoader } = await import('./js/loader.js'); const j = structuredClone(window.tfi.job()); j.indications.find((x) => x.id === iid).utMin = 4.321; return [...new Uint8Array(await (await buildLoader(j)).arrayBuffer())]; }, ind.id);
     await page.setInputFiles('#utlInput', { name: 'readings.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(bytes) });
-    await page.waitForSelector('#confirmDlg[open]'); await page.click('#confirmDlg [data-cf="yes"]');
+    await page.waitForSelector('#dlg[open] .lp'); await page.click('[data-lp="apply"]'); // the preview (stage 10)
     await waitFor('loader');
     e = (await entries()).find((x) => x.source === 'loader');
     assert.equal(e.note, 'readings.xlsx');
@@ -1525,6 +1525,129 @@ export default {
     assert.ok(n1 > 0);
     assert.deepEqual(third.errors, []);
     await third.context().close();
+  },
+
+  async 'loader sheet: every reading gets a status, conflicts wait for a decision, and only decided readings apply'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const r = await page.evaluate(async () => {
+      const { buildLoader, defaultDecisions, readLoader } = await import('./js/loader.js');
+      const job = structuredClone(window.tfi.job()), sheet = structuredClone(job), ids = job.indications.slice(0, 4).map((i) => i.id);
+      const ut = (k) => job.indications[k].utMin;
+      sheet.indications[0].utMin = 3.5; sheet.indications[1].utMin = 5; sheet.indications[2].utMin = 2.9; sheet.info.utTech = 'J. Smith';
+      const buf = await (await buildLoader(sheet)).arrayBuffer();
+      job.nozzles.splice(0, 1);
+      const res = await readLoader(job, buf, { verified: (it) => it.id === `ind:${ids[2]}:utMin` });
+      const st = (id) => res.items.find((it) => it.id === id)?.status;
+      const d = defaultDecisions(res.items);
+      const out = {
+        st: [st(`ind:${ids[0]}:utMin`), st(`ind:${ids[1]}:utMin`), st(`ind:${ids[2]}:utMin`), st(`ind:${ids[0]}:utMethod`), st(`ind:${ids[3]}:utMin`)],
+        had: [ut(0), ut(1), ut(2), ut(3)],
+        unmatched: res.items.filter((it) => it.status === 'unmatched').map((it) => it.area),
+        shellSame: res.items.filter((it) => it.area === 'Shell').every((it) => it.status === 'same'),
+        dflt: [d.get(`ind:${ids[0]}:utMin`), d.get(`ind:${ids[2]}:utMin`), d.get(`ind:${ids[0]}:utMethod`)],
+        getOther: res.items.find((it) => it.id === `ind:${ids[0]}:utMin`).get({ indications: [{ id: ids[0], utMin: 9 }] }),
+      };
+      d.set(`ind:${ids[0]}:utMin`, 'keep'); d.set(`ind:${ids[2]}:utMin`, 'keep');
+      res.apply(d);
+      out.after = [job.indications[0].utMin, job.indications[1].utMin, job.indications[2].utMin, job.info.utTech];
+      const again = await readLoader(job, buf);
+      out.again = [again.items.find((it) => it.id === `ind:${ids[1]}:utMin`).status, again.items.find((it) => it.id === `ind:${ids[0]}:utMin`).status];
+      return out;
+    });
+    assert.ok(r.had[0] && !r.had[1] && r.had[2] && !r.had[3], 'fixture: readings 1 and 3 set, 2 and 4 blank');
+    assert.deepEqual(r.st, ['changed', 'new', 'conflict', 'same', undefined], 'changed, new, conflict (verified), same; a blank cell is not listed');
+    assert.deepEqual(r.unmatched, ['Nozzles']);
+    assert.ok(r.shellSame);
+    assert.deepEqual(r.dflt, ['sheet', '', 'skip'], 'unverified changes start as use the sheet; a conflict has no default');
+    assert.equal(r.getOther, 9, 'get() reads the reading from any version of the job');
+    assert.equal(r.after[0], r.had[0], 'unticked: kept'); assert.ok(Math.abs(r.after[1] - 5) < 0.01, 'new: applied');
+    assert.equal(r.after[2], r.had[2], 'conflict kept'); assert.equal(r.after[3], 'J. Smith');
+    assert.deepEqual(r.again, ['same', 'changed'], 'loaded again: what was applied is the same, what was kept still differs');
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'loader sheet: the preview needs a choice for each conflict, keeps a revision, logs it, and recognises the sheet again'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    // verified: the readings were in a saved job file
+    await page.evaluate(() => { delete Window.prototype.showSaveFilePicker; delete window.showSaveFilePicker; });
+    await Promise.all([page.waitForEvent('download'), page.click('#saveFileBtn')]);
+    await page.waitForTimeout(500);
+    const info = await page.evaluate(() => { const j = window.tfi.job(); return { id: j.id, ids: j.indications.slice(0, 2).map((i) => i.id), had: j.indications[0].utMin, no: j.indications[0].no }; });
+    const bytes = await page.evaluate(async (ids) => { const { buildLoader } = await import('./js/loader.js'); const j = structuredClone(window.tfi.job()); j.indications.find((x) => x.id === ids[0]).utMin = 3.5; j.indications.find((x) => x.id === ids[1]).utMin = 5; return [...new Uint8Array(await (await buildLoader(j)).arrayBuffer())]; }, info.ids);
+    const upload = () => page.setInputFiles('#utlInput', { name: 'returned.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(bytes) });
+    await upload();
+    await page.waitForSelector('#dlg[open] .lp');
+    assert.match(await page.textContent("#dlg .lp"), /1 new.*1 conflict/s);
+    assert.equal(await page.$eval('[data-lp="apply"]', (b) => b.disabled), true, 'Apply waits for the conflict');
+    // "use the sheet for all" asks again; cancelling leaves it undecided
+    await page.click('[data-lp="all-sheet"]');
+    await page.waitForSelector('#confirmDlg[open]'); await page.click('#confirmDlg [data-cf="no"]');
+    assert.equal(await page.$eval('[data-lp="apply"]', (b) => b.disabled), true);
+    // nothing has changed yet
+    assert.equal(await page.evaluate(() => window.tfi.job().indications[1].utMin ?? null), null);
+    await page.selectOption(`[data-lp-dec="ind:${info.ids[0]}:utMin"]`, 'keep');
+    assert.equal(await page.$eval('[data-lp="apply"]', (b) => b.disabled), false);
+    assert.match(await page.textContent('[data-lp="apply"]'), /Apply 1 reading/);
+    await page.click('[data-lp="apply"]');
+    await page.waitForFunction(() => window.tfi.job().indications[1].utMin > 0);
+    const r = await page.evaluate(async (jid) => {
+      const { db } = await import('./js/db.js');
+      for (let i = 0; i < 60; i++) { const imp = (await db.allImports()).filter((x) => x.kind === 'loader' && x.result === 'applied'); if (imp.length) break; await new Promise((res) => setTimeout(res, 50)); }
+      const revs = await db.jobRevisions(jid), imp = (await db.allImports()).find((x) => x.kind === 'loader' && x.result === 'applied'), audit = await db.jobAudit(jid);
+      const before = revs.find((x) => x.reason === 'before-replace' && /returned\.xlsx/.test(x.note));
+      return { before: before && before.job.indications[1].utMin == null, imp: imp && { applied: imp.applied, decisions: imp.decisions.map((d) => [d.status, d.decision]).sort(), hash: imp.hash?.length }, audit: audit.filter((e) => e.source === 'loader').map((e) => e.changes.map((c) => c.field)) };
+    }, info.id);
+    assert.ok(r.before, 'a before-replace revision holds the job as it was');
+    assert.deepEqual(r.imp, { applied: 1, decisions: [['conflict', 'keep'], ['new', 'sheet']], hash: 64 });
+    assert.deepEqual(r.audit.map((f) => f.filter((x) => x !== 'utLoads')), [['utMin']], 'the reading, and the load in the job’s list of loads');
+    assert.equal(await page.evaluate(() => window.tfi.job().indications[0].utMin), info.had, 'the verified reading is kept');
+    // the same sheet again: recognised, and only what still differs is listed
+    await upload();
+    await page.waitForSelector('#dlg[open] .lp');
+    const txt = await page.textContent('#dlg .lp');
+    assert.match(txt, /This sheet was loaded on/); assert.match(txt, /1 conflict/); assert.doesNotMatch(txt, /\d+ new/);
+    await page.click('#dlg [data-lp="cancel"]');
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'overwrite protection: overwriting a job file someone else saved keeps their version as a revision'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(async () => { // a linked job file (handles kept in memory, as in the format test)
+      const { db } = await import('./js/db.js'), id = window.tfi.job().id;
+      const root = await navigator.storage.getDirectory(), hnd = await root.getFileHandle('theirs.json', { create: true });
+      const handles = new Map(), get = db.getMeta.bind(db), set = db.setMeta.bind(db);
+      db.getMeta = async (k) => (k.startsWith('fh:') ? handles.get(k) : get(k));
+      db.setMeta = async (k, v) => (k.startsWith('fh:') ? handles.set(k, v) : set(k, v));
+      await db.setMeta('fh:' + id, hnd);
+      window.__hnd = hnd;
+    });
+    await page.keyboard.press('Control+s');
+    await page.evaluate(async () => { for (let i = 0; i < 100 && !(await window.__hnd.getFile()).size; i++) await new Promise((r) => setTimeout(r, 50)); });
+    await page.waitForTimeout(600);
+    // someone else saves Rev 2 of the file with another client name
+    await page.evaluate(async () => {
+      const f = JSON.parse(await (await window.__hnd.getFile()).text());
+      f.job.rev = 2; f.rev = 2; f.job.savedAt = Date.now() + 1000; f.job.info.client = 'Their client';
+      const w = await window.__hnd.createWritable(); await w.write(JSON.stringify(f)); await w.close();
+    });
+    await page.evaluate(() => window.tfi.go('setup'));
+    await page.fill('input[data-bind="info.client"]', 'My client'); await page.press('input[data-bind="info.client"]', 'Tab');
+    await page.waitForTimeout(400);
+    await page.keyboard.press('Control+s');
+    await page.waitForSelector('#confirmDlg[open]');
+    assert.match(await page.textContent('#confirmDlg'), /Someone else has saved/);
+    await page.click('#confirmDlg [data-cf="ok"]');
+    await page.evaluate(async () => { for (let i = 0; i < 100; i++) { try { if (JSON.parse(await (await window.__hnd.getFile()).text()).job.info.client === 'My client') return; } catch { /* being written */ } await new Promise((r) => setTimeout(r, 50)); } });
+    const kept = await page.evaluate(async () => {
+      const { db } = await import('./js/db.js');
+      const r = (await db.jobRevisions(window.tfi.job().id)).find((x) => x.reason === 'before-replace' && /Their version in theirs\.json \(Rev 2\)/.test(x.note));
+      return r && { client: r.job.info.client };
+    });
+    assert.deepEqual(kept, { client: 'Their client' });
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
   },
 
 };
