@@ -554,13 +554,19 @@ one `.json` file holding all the job data and its photos.
 - **Save conflicts (v3.5):** before Save overwrites a job file, the app checks that nobody else has
   saved it since this computer last opened or saved it. If someone has, it shows both revisions and
   asks: **Save mine as a copy** (keeps both), **Open their version**, **Overwrite their changes** or
-  Cancel. A stage change made from a teammate's Dashboard is not a conflict: it is merged into your
+  Cancel. Overwriting keeps their version on this device as a revision first (v3.19). A stage change made from a teammate's Dashboard is not a conflict: it is merged into your
   save instead of being overwritten.
 - A job file saved by a newer version of the app is refused with a message to reload and update, so
   an older installed copy can't re-save it and lose the newer data. Older jobs opened in a newer
   version are updated, and the app says what changed (e.g. the API 653 patch margin).
 - Clearing the browser's site data deletes jobs that haven't been saved to a file. The app asks the
-  browser to keep its data permanently and warns when the device's storage is over 80 % full.
+  browser to keep its data permanently, warns at 70, 85 and 95 % full, and refuses new photos at 95 %
+  (Jobs → *Storage on this device*). **Back up this device** (Jobs page) saves every job, photo, revision
+  and audit entry in one file.
+- **History on the device (v3.17 – v3.20):** each job keeps revisions (Revisions screen: compare, view the
+  report as it was, restore) and an audit trail of every change (Audit trail screen). A Complete job is
+  locked with its issued report frozen; Reopen asks for a reason. See the *Data integrity upgrade* sections
+  at the top.
 
 ## Workflow
 
@@ -579,6 +585,8 @@ one `.json` file holding all the job data and its photos.
 5. **API 653** — set Oᵣ, rate basis, minimum thickness limits, coating/CP options. Review the
    results and the repair list.
 6. **Report** → *Print / Save PDF*, and **Export** for CSV (opens in Excel), SVG/PNG map, or backup.
+7. Move the job through the stages (Setup or the Dashboard). Marking it **Complete** issues the report:
+   it is frozen as printed and the job becomes read-only until it is reopened with a reason.
 
 ## Building the floor: automatic grid or row by row
 
@@ -855,11 +863,13 @@ the completed workbook is uploaded and the report updates.
    columns tie each cell back to its station, plate, nozzle or indication — leave them alone.
 2. **The UT technician** fills in the yellow cells (Excel, LibreOffice or Google Sheets saved as
    .xlsx) and returns the file.
-3. **Upload** — *Export → Upload completed UT loader sheet…* (or **UT loader ↑**). The app checks
-   the sheet belongs to this job, then shows a summary before changing anything: new and changed
-   readings per area, technician details, rows for items that no longer exist, and any cells it
-   could not read (e.g. "n/a"). **Blank cells never erase readings already in the job.** Uploading
-   the same sheet again changes nothing. Each upload is logged in the job.
+3. **Upload** — *Export → Upload completed UT loader sheet…* (or **UT loader ↑**). The app shows a
+   **preview** before changing anything (v3.19): every reading in the sheet against the job, by area, as
+   new, changed, conflict (it differs from a verified reading), same, not in this job or unreadable.
+   New and changed readings start ticked; each conflict needs a choice (keep, use the sheet, or skip)
+   before **Apply** is enabled. **Blank cells never erase readings already in the job.** Apply keeps a
+   revision of the job as it was, logs the changes in the audit trail and records every decision; the
+   same sheet loaded again is recognised and shows only what still differs. See *stage 10* above.
 
 Units follow the job (inches or millimetres); the sheet records which it used.
 
@@ -892,7 +902,9 @@ MRT = min(RTbc, RTip) − Or × (StPr + UPr)
 - **RTip / RTbc** — minimum remaining thickness of unrepaired product-side / soil-side locations
   (nominal or the plate's general UT if there are none).
 - **StPr / UPr** — maximum linear corrosion rate of unrepaired product-side / soil-side locations:
-  wall loss ÷ rate basis (years). Set to 0 by the *coated* / *effective CP* options, or overridden.
+  wall loss ÷ rate basis (years). The *coated* / *effective CP* options and overrides apply as set out
+  in *Calculation corrections (v3.6.0)* above (for example, recorded product-side pitting keeps StPr on
+  a coated floor unless the engineer confirms the coating basis).
 - Remaining thickness per indication comes from UT; otherwise nominal − VT pit depth (product side);
   otherwise the MFL % estimate (flagged in the report).
 - "Both sides" splits loss into VT pit depth (product side) and the remainder (soil side).
@@ -900,8 +912,8 @@ MRT = min(RTbc, RTip) − Or × (StPr + UPr)
   from what's left, and this repeats until everything passes; unneeded repairs are then pruned.
   **Yes** forces a repair, **No** keeps the location in service and flags it if below MRT.
 - Limits are separate for bottom plates, annular plates and the critical zone (within 3 in / 75 mm
-  of the shell; default limit = ½ original plate thickness or ½ lower shell course t-min, not less
-  than 0.1 in). The limit presets for bottom plates are 0.10 in (no leak detection/containment) and
+  of the shell; since v3.6.0 the default limit is the smaller of 0.118 in (3 mm) and ½ course 1
+  t-min, not less than 0.10 in (2.5 mm), and an entered limit needs a reason). The limit presets for bottom plates are 0.10 in (no leak detection/containment) and
   0.05 in (leak detection & containment, or a reinforced lining > 0.05 in).
 
 These defaults follow API 653 §4.4.7 as commonly applied. **Check them against the edition you
@@ -927,7 +939,7 @@ every limit is editable.
 | `js/app/auditlog.js` | Recording the audit trail: each write of the open job, other sources, merging a file's entries |
 | `js/app/revisions.js` | Keeping revisions: on file save, stage change, import, restore; the daily checkpoint; content checksum; the Complete lock test |
 | `js/app/images.js`, `js/app/menu.js` | Photo / logo helpers; side menu section button |
-| `js/views/*.js` | One module per screen area: dashboard, registry, jobs, setup, floormap, floorlists, api, shell, nozzles, roof, settle, sections, summary, report, codetables, files, history, backup, revisions, audit, loaderpreview |
+| `js/views/*.js` | One module per screen area: dashboard, registry, jobs, setup, floormap, floorlists, api, shell, nozzles, roof, settle, sections, summary, report, codetables, files, history, backup, revisions, audit, loaderpreview, storage |
 | `js/backup.js` | Backup file: written in pieces with a checksum, verified, compared with the device |
 | `js/validate.js` | Job file checks before an import: problems and things to check |
 | `js/prune.js` | Which revisions are kept (15 checkpoints, 5 others, never file-save or issued) and which binned photos go |
@@ -943,7 +955,9 @@ every limit is editable.
 | `js/map.js` | SVG floor map and pan/zoom |
 | `js/report.js` | Printable report |
 | `js/export.js` | CSV, SVG/PNG export |
-| `js/db.js` | IndexedDB storage (jobs, photos, light job cards, registry, settings); job + photo writes are one transaction |
+| `js/db.js` | IndexedDB storage (jobs, photos and the photo bin, light job cards, registry, settings, revisions, audit, imports); job + photo writes are one transaction |
+| `js/loader.js`, `js/xlsx.js` | UT loader sheet: building the workbook, reading it back into a list of readings with a status |
+| `js/saver.js`, `js/journal.js`, `js/migrations.js`, `js/integrity.js` | Save queue, crash recovery copy, numbered migrations, the database check |
 | `js/model.js`, `js/demo.js` | Job model, demo data |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA install and offline support |
 | `tests/` | Golden and browser tests (not used by the app) |
