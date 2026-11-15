@@ -5,6 +5,7 @@ import { renderAll, renderView } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
 import { checkStorage, commit, fileChanges, flushSave, loadJobs, loadTanks, saver, writeNow } from '../app/persist.js';
 import { renderHeader } from '../app/header.js';
+import { addRevision, whoAmI } from '../app/revisions.js';
 import { db } from '../db.js';
 import { classifyImport } from '../duplicates.js';
 import { download, fileBase, indicationsCSV, nozzlesCSV, platesCSV, roofCSV, settleCSV, shellCSV, svgForExport, svgToPng } from '../export.js';
@@ -18,7 +19,6 @@ import { rolloutSVG, SHELL_SVG_STYLE } from '../shell.js';
 import { $, askChoice, askConfirm, toast } from '../ui.js';
 import { sha256 } from '../util.js';
 import { validateJobFile } from '../validate.js';
-import { addRevision, whoAmI } from './history.js';
 import { openJob, showMigrationNotes } from './jobs.js';
 
 /* Job files: one .json file per job (data + photos) that can live in OneDrive, SharePoint, a USB stick…
@@ -146,6 +146,7 @@ export async function saveJobFile(id = S.job?.id, saveAs = false) {
       await rememberFile(id, hnd, true);
       if (S.job?.id === id) S.fileName = hnd.name;
       await applyStamp(id, job, counted);
+      await addRevision(job, 'file-save', `Rev ${stamp.rev} — ${hnd.name}`).catch((e) => console.warn('Revision', e));
       toast(`Saved ${hnd.name} — Rev ${stamp.rev}`);
       return;
     } catch (e) {
@@ -159,6 +160,7 @@ export async function saveJobFile(id = S.job?.id, saveAs = false) {
   for await (const c of chunks()) parts.push(c);
   download(name, new Blob(parts, { type: 'application/json' }), 'application/json');
   await applyStamp(id, job, counted);
+  await addRevision(job, 'file-save', `Rev ${stamp.rev} — ${name} (downloaded)`).catch((e) => console.warn('Revision', e));
   toast(`Downloaded ${name} (Rev ${stamp.rev}). Move it into your OneDrive folder to share it.`);
 }
 
@@ -222,6 +224,7 @@ export async function importJobFile(file) {
     const photos = job.id === oldId ? data.photos || [] : copyPhotos(job, data.photos || []);
     if (exists && job.id === oldId) await addRevision(exists, 'before-replace', `Before opening ${file.name} over it`);
     await db.replaceJob(job, photos, exists && job.id === oldId ? oldId : null);
+    await addRevision(job, 'import', `Opened from ${file.name}`).catch((e) => console.warn('Revision', e));
     record(exists ? (job.id === oldId ? 'replaced' : 'kept-both') : dup.kind === 'possible' ? 'added-separately' : 'opened', job.id);
     await loadJobs(); toast(`Opened ${file.name}`); await openJob(job.id); checkStorage();
     if (notes.length) showMigrationNotes(notes);

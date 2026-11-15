@@ -7,6 +7,30 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Data integrity upgrade — stage 8a: revisions and the Revisions screen (v3.17.0)
+
+A revision is a complete, checksummed copy of the job kept on this device. Revisions are never changed. One is now kept:
+
+- each time the job is **saved to a file** (with the file's revision number);
+- each time its **stage changes** (from Setup, the header or the Dashboard), e.g. *Upcoming → Reporting*;
+- when a job file is **opened**, restored **from a backup**, or **recovered** after an unexpected close;
+- **before** anything replaces it (a newer file, a restored revision), and before a migration (stage 11);
+- once a day, a **daily checkpoint** of the job as it was before the day's first change. It is skipped when the
+  newest revision already holds exactly that job.
+
+**Revisions** (in the menu, above Report) lists them, newest first, with who made them, the file revision and whether
+the checksum still matches. For each one:
+
+- **Report** shows the report as it was then, read-only.
+- **Compare**: tick one revision to compare it with the job now, or two to compare them with each other. The list
+  shows each changed field (area, item, field, before and after); added, removed and moved items are matched by id,
+  and shell readings by elevation.
+- **Restore** puts the job back as it was in that revision. The job as it is now is kept as a revision first, the file
+  revision number isn't taken back, and photos that are no longer on this device are reported. A Complete job can't be
+  restored until it is reopened (stage 8b).
+
+Pruning old revisions (keep the last 15 checkpoints and 5 others, never the issued one) comes with stage 10.
+
 ## Data integrity upgrade — stage 7: duplicate imports (v3.16.0)
 
 After its checks (stage 6), a job file is compared with what is already on this device:
@@ -790,10 +814,12 @@ every limit is editable.
 | `js/app/persist.js` | Saving the open job: recalculation, save queue, crash journal, change count, `commit` |
 | `js/app/header.js` | Header, job file badge, revision text |
 | `js/app/folder.js` | Linked jobs folder: link, scan, write a stage back |
+| `js/app/revisions.js` | Keeping revisions: on file save, stage change, import, restore; the daily checkpoint; content checksum; the Complete lock test |
 | `js/app/images.js`, `js/app/menu.js` | Photo / logo helpers; side menu section button |
-| `js/views/*.js` | One module per screen area: dashboard, registry, jobs, setup, floormap, floorlists, api, shell, nozzles, roof, settle, sections, summary, report, codetables, files, history, backup |
+| `js/views/*.js` | One module per screen area: dashboard, registry, jobs, setup, floormap, floorlists, api, shell, nozzles, roof, settle, sections, summary, report, codetables, files, history, backup, revisions |
 | `js/backup.js` | Backup file: written in pieces with a checksum, verified, compared with the device |
 | `js/validate.js` | Job file checks before an import: problems and things to check |
+| `js/revdiff.js` | Field-by-field comparison of two versions of a job |
 | `js/duplicates.js` | Is an imported job already here, a different version, or possibly the same inspection twice |
 | `js/ui.js` | Element lookup, toasts and in-app dialogs |
 | `js/cards.js` | Job summary cards for the Jobs list, Dashboard and registry |

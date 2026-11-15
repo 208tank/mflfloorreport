@@ -800,3 +800,7 @@ dialog.wide-dlg { max-width: 96vw; }
 /* Backups card (data integrity stage 5) */
 .backup-auto { max-width: 24rem; margin-top: .75rem; }
 .rs-dlg select { min-width: 17rem; }
+
+/* Revisions (data integrity stage 8) */
+.grid.revs td { vertical-align: top; }
+.rev-report { max-height: 70vh; overflow: auto; border: 1px solid var(--line, #ddd); padding: 12px; }

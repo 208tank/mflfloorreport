@@ -6,6 +6,7 @@ import { onAction, onChange } from '../app/actions.js';
 import { appReload, changesText, checkStorage, fileChanges, leaveJobOk, loadJobs, recompute, scheduleSave, STORAGE_WARN } from '../app/persist.js';
 import { renderHeader } from '../app/header.js';
 import { resizeImage } from '../app/images.js';
+import { addRevision } from '../app/revisions.js';
 import { indCount } from '../cards.js';
 import { db, requestPersistence } from '../db.js';
 import { makeDemo } from '../demo.js';
@@ -14,7 +15,7 @@ import { copyPhotos, migrate, migrationNotes, newJob, SCHEMA, uid } from '../mod
 import { $, askConfirm, toast } from '../ui.js';
 import { esc as h } from '../util.js';
 import { backupCardHTML } from './backup.js';
-import { addRevision, integrityHTML, renderIntegrity } from './history.js';
+import { integrityHTML, renderIntegrity } from './history.js';
 
 function viewJobs() {
   // the open job's card may lag behind its latest change: show the open job's own values

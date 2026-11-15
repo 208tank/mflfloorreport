@@ -1,29 +1,17 @@
-// Revisions, crash recovery and the device data check (refactoring step 6). The data check's panel is on the
+// Baseline revisions, crash recovery and the device data check (refactoring step 6; revisions themselves are in
+// js/app/revisions.js). The data check's panel is on the
 // Jobs screen (Settings); its buttons are handled here. Audit logging (data integrity stage 9) will join this module.
-import { APP_VERSION, S } from '../app/state.js';
+import { S } from '../app/state.js';
 import { go } from '../app/nav.js';
 import { onAction } from '../app/actions.js';
 import { journal, loadJobs } from '../app/persist.js';
+import { addRevision } from '../app/revisions.js';
 import { db, lite } from '../db.js';
 import { checkIntegrity, SAFE_REPAIRS } from '../integrity.js';
 import { recoveryDiff } from '../journal.js';
-import { migrate, uid } from '../model.js';
+import { migrate } from '../model.js';
 import { $, askChoice, askConfirm, toast } from '../ui.js';
 import { esc as h, sha256 } from '../util.js';
-
-/** Who is making changes on this device: the inspector name from Settings and a per-install id.
- *  Shaped so a signed-in identity (Microsoft Entra ID) can replace it later. */
-export async function whoAmI() {
-  let id = await db.getMeta('installId').catch(() => null);
-  if (!id) { id = 'dev-' + uid(); await db.setMeta('installId', id).catch(() => {}); }
-  return { name: S.company?.inspector || '', id, method: 'device' };
-}
-
-/** Add an immutable revision of a stored job (the job as given, without photos). */
-export async function addRevision(job, reason, note = '') {
-  const keys = await db.jobPhotoKeys(job.id).catch(() => []);
-  return db.addRevision({ jobId: job.id, rev: job.rev || 0, at: Date.now(), by: await whoAmI(), reason, note, appVersion: APP_VERSION, schema: job.schema || 1, hash: await sha256(job), job, photoIds: keys });
-}
 
 /** After the history stores are added, give every existing job one baseline revision (once). */
 export async function baselineRevisions() {
@@ -48,6 +36,7 @@ export async function recoverAfterCrash() {
     if (choice === 'restore') {
       await addRevision(stored, 'before-replace', 'Before restoring changes after an unexpected close');
       await db.putJob(migrate(e.job));
+      await addRevision(migrate(e.job), 'restore', 'Recovered after an unexpected close').catch((err) => console.warn('Revision', err));
       restored++;
     }
     if (choice === 'restore' || choice === 'discard') journal.remove(e.job.id); // no answer (dialog dismissed): ask again next time

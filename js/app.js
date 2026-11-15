@@ -9,6 +9,7 @@ import { onChange } from './app/actions.js';
 import { appReload, commit, configurePersist, flushNow, flushSave, journal, loadJobs, loadTanks, recompute, saver } from './app/persist.js';
 import { renderHeader, showFileState } from './app/header.js';
 import { writeStageToFile } from './app/folder.js';
+import { stageRevision } from './app/revisions.js';
 import { measuredFromDrawing, rowsFromGrid } from './builder.js';
 import { db, dbConfig } from './db.js';
 import { setPath } from './model.js';
@@ -32,6 +33,7 @@ import './views/report.js';
 import './views/dashboard.js';
 import './views/registry.js';
 import './views/summary.js';
+import './views/revisions.js';
 
 /* Test hooks (window.tfi is used by the automated tests; window.__app is handy in the console). */
 window.tfi = { go: (v) => go(v), zoom: (x, y, r) => { S.mapCtl?.focus(x, y, r); drawMap(); }, job: () => S.job, commit: () => { commit(); renderView(); } }; // used by the automated tests
@@ -55,9 +57,10 @@ onChange([
     if (path === 'layout.annN' && v !== null) v = Math.max(1, Math.round(v));
     const before = S.layout;
     if (path === 'layout.mode' && v === 'measured' && !(S.job.layout.mrows || []).length) S.job.layout.mrows = measuredFromDrawing(S.job);
-    if (path === 'status.stage' && S.job.status?.stage !== v) (S.job.status.history = S.job.status.history || []).push({ stage: v, at: Date.now() });
+    const fromStage = S.job.status?.stage;
+    if (path === 'status.stage' && fromStage !== v) (S.job.status.history = S.job.status.history || []).push({ stage: v, at: Date.now() });
     setPath(S.job, path, v);
-    if (path === 'status.stage') { commit(); renderHeader(); writeStageToFile(S.job.id, v); }
+    if (path === 'status.stage') { commit(); renderHeader(); writeStageToFile(S.job.id, v); if (fromStage !== v) stageRevision(S.job, fromStage, v); }
     if (path === 'layout.mode' && v === 'custom' && !(S.job.layout.rows || []).length) { recompute(); S.job.layout.rows = rowsFromGrid(S.job); }
     commit();
     if (path.startsWith('layout.') || path === 'tank.diameter') relocateOrphans(before);

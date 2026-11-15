@@ -6,6 +6,7 @@ import { onAction, onChange } from '../app/actions.js';
 import { commit, flushSave, loadJobs } from '../app/persist.js';
 import { renderHeader } from '../app/header.js';
 import { canDir, dashInit, linkFolder, scanFolder, writeStageToFile } from '../app/folder.js';
+import { stageRevision } from '../app/revisions.js';
 import { jobCard } from '../cards.js';
 import { db } from '../db.js';
 import { defaultStatus, STAGE_LABEL, STAGES } from '../model.js';
@@ -18,15 +19,19 @@ export async function setStage(id, stage) {
   const now = Date.now();
   if (S.job?.id === id) {
     if (S.job.status.stage === stage) return;
+    const from = S.job.status.stage;
     S.job.status.stage = stage; (S.job.status.history = S.job.status.history || []).push({ stage, at: now });
     commit(); await flushSave(); renderHeader();
+    await stageRevision(S.job, from, stage);
   } else {
     const j = await db.getJob(id);
     if (j) {
       j.status = { ...defaultStatus(), ...(j.status || jobCard(j)) };
       if (j.status.stage === stage) return;
+      const from = j.status.stage;
       j.status.stage = stage; j.status.history = [...(j.status.history || []), { stage, at: now }]; j.updated = now;
       await db.putJob(j);
+      await stageRevision(j, from, stage);
     }
   }
   const f = S.dash.files.get(id);

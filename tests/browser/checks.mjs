@@ -392,10 +392,11 @@ export default {
     assert.match(msg, /TK-101/); assert.match(msg, /Shell/);
     await b.click('#confirmDlg [data-cf="restore"]');
     await b.waitForFunction(() => window.tfi?.job());
-    const r = await b.evaluate(async (jid) => { const { db } = await import('./js/db.js'); const revs = await db.jobRevisions(jid); return { client: (await db.getJob(jid)).info.client, open: window.tfi.job().info.client, rev: revs.at(-1)?.reason, prevClient: revs.at(-1)?.job.info.client, journal: Object.keys(localStorage).filter((k) => k.startsWith('tfi-journal:')) }; }, id);
+    const r = await b.evaluate(async (jid) => { const { db } = await import('./js/db.js'); const revs = await db.jobRevisions(jid); return { client: (await db.getJob(jid)).info.client, open: window.tfi.job().info.client, rev: revs.at(-2)?.reason, last: revs.at(-1)?.reason, prevClient: revs.at(-2)?.job.info.client, journal: Object.keys(localStorage).filter((k) => k.startsWith('tfi-journal:')) }; }, id);
     assert.equal(r.client, 'Recovered client');
     assert.equal(r.open, 'Recovered client');
     assert.equal(r.rev, 'before-replace', 'the device copy before recovery is kept as a revision');
+    assert.equal(r.last, 'restore', 'the recovered job is kept as a revision too');
     assert.notEqual(r.prevClient, 'Recovered client');
     assert.deepEqual(r.journal, []);
     // not offered again
@@ -924,12 +925,16 @@ export default {
     const fresh = await appPage(browser, url, { demo: false });
     const msg = await restoreBackup(fresh, file);
     assert.match(msg, /Restored 2 jobs from the backup/);
-    const after = await storeSnapshot(fresh);
+    const after = await storeSnapshot(fresh), afterRaw = { ...after };
+    // each restored job gains one 'restore' revision on top of the revisions it had; the rest is identical
+    const restored = JSON.parse(after.revisions).filter((r) => r.reason === 'restore');
+    assert.deepEqual(restored.map((r) => r.jobId).sort(), JSON.parse(before.jobs).map((j) => j.id).sort(), 'one restore revision per job');
+    after.revisions = JSON.stringify(JSON.parse(after.revisions).filter((r) => r.reason !== 'restore'));
     for (const k of Object.keys(before)) assert.equal(after[k], before[k], `store ${k} differs after restore`);
     // restoring the same backup again changes nothing
     const again = await restoreBackup(fresh, file);
     assert.match(again, /Nothing needed restoring/);
-    assert.deepEqual(await storeSnapshot(fresh), after);
+    assert.deepEqual(await storeSnapshot(fresh), afterRaw);
     assert.deepEqual(fresh.errors, []);
     await fresh.context().close();
   },
@@ -1137,6 +1142,79 @@ export default {
     const revs = JSON.parse((await storeSnapshot(page)).revisions).filter((r) => r.jobId === id);
     assert.ok(revs.some((r) => r.reason === 'before-replace' && r.job.info.client === 'Demo Energy Ltd.' && /tk-import\.json/.test(r.note)), 'device copy kept as a revision');
     assert.deepEqual(await importRecords(page), [['replaced', 0, 0]]);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'revisions: edits, stage changes, file saves and imports each add a revision; the Revisions screen lists them'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const id = await page.evaluate(() => window.tfi.job().id);
+    await page.evaluate(() => window.tfi.go('setup'));
+    await page.fill('input[data-bind="info.client"]', 'Edited today'); await page.press('input[data-bind="info.client"]', 'Tab');
+    await page.selectOption('select[data-bind="status.stage"]', 'reporting');
+    await page.waitForTimeout(600);
+    await page.evaluate(() => { delete Window.prototype.showSaveFilePicker; delete window.showSaveFilePicker; });
+    const [d] = await Promise.all([page.waitForEvent('download'), page.click('#saveFileBtn')]);
+    await page.waitForTimeout(600);
+    const { readFile } = await import('node:fs/promises');
+    const file = { name: 'again.json', mimeType: 'application/json', buffer: Buffer.from((await readFile(await d.path(), 'utf8')).replace('"Edited today"', '"Edited in the file"')) };
+    await page.evaluate(() => window.tfi.go('jobs'));
+    await page.setInputFiles('input[data-act="job-import"]', file);
+    await page.waitForSelector('#confirmDlg[open]'); await page.click('#confirmDlg [data-cf="yes"]');
+    await page.waitForFunction(() => window.tfi.job()?.info.client === 'Edited in the file');
+    // let the import finish (its last step records the 'import' revision and redraws) before moving on
+    await page.evaluate(async (jid) => { const { db } = await import('./js/db.js'); for (let i = 0; i < 100; i++) { if ((await db.jobRevisions(jid)).some((r) => r.reason === 'import')) return; await new Promise((r) => setTimeout(r, 50)); } }, id);
+    await page.waitForTimeout(200);
+    await page.evaluate(() => window.tfi.go('revs'));
+    await page.waitForSelector('#revList table');
+    const rows = await page.$$eval('#revList tbody tr', (trs) => trs.map((tr) => tr.children[3].textContent + ' | ' + tr.children[6].textContent));
+    const has = (re) => rows.some((r) => re.test(r));
+    for (const re of [/Daily checkpoint/, /Stage changed.*Upcoming → Reporting/, /Saved to a file.*Rev 1/, /Before being replaced/, /Opened from a file.*again\.json/]) assert.ok(has(re), `${re} in\n${rows.join('\n')}`);
+    assert.ok(rows.every((r) => /✓/.test(r)), 'every checksum matches');
+    // the checkpoint holds the job as it was before the day's first change
+    const cp = await page.evaluate(async (jid) => (await (await import('./js/db.js')).db.jobRevisions(jid)).find((r) => r.reason === 'checkpoint').job.info.client, id);
+    assert.equal(cp, 'Demo Energy Ltd.');
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'revisions: compare, report, and restore — a restored revision equals the original by content checksum'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => window.tfi.go('setup'));
+    await page.selectOption('select[data-bind="status.stage"]', 'inspection'); // revision: client still "Demo Energy Ltd."
+    await page.waitForTimeout(400);
+    await page.fill('input[data-bind="info.client"]', 'Changed later'); await page.press('input[data-bind="info.client"]', 'Tab');
+    await page.waitForTimeout(600);
+    await page.evaluate(() => window.tfi.go('revs'));
+    await page.waitForSelector('#revList table');
+    const n = await page.$eval('#revList tbody tr:has-text("Stage changed")', (tr) => +tr.dataset.n);
+    // compare with now
+    await page.check(`[data-revpick="${n}"]`);
+    await page.click('#revCompare');
+    await page.waitForSelector('#revDiff:not([hidden]) table');
+    assert.match(await page.textContent('#revDiff'), /client.*Demo Energy Ltd\..*Changed later/s);
+    // its report, read-only
+    await page.click(`[data-act="rev-report"][data-n="${n}"]`);
+    await page.waitForSelector('#dlg[open] .rev-report .report');
+    assert.match(await page.textContent('#dlg .rev-report'), /Demo Energy Ltd\./);
+    await page.click('#dlg [data-rv="close"]');
+    // restore it
+    const revBefore = await page.evaluate(() => window.tfi.job().rev || 0);
+    await page.click(`[data-act="rev-restore"][data-n="${n}"]`);
+    await page.click('#confirmDlg [data-cf="yes"]');
+    await page.waitForFunction(() => window.tfi.job().info.client === 'Demo Energy Ltd.');
+    const r = await page.evaluate(async (n) => {
+      const { contentHash } = await import('./js/app/revisions.js'), { db } = await import('./js/db.js');
+      const job = window.tfi.job();
+      let revs = [];
+      for (let i = 0; i < 100 && !revs.some((x) => x.reason === 'restore'); i++) { revs = await db.jobRevisions(job.id); if (!revs.some((x) => x.reason === 'restore')) await new Promise((res) => setTimeout(res, 50)); }
+      const orig = revs.find((x) => x.n === n);
+      return { same: (await contentHash(job)) === (await contentHash(orig.job)), stored: (await contentHash(await db.getJob(job.id))) === (await contentHash(orig.job)), reasons: revs.map((x) => x.reason), kept: revs.find((x) => x.reason === 'before-replace' && x.note.includes('revision ' + n))?.job.info.client, rev: job.rev || 0 };
+    }, n);
+    assert.ok(r.same && r.stored, 'restored content equals the revision by checksum (on screen and on the device)');
+    assert.equal(r.kept, 'Changed later', 'the job as it was is kept as a revision first');
+    assert.ok(r.reasons.includes('restore'));
+    assert.equal(r.rev, revBefore, 'the file revision number is not taken back');
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },

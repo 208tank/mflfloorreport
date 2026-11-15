@@ -6,13 +6,13 @@ import { APP_VERSION, S } from '../app/state.js';
 import { renderAll } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
 import { flushSave, loadJobs, loadTanks, recompute } from '../app/persist.js';
+import { addRevision, whoAmI } from '../app/revisions.js';
 import { BACKUP_TYPES, backupName, backupPieces, entryAsCopy, planRestore, verifyBackup } from '../backup.js';
 import { db } from '../db.js';
 import { download } from '../export.js';
 import { SCHEMA, uid } from '../model.js';
 import { $, toast } from '../ui.js';
 import { esc as h } from '../util.js';
-import { addRevision, whoAmI } from './history.js';
 
 /** S.backup: { last: { at, fileName, where, counts, bytes, hash } | null, days: 0 (off) | N, due: bool }. */
 const AUTO_KEEP = 5;
@@ -155,9 +155,11 @@ async function applyRestore(fileName, data, plan, choice, opts) {
   for (const p of plan.jobs) {
     const a = act(p); if (a === 'same' || a === 'keep') continue;
     try {
-      if (a === 'replace') { await addRevision(p.device, 'before-replace', `Before restoring from backup ${fileName}`); await db.restoreJob(p.entry, { replace: true }); }
-      else if (a === 'both') await db.restoreJob(entryAsCopy(p.entry, { job: uid(), photo: () => uid() }));
-      else await db.restoreJob(p.entry);
+      let entry = p.entry;
+      if (a === 'replace') { await addRevision(p.device, 'before-replace', `Before restoring from backup ${fileName}`); await db.restoreJob(entry, { replace: true }); }
+      else if (a === 'both') { entry = entryAsCopy(p.entry, { job: uid(), photo: () => uid() }); await db.restoreJob(entry); }
+      else await db.restoreJob(entry);
+      await addRevision(entry.job, 'restore', `Restored from backup ${fileName}`).catch((e) => console.warn('Revision', e));
       done[a]++;
     } catch (e) { failed.push(`${p.entry.job.info?.tankId || p.id} (${e.message})`); }
   }

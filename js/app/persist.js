@@ -4,6 +4,7 @@
 // because the header in turn shows this module's change count.
 import { S } from './state.js';
 import { go } from './nav.js';
+import { checkpointIfDue } from './revisions.js';
 import { api653 } from '../calc.js';
 import { db, requestPersistence } from '../db.js';
 import { buildLayout } from '../geometry.js';
@@ -45,6 +46,7 @@ async function writeCurrent() {
     await db.putTank(t); await loadTanks();
     return;
   }
+  await checkpointIfDue(job.id).catch((e) => console.warn('Checkpoint', e)); // stage 8: never blocks the save
   await db.putJob(job);
   renderFileState();
 }
