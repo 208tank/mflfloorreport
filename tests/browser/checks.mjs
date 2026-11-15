@@ -714,7 +714,7 @@ export default {
     await page.context().close();
   },
 
-  async 'job files: the file written in pieces is byte-for-byte the v3.4.2 format'({ browser, url, appPage }) {
+  async 'job files: the file written in pieces is byte-for-byte the v3.4.2 format (version 2 adds the issued report)'({ browser, url, appPage }) {
     const page = await appPage(browser, url);
     await page.evaluate(async () => {
       const { db } = await import('./js/db.js');
@@ -734,10 +734,38 @@ export default {
       for (let i = 0; i < 50 && !(await hnd.getFile()).size; i++) await new Promise((res) => setTimeout(res, 50));
       await new Promise((res) => setTimeout(res, 200));
       const text = await (await hnd.getFile()).text(), f = JSON.parse(text);
-      const expected = JSON.stringify({ format: 'tank-floor-inspector', version: 1, saved: f.saved, rev: f.rev, job: f.job, photos: await db.jobPhotos(id), appVersion: f.appVersion });
+      const expected = JSON.stringify({ format: 'tank-floor-inspector', version: 2, saved: f.saved, rev: f.rev, job: f.job, photos: await db.jobPhotos(id), appVersion: f.appVersion });
       return { same: text === expected, photos: f.photos.length, len: text.length };
     });
     assert.deepEqual({ same: r.same, photos: r.photos }, { same: true, photos: 3 });
+    // a Complete job: the issued report goes in after the photos (photos attached to an indication, so the report shows them)
+    await page.evaluate(async () => {
+      const { db } = await import('./js/db.js'), { S } = await import('./js/app/state.js'), job = window.tfi.job();
+      for (const p of await db.jobPhotos(job.id)) { p.indId = job.indications[0].id; await db.putPhoto(p); }
+      S.photos = await db.jobPhotos(job.id); S.reportOpts.photos = true;
+    });
+    // a Complete job: the issued report goes in after the photos, with its photos written as references
+    await page.evaluate(() => window.tfi.go('setup'));
+    await page.selectOption('select[data-bind="status.stage"]', 'complete');
+    await page.waitForFunction(() => window.tfi.job().issued);
+    await page.waitForTimeout(300);
+    await page.evaluate(async () => { const w = await window.__hnd.createWritable(); await w.truncate(0); await w.close(); });
+    await page.keyboard.press('Control+s');
+    const c = await page.evaluate(async () => {
+      const { db } = await import('./js/db.js'), { readIssued } = await import('./js/issuedfile.js');
+      const job = window.tfi.job(), id = job.id, hnd = window.__hnd;
+      for (let i = 0; i < 60 && !(await hnd.getFile()).size; i++) await new Promise((res) => setTimeout(res, 50));
+      await new Promise((res) => setTimeout(res, 200));
+      const text = await (await hnd.getFile()).text(), f = JSON.parse(text);
+      const rv = await db.getRevision(`${id}:${job.issued.n}`);
+      const issued = { n: rv.n, at: rv.issued.at, by: rv.by, appVersion: rv.issued.appVersion, opts: rv.issued.opts, hash: rv.issued.hash, job: rv.job, html: f.issued.html };
+      const expected = JSON.stringify({ format: 'tank-floor-inspector', version: 2, saved: f.saved, rev: f.rev, job: f.job, photos: await db.jobPhotos(id), issued, appVersion: f.appVersion });
+      const back = await readIssued(f.issued, f.photos);
+      return { same: text === expected, refs: (f.issued.html.match(/"tfi-photo:ph\d"/g) || []).length, inline: f.issued.html.includes('AAAAAAAAAA'), back: back.html === rv.issued.html };
+    });
+    assert.equal(c.same, true, 'the issued report sits between the photos and appVersion');
+    assert.ok(c.refs >= 3 && !c.inline, 'the report’s photos are references in the file');
+    assert.ok(c.back, 'read back, it is the issued report exactly');
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },
@@ -1333,6 +1361,59 @@ export default {
     assert.equal(await page.evaluate(async (id) => (await (await import('./js/db.js')).db.getJob(id)).status.history.at(-1).reason, id), 'Typo in the client name');
     assert.deepEqual(page.errors, []);
     await page.context().close();
+  },
+
+  async 'job files: a Complete job’s issued report travels in the file to another device'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => window.tfi.go('setup'));
+    await page.selectOption('select[data-bind="status.stage"]', 'complete');
+    await page.waitForFunction(() => window.tfi.job().issued);
+    await page.waitForTimeout(300);
+    const orig = await page.evaluate(async () => { const { db } = await import('./js/db.js'), j = window.tfi.job(); return (await db.getRevision(`${j.id}:${j.issued.n}`)).issued; });
+    await page.evaluate(() => { delete Window.prototype.showSaveFilePicker; delete window.showSaveFilePicker; });
+    const [d] = await Promise.all([page.waitForEvent('download'), page.click('#saveFileBtn')]);
+    const { readFile } = await import('node:fs/promises');
+    const text = await readFile(await d.path(), 'utf8');
+    assert.equal(JSON.parse(text).version, 2);
+    await page.context().close();
+
+    // another device: a fresh profile
+    const other = await appPage(browser, url);
+    await other.evaluate(() => window.tfi.go('jobs'));
+    await other.setInputFiles('#openFileInput', { name: 'issued.json', mimeType: 'application/json', buffer: Buffer.from(text) });
+    await other.waitForSelector('#confirmDlg[open]'); // this device has its own demo of the same tank and date
+    await other.click('#confirmDlg [data-cf="import"]');
+    await other.waitForFunction(() => window.tfi.job()?.issued && window.tfi.job().status.stage === 'complete');
+    const got = await other.evaluate(async () => {
+      const { db } = await import('./js/db.js'), j = window.tfi.job();
+      for (let i = 0; i < 40 && !(await db.getJob(j.id)).issued; i++) await new Promise((res) => setTimeout(res, 50));
+      const r = await db.getRevision(`${j.id}:${j.issued.n}`);
+      return { reason: r.reason, html: r.issued.html, hash: r.issued.hash, stored: (await db.getJob(j.id)).issued?.n === j.issued.n };
+    });
+    assert.equal(got.reason, 'issued'); assert.ok(got.stored);
+    assert.equal(got.hash, orig.hash); assert.ok(got.html === orig.html, 'the same report, byte for byte');
+    await other.evaluate(() => window.tfi.go('report'));
+    await other.waitForSelector('#issuedBar');
+    assert.match(await other.textContent('#issuedBar'), /checksum ✓/);
+    assert.ok(await other.$('#jobTitle [data-act="reopen"]'), 'locked on the other device too');
+    assert.deepEqual(other.errors, []);
+    await other.context().close();
+
+    // a file whose issued report was changed: a warning, and the job opens without it
+    const bad = JSON.parse(text); bad.issued.html = bad.issued.html.replace('Demo Energy Ltd.', 'Someone Else');
+    const third = await appPage(browser, url);
+    await third.evaluate(() => window.tfi.go('jobs'));
+    await third.setInputFiles('#openFileInput', { name: 'changed.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(bad)) });
+    await third.waitForSelector('#confirmDlg[open]');
+    assert.match(await third.textContent('#confirmDlg'), /issued report does not match its checksum/);
+    await third.click('#confirmDlg [data-cf="open"]');
+    await third.waitForSelector('#confirmDlg[open] [data-cf="import"]');
+    await third.click('#confirmDlg [data-cf="import"]');
+    await third.waitForFunction(() => window.tfi.job()?.status.stage === 'complete');
+    await third.waitForTimeout(500);
+    assert.equal(await third.evaluate(() => window.tfi.job().issued), undefined, 'not kept as the issued report');
+    assert.deepEqual(third.errors, []);
+    await third.context().close();
   },
 
 };

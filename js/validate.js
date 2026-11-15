@@ -11,6 +11,7 @@ import { migrate } from './model.js';
 import { buildLayout } from './geometry.js';
 import { SEC } from './sections.js';
 import { sha256 } from './util.js';
+import { readIssued } from './issuedfile.js';
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const blank = (v) => v === null || v === undefined || v === '';
@@ -124,5 +125,14 @@ export async function validateJobFile(data, { schema = Infinity, fileVersion = I
     for (const r of s?.recs || []) if (r?.photo && !photoIds.has(r.photo)) warn(`Recommendation ${r.no || r.finding || r.id} (${SEC.get(k)?.label || k}) shows a photo that is not in the file.`);
     for (const n of s?.nde || []) for (const e of n?.equip || []) if (!eqIds.has(e)) warn(`NDE method ${n.method || n.id} (${SEC.get(k)?.label || k}) uses equipment that is not in the job’s equipment list.`);
   }
-  return { errors, warnings, job };
+  // ---- file version 2 (stage 8c): the issued report of a Complete job, and the audit trail
+  let issued = null;
+  if (data.issued !== undefined) {
+    const r = await readIssued(data.issued, Array.isArray(data.photos) ? data.photos : []);
+    if (r.problem) warn(`The file’s ${r.problem.replace(/^its /, '')}: the job opens without it, and its report will be the one this version of the app produces.`);
+    else if (job.status?.stage !== 'complete') warn('The file has an issued report, but the job is not Complete: the issued report is not kept.');
+    else issued = r;
+  } else if (job.status?.stage === 'complete' && (data.version || 1) >= 2) warn('The job is Complete but the file has no issued report: its report will be the one this version of the app produces.');
+  if (data.audit !== undefined && !Array.isArray(data.audit)) warn('The file’s audit trail is not a list: it is not kept.');
+  return { errors, warnings, job, issued };
 }

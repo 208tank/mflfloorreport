@@ -18,7 +18,7 @@ export const uid = () => Date.now().toString(36) + Math.random().toString(36).sl
  *  structure, so older installed copies refuse those files instead of re-saving them without the new data. */
 export const SCHEMA = JOB_SCHEMA;
 /** Job file (container) format version. */
-export const FILE_VERSION = 1;
+export const FILE_VERSION = 2; // 2: the issued report and the audit trail (data integrity stage 8c)
 
 export function newJob(units = 'imperial') {
   const today = new Date().toISOString().slice(0, 10);

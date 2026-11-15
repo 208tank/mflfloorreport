@@ -7,6 +7,23 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Data integrity upgrade — stage 8c: the issued report travels in the job file (v3.17.2)
+
+Job files are now **version 2**. A Complete job's file carries its issued report, so it opens on another computer
+locked, showing the same report byte for byte. The report's photos are already in the file, so inside the report they
+are written as references and put back when the file is opened. That keeps the file from carrying every photo twice.
+The checksum proves the report came back unchanged. The file also has room for the job's audit trail (stage 9 fills
+it).
+
+When a file is opened:
+
+- an intact issued report becomes the job's issued revision on this device;
+- an issued report that was changed, or refers to photos the file doesn't have, is a **warning**. The job opens
+  without it and shows the report this version of the app produces;
+- an issued report in a job that isn't Complete is not kept (with a warning).
+
+Older (version 1) files open as before. Older versions of the app refuse version 2 files and ask to be updated.
+
 ## Data integrity upgrade — stage 8b: Complete freezes the report and locks the job (v3.17.1)
 
 **Marking a job Complete** (from Setup or the Dashboard) issues its report: the report is kept exactly as printed, with
@@ -839,6 +856,7 @@ every limit is editable.
 | `js/views/*.js` | One module per screen area: dashboard, registry, jobs, setup, floormap, floorlists, api, shell, nozzles, roof, settle, sections, summary, report, codetables, files, history, backup, revisions |
 | `js/backup.js` | Backup file: written in pieces with a checksum, verified, compared with the device |
 | `js/validate.js` | Job file checks before an import: problems and things to check |
+| `js/issuedfile.js` | The issued report inside a job file: photos as references, checked on opening |
 | `js/revdiff.js` | Field-by-field comparison of two versions of a job |
 | `js/duplicates.js` | Is an imported job already here, a different version, or possibly the same inspection twice |
 | `js/ui.js` | Element lookup, toasts and in-app dialogs |

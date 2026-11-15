@@ -12,7 +12,8 @@ import { download, fileBase, indicationsCSV, nozzlesCSV, platesCSV, roofCSV, set
 import { itemFloor } from '../geometry.js';
 import { buildLoader, loaderAreas, readLoader } from '../loader.js';
 import { renderMapSVG } from '../map.js';
-import { copyPhotos, FILE_VERSION, migrationNotes, SCHEMA, uid } from '../model.js';
+import { copyPhotos, FILE_VERSION, migrate, migrationNotes, SCHEMA, uid } from '../model.js';
+import { packPhoto } from '../issuedfile.js';
 import { saveErrorText } from '../saver.js';
 import { allDefs, numberDefs } from '../sections.js';
 import { rolloutSVG, SHELL_SVG_STYLE } from '../shell.js';
@@ -30,7 +31,7 @@ const canPick = () => 'showSaveFilePicker' in window && window.self === window.t
 /** Build the file for the next revision without changing the stored job yet.
  *  The file is produced in pieces (header + job, then one photo at a time, then the rest) so a job with
  *  hundreds of photos never needs one huge string in memory. The bytes are exactly what
- *  JSON.stringify({ format, version, saved, rev, job, photos, tank?, appVersion }) gives. */
+ *  JSON.stringify({ format, version, saved, rev, job, photos, tank?, issued?, audit?, appVersion }) gives. */
 async function jobFile(id) {
   // never write a file from stale data: every change must be on the device first
   if (S.job?.id === id && !(await flushSave())) throw Object.assign(new Error(`your latest changes could not be saved to this device (${saveErrorText(saver.error)})`), { name: 'NotSavedError' });
@@ -42,7 +43,16 @@ async function jobFile(id) {
   const counted = { edits: stored.edits || 0, updated: stored.updated || 0 };
   const tank = stored.tankRef ? await db.getTank(stored.tankRef).catch(() => null) : null;
   const head = JSON.stringify({ format: 'tank-floor-inspector', version: FILE_VERSION, saved: new Date(at).toISOString(), rev: stamp.rev }).slice(0, -1) + ',"job":' + JSON.stringify(job) + ',"photos":[';
-  const tail = ']' + (tank ? ',"tank":' + JSON.stringify(tank) : '') + ',"appVersion":' + JSON.stringify(APP_VERSION) + '}';
+  // file version 2 (stage 8c): the issued report of a Complete job (photos as references) and the audit trail
+  let issued = null;
+  const ir = stored.issued && stored.status?.stage === 'complete' ? await db.getRevision(`${id}:${stored.issued.n}`).catch(() => null) : null;
+  if (ir?.issued?.html) {
+    let html = ir.issued.html;
+    for (const k of keys) html = packPhoto(html, await db.getPhoto(k));
+    issued = { n: ir.n, at: ir.issued.at, by: ir.by, appVersion: ir.issued.appVersion, opts: ir.issued.opts, hash: ir.issued.hash, job: ir.job, html };
+  }
+  const audit = await db.jobAudit(id).catch(() => []);
+  const tail = ']' + (tank ? ',"tank":' + JSON.stringify(tank) : '') + (issued ? ',"issued":' + JSON.stringify(issued) : '') + (audit.length ? ',"audit":' + JSON.stringify(audit) : '') + ',"appVersion":' + JSON.stringify(APP_VERSION) + '}';
   async function* chunks() {
     yield head;
     let first = true;
@@ -176,6 +186,19 @@ async function openJobFile() {
   $('#openFileInput').click();
 }
 
+/** Keep a file's issued report as this device's issued revision, and point the job at it (stage 8c). Only for a
+ *  Complete job: an issued report travels with the job, but a reopened job shows its live report. */
+async function keepIssued(job, fi, fileName) {
+  if (!fi?.html || job.status?.stage !== 'complete') return;
+  try {
+    const ij = fi.job && typeof fi.job === 'object' ? migrate(structuredClone(fi.job)) : job;
+    ij.id = job.id; // the same job, or the copy it is kept as
+    const r = await addRevision(ij, 'issued', `Issued report from ${fileName}`, { by: fi.by || null, issued: { html: fi.html, opts: fi.opts, appVersion: fi.appVersion, at: fi.at, hash: fi.hash } });
+    job.issued = { n: r.n, at: fi.at, hash: fi.hash, appVersion: fi.appVersion };
+    await db.putJob(job);
+  } catch (e) { console.warn('Issued report', e); }
+}
+
 /** A list of problems for a dialog: the first 12, then how many more. */
 const problemList = (a) => a.slice(0, 12).map((x) => '• ' + x).join('\n') + (a.length > 12 ? `\n• … and ${a.length - 12} more` : '');
 
@@ -195,6 +218,7 @@ export async function importJobFile(file) {
     if (v.warnings.length && (await askChoice(`${file.name} has ${v.warnings.length === 1 ? 'one thing' : v.warnings.length + ' things'} to check:\n\n${problemList(v.warnings)}\n\nOpen it anyway? You can correct these in the app.`, [['cancel', 'Cancel'], ['open', 'Open anyway', 'primary']])) !== 'open') { record('cancelled'); return null; }
     const notes = migrationNotes(data.job);
     const job = v.job; // migrated, with numbers stored as text converted (validate.js)
+    delete job.issued; // the file's revision numbers are another device's; keepIssued sets it again for this one
     // data integrity stage 7: already here, a different version of a job that is, or possibly the same inspection twice?
     const dup = await classifyImport({ job, photoIds: (data.photos || []).map((p) => p.id) }, { getJob: (id) => db.getJob(id), photoKeys: (id) => db.jobPhotoKeys(id), cards: S.jobs }, await db.importsByHash(fileHash).catch(() => []));
     const before = dup.opened.length ? ` You opened this file on this device before (${new Date(dup.opened[0].at).toLocaleString()}).` : '';
@@ -225,6 +249,7 @@ export async function importJobFile(file) {
     if (exists && job.id === oldId) await addRevision(exists, 'before-replace', `Before opening ${file.name} over it`);
     await db.replaceJob(job, photos, exists && job.id === oldId ? oldId : null);
     await addRevision(job, 'import', `Opened from ${file.name}`).catch((e) => console.warn('Revision', e));
+    await keepIssued(job, v.issued, file.name);
     record(exists ? (job.id === oldId ? 'replaced' : 'kept-both') : dup.kind === 'possible' ? 'added-separately' : 'opened', job.id);
     await loadJobs(); toast(`Opened ${file.name}`); await openJob(job.id); checkStorage();
     if (notes.length) showMigrationNotes(notes);
