@@ -7,7 +7,7 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
-## Modular refactoring (v3.12.0 onwards)
+## Modular refactoring (v3.12.0 – v3.13.0)
 
 Nothing changes for the user: every screen renders the same HTML, and the calculations, job files and
 report are unchanged. The shared core of `js/app.js` now lives in `js/app/`:
@@ -36,6 +36,11 @@ registers its screen with `defineView` and its buttons with `onAction` / `onChan
 | 12 | v3.12.11 | Floor map and its editors (`views/floormap.js`) |
 | 13 | v3.12.12 | Job files, exports and the UT loader buttons (`views/files.js`) |
 | 14 | v3.12.13 | Jobs screen and Settings (`views/jobs.js`); saving (`app/persist.js`) and the header (`app/header.js`); `app/host.js` removed |
+| 15 | v3.13.0 | `app.js` is the entry point only; side menu (`app/menu.js`); equipment picker and typed-value listeners moved to their modules |
+
+The refactoring is complete. v3.13.0 renders all 32 screens identically to v3.11.0 (before step 1), and all 15 scripted
+edit sequences (463 steps, `tests/tools/scripts/`) give identical job data, registry, photos, settings, downloaded files
+and screens.
 
 Screen modules may reuse each other's building blocks (the module tests fail on any import loop, and on any
 module that app.js doesn't load). Saving lives in `js/app/persist.js`, which every screen imports directly. Four

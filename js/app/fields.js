@@ -1,7 +1,7 @@
 // Form fields: the labelled inputs used on every screen, and reading their values (refactoring step 1).
 import { S } from './state.js';
-import { inVal, toMm, num, unitLabel } from '../units.js';
 import { getPath } from '../model.js';
+import { inVal, num, toMm, unitLabel } from '../units.js';
 import { esc as h } from '../util.js';
 
 export function valOf(v, kind) {
@@ -63,3 +63,9 @@ export function sxIn(kind, sec, it, f, type = 'text', extra = '') {
 export function sxSel(kind, sec, it, f, opts) {
   return `<select data-sx="${kind}" data-sec="${sec}" data-iid="${it.id}" data-f="${f}">${opts.map((o) => { const [k, l] = Array.isArray(o) ? o : [o, o || '—']; return `<option value="${h(k)}" ${String(it[f] ?? '') === String(k) ? 'selected' : ''}>${h(l)}</option>`; }).join('')}</select>`;
 }
+
+/* a value typed while the page was refreshing is put back into the new field; commit it when the field is left */
+document.addEventListener('focusout', (e) => {
+  const el = e.target;
+  if (el?.dataset?.restored) { delete el.dataset.restored; if (el.value !== el.defaultValue) el.dispatchEvent(new Event('change', { bubbles: true })); }
+});

@@ -1,15 +1,17 @@
-// Tank Floor Inspector — main application.
+// Tank Floor Inspector — entry point (refactoring step 15).
+// Loads every screen module (each registers its screens and buttons with js/app/nav.js and js/app/actions.js),
+// wires the core modules together, binds job fields, listens to window events and starts the app.
+// Layers: app.js → js/views/* (screens) → js/app/* (core) → js/*.js (calculations, data, files).
 import { APP_VERSION, S } from './app/state.js';
 import { readInput, rerenderKeep } from './app/fields.js';
-import { configureNav, go, renderAll, renderNav, renderView } from './app/nav.js';
-import { onAction, onChange } from './app/actions.js';
+import { configureNav, go, renderAll, renderView } from './app/nav.js';
+import { onChange } from './app/actions.js';
 import { appReload, commit, configurePersist, flushNow, flushSave, journal, loadJobs, loadTanks, recompute, saver } from './app/persist.js';
 import { renderHeader, showFileState } from './app/header.js';
 import { writeStageToFile } from './app/folder.js';
 import { measuredFromDrawing, rowsFromGrid } from './builder.js';
 import { db, dbConfig } from './db.js';
 import { setPath } from './model.js';
-import { viewPlace } from './sections.js';
 import { editionsFor, supplementsFor } from './tables.js';
 import { $, toast } from './ui.js';
 import { esc as h } from './util.js';
@@ -23,38 +25,26 @@ import { crumbHTML } from './views/sections.js';
 import { refreshSettle } from './views/settle.js';
 import { refreshBuilder, refreshSetupPreview, relocateOrphans } from './views/setup.js';
 import { refreshShell, shellBuildHTML } from './views/shell.js';
+import './app/menu.js';
 import './views/codetables.js';
 import './views/report.js';
 import './views/dashboard.js';
 import './views/registry.js';
 import './views/summary.js';
 
-/* ---------------------------------------------------------------- state ---- */
-
-function dbFailed(e) {
-  document.querySelector('#main')?.insertAdjacentHTML('afterbegin', `<section class="card"><h2>The device database could not be opened</h2><p>${h(String(e?.message || e))}</p><p class="muted">If the app was being updated, the update was stopped and your data is unchanged. Close other Tank Floor Inspector windows and reload. If this keeps happening, do not clear the browser data — contact support with this message.</p></section>`);
-}
-
-/* ---------------------------------------------------------------- shell ---- */
-
+/* Test hooks (window.tfi is used by the automated tests; window.__app is handy in the console). */
 window.tfi = { go: (v) => go(v), zoom: (x, y, r) => { S.mapCtl?.focus(x, y, r); drawMap(); }, job: () => S.job, commit: () => { commit(); renderView(); } }; // used by the automated tests
+window.__app = S; // handy for debugging in the console
 
-/* --------------------------------------------------------------- events --- */
-
-/* Button actions (data-act), registered with the action registry (js/app/actions.js). */
-onAction({
-  'nav-sec': async (el, id, e, act) => {
-    {
-      const k = el.dataset.sec, pl = viewPlace(S.view);
-      if (S.navOpen.has(k)) { S.navOpen.delete(k); renderNav(); return; }
-      S.navOpen.add(k);
-      if (pl?.sec === k) { renderNav(); return; }
-      go(S.ndeTab[k] || 'nde:' + k); return;
-    }
-  },
+/* Wiring: how saving and navigation update the header, what leaving registry editing does, and the section breadcrumb. */
+configurePersist({ header: () => renderHeader(), fileState: () => showFileState() });
+configureNav({
+  header: () => renderHeader(),
+  leaveRegistry: () => { if (saver.pending()) flushSave(); S.job = null; recompute(); S.photos = []; },
+  crumb: (pl) => crumbHTML(pl)
 });
 
-/* Change handlers (input bindings), registered in their original order (js/app/actions.js). */
+/* Job fields (data-bind): set the value, recalculate and save, then refresh whichever screen is showing. */
 onChange([
   { order: 10, when: (el, act) => el.matches('[data-bind]'), run: async (el, e, act) => {
     {
@@ -85,14 +75,7 @@ onChange([
   } },
 ]);
 
-// a value typed while the page was refreshing is put back into the new field; commit it when the field is left
-document.addEventListener('focusout', (e) => {
-  const el = e.target;
-  if (el?.dataset?.restored) { delete el.dataset.restored; if (el.value !== el.defaultValue) el.dispatchEvent(new Event('change', { bubbles: true })); }
-});
-
-/* ---------------------------------------------------------------- misc --- */
-
+/* Window events: database upgrade blocked, install prompt, online / offline, save on hide or close, printing. */
 window.addEventListener('tfi-db-blocked', () => toast('Close any other Tank Floor Inspector windows or tabs to finish updating the app.'));
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installEvt = e; renderHeader(); });
 window.addEventListener('online', () => { const n = $('#netState'); if (n) n.textContent = 'Online'; });
@@ -104,6 +87,7 @@ window.addEventListener('beforeunload', (e) => { flushNow(); if (saver.pending()
 window.addEventListener('beforeprint', () => { if (S.view !== 'report' && S.job) { S._prevView = S.view; go('report'); } });
 window.addEventListener('afterprint', () => { if (S._prevView) { const v = S._prevView; S._prevView = null; go(v); } });
 
+/* Offline support: the service worker caches the app; a new version offers a reload. */
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('./sw.js').then((reg) => {
     reg.addEventListener('updatefound', () => {
@@ -115,13 +99,10 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   }).catch(() => { /* offline support unavailable */ });
 }
 
-/* Screens (navigation registry, js/app/nav.js) */
-configurePersist({ header: () => renderHeader(), fileState: () => showFileState() });
-configureNav({
-  header: () => renderHeader(),
-  leaveRegistry: () => { if (saver.pending()) flushSave(); S.job = null; recompute(); S.photos = []; },
-  crumb: (pl) => crumbHTML(pl)
-});
+/* Start-up */
+function dbFailed(e) {
+  document.querySelector('#main')?.insertAdjacentHTML('afterbegin', `<section class="card"><h2>The device database could not be opened</h2><p>${h(String(e?.message || e))}</p><p class="muted">If the app was being updated, the update was stopped and your data is unchanged. Close other Tank Floor Inspector windows and reload. If this keeps happening, do not clear the browser data — contact support with this message.</p></section>`);
+}
 
 (async function init() {
   dbConfig.appVersion = APP_VERSION;
@@ -134,16 +115,3 @@ configureNav({
   if (last && S.jobs.some((j) => j.id === last)) await openJob(last, 'dash');
   else go('dash');
 })();
-
-window.__app = S; // handy for debugging in the console
-
-// equipment picker: float the list above the table (tables scroll and would clip it); close on outside click / scroll
-document.addEventListener('click', (e) => { for (const d of document.querySelectorAll('details.eqpick[open]')) if (!d.contains(e.target)) d.open = false; });
-document.addEventListener('toggle', (e) => {
-  const d = e.target; if (!d.matches?.('details.eqpick') || !d.open) return;
-  const pop = d.querySelector('.eqpop'), r = d.querySelector('summary').getBoundingClientRect();
-  pop.style.position = 'fixed'; pop.style.left = Math.min(r.left, innerWidth - 300) + 'px';
-  const below = innerHeight - r.bottom;
-  if (below < 260 && r.top > below) { pop.style.top = ''; pop.style.bottom = (innerHeight - r.top + 4) + 'px'; } else { pop.style.bottom = ''; pop.style.top = (r.bottom + 4) + 'px'; }
-}, true);
-document.addEventListener('scroll', (e) => { if (e.target.closest?.('.eqpop')) return; for (const d of document.querySelectorAll('details.eqpick[open]')) d.open = false; }, true);

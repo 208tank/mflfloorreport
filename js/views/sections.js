@@ -385,3 +385,14 @@ onChange([
   }
   } }
 ]);
+
+/* equipment picker: float the list above the table (tables scroll and would clip it); close on outside click / scroll */
+document.addEventListener('click', (e) => { for (const d of document.querySelectorAll('details.eqpick[open]')) if (!d.contains(e.target)) d.open = false; });
+document.addEventListener('toggle', (e) => {
+  const d = e.target; if (!d.matches?.('details.eqpick') || !d.open) return;
+  const pop = d.querySelector('.eqpop'), r = d.querySelector('summary').getBoundingClientRect();
+  pop.style.position = 'fixed'; pop.style.left = Math.min(r.left, innerWidth - 300) + 'px';
+  const below = innerHeight - r.bottom;
+  if (below < 260 && r.top > below) { pop.style.top = ''; pop.style.bottom = (innerHeight - r.top + 4) + 'px'; } else { pop.style.bottom = ''; pop.style.top = (r.bottom + 4) + 'px'; }
+}, true);
+document.addEventListener('scroll', (e) => { if (e.target.closest?.('.eqpop')) return; for (const d of document.querySelectorAll('details.eqpick[open]')) d.open = false; }, true);
