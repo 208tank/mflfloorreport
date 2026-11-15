@@ -33,8 +33,10 @@ registers its screen with `defineView` and its buttons with `onAction` / `onChan
 | 9 | v3.12.8 | Section screens and equipment (`views/sections.js`), summary and deficiencies (`views/summary.js`); image helpers (`app/images.js`) |
 | 10 | v3.12.9 | Tank setup and the floor builders (`views/setup.js`) |
 | 11 | v3.12.10 | Indication and plate lists (`views/floorlists.js`), API 653 evaluation (`views/api.js`) |
+| 12 | v3.12.11 | Floor map and its editors (`views/floormap.js`) |
 
-Screen modules can't import `app.js`, so the few app-level steps they need that haven't moved yet (saving and loading, the
+Screen modules may reuse each other's building blocks (the module tests fail on any import loop), but
+they can't import `app.js`, so the few app-level steps they need that haven't moved yet (saving and loading, the
 recovery journal, opening and importing job files, and the floor map and setup redraws) are handed over at start-up through `js/app/host.js`.
 
 ## Data integrity upgrade — stage 4: database integrity check (v3.11.0)

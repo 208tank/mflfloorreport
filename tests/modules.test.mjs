@@ -39,3 +39,21 @@ test('the offline cache lists every module under js/', () => {
   const missing = jsFiles(join(root, 'js')).map((f) => './' + f.slice(root.length)).filter((p) => !sw.includes(`'${p}'`));
   assert.deepEqual(missing, []);
 });
+
+test('no import loops between modules (screen modules may reuse each other, but never in a circle)', () => {
+  const files = jsFiles(join(root, 'js'));
+  const deps = new Map(files.map((f) => {
+    const src = readFileSync(f, 'utf8');
+    const list = [...src.matchAll(/^import\s+(?:[^;]*?\s+from\s+)?'([^']+)'/gm)].map((m) => join(f, '..', m[1]));
+    return [f, list];
+  }));
+  const loops = [];
+  const visit = (f, path) => {
+    for (const d of deps.get(f) || []) {
+      if (path.includes(d)) { loops.push([...path.slice(path.indexOf(d)), d].map((p) => p.slice(root.length)).join(' → ')); continue; }
+      if (path.length < 40) visit(d, [...path, d]);
+    }
+  };
+  for (const f of files) visit(f, [f]);
+  assert.deepEqual([...new Set(loops)], []);
+});
