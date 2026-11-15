@@ -31,6 +31,7 @@ registers its screen with `defineView` and its buttons with `onAction` / `onChan
 | 7 | v3.12.6 | Dashboard (`views/dashboard.js`); the linked jobs folder (`app/folder.js`) |
 | 8 | v3.12.7 | Tank registry (`views/registry.js`) |
 | 9 | v3.12.8 | Section screens and equipment (`views/sections.js`), summary and deficiencies (`views/summary.js`); image helpers (`app/images.js`) |
+| 10 | v3.12.9 | Tank setup and the floor builders (`views/setup.js`) |
 
 Screen modules can't import `app.js`, so the few app-level steps they need that haven't moved yet (saving and loading, the
 recovery journal, opening and importing job files, and the floor map and setup redraws) are handed over at start-up through `js/app/host.js`.
