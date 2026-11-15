@@ -7,6 +7,33 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Report improvements — R1: the report frame (v3.21.0)
+
+The printed report is now a numbered engineering document. Every table, note, drawing and photo it had before is
+still in it, and no calculation result changed (the engineering golden tests are unchanged).
+
+- **Front matter:** cover page (company, tank, client, site, report number, revision, DRAFT or ISSUED); document
+  control (revision history from the job's file saves and issued report, prepared / peer reviewed / approved
+  signature lines); contents; a key to value types (M measured, C calculated, E estimated, O inspector observation,
+  A engineering assessment; the marks are applied to values in a later stage) and abbreviations.
+- **Numbered chapters** (executive summary; tank identification and design; personnel, equipment and calibration;
+  floor; shell; roof; nozzles; foundation and settlement; findings by component; deficiencies and recommendations)
+  and **lettered appendices** (plate register, floor indication photographs). Sections are numbered 4.2; tables and
+  figures by chapter (Table 4-1, Figure 5-1), listed in the contents.
+- **Report sections and layout** (Report screen): switch each front-matter part, chapter and appendix on or off,
+  and move chapters and appendices up or down; numbering follows. Chapters with nothing to show for the job are left
+  out. Content options (photos, indication sizes, false calls, plate labels, datum marks) are there too. The choice
+  is kept on this device; *Default layout* restores the standard order.
+- **Pages:** Letter, or A4 (Jobs → Company → Report page size). A running header (company, tank, report number) and
+  footer (revision, DRAFT / ISSUED, "Page n of N") on every page but the cover; chapters start on a new page.
+- **Drawings** (floor map, shell roll-out, roof plans, settlement plan and chart) each get their own page with a
+  numbered figure caption, **landscape** by default or **portrait** (Report sections and layout → Drawing pages).
+- **DRAFT** watermark until the job is Complete; the issued report has none.
+- The page set-up and frame styles are carried inside the report, so an issued report keeps them.
+
+Print with the browser's own "Headers and footers" turned off. Browsers can't put page numbers into a contents list,
+so the contents give section, table and figure numbers (each a link in the PDF) and every page is numbered.
+
 ## Data integrity upgrade — stage 12: storage, backup reminder and history pruning (v3.20.0)
 
 **Storage on this device** (Jobs page) shows:
@@ -454,6 +481,9 @@ Nothing in `tests/` or `package.json` is used by the app, which still has no dep
 - `tests/modules.test.mjs` (part of the Node run) — every module parses, every import matches an
   export, no undefined names (ESLint, `npm i --no-save eslint@10` first), and the offline cache lists
   every module.
+- `node tests/tools/report-content-diff.mjs` — checks that every table cell, paragraph, heading, drawing and photo in
+  the recorded report of each test job is still in the report the code builds now. Run it before re-recording the
+  report golden files.
 - `node tests/tools/screens-diff.mjs <old copy> <new copy>` — renders every screen with the demo tank in
   two copies of the app and reports any difference in the HTML. Used to confirm a refactoring step
   changes nothing on screen.
@@ -955,7 +985,8 @@ every limit is editable.
 | `js/geometry.js` | Plate layout generator, plate ↔ floor coordinates |
 | `js/calc.js` | Indication analysis and API 653 MRT |
 | `js/map.js` | SVG floor map and pan/zoom |
-| `js/report.js` | Printable report |
+| `js/report.js` | Printable report: the content of each chapter |
+| `js/report/frame.js` | Report frame: chapter order and switches, numbering, cover, document control, contents, value key, page set-up, running header and footer |
 | `js/export.js` | CSV, SVG/PNG export |
 | `js/db.js` | IndexedDB storage (jobs, photos and the photo bin, light job cards, registry, settings, revisions, audit, imports); job + photo writes are one transaction |
 | `js/loader.js`, `js/xlsx.js` | UT loader sheet: building the workbook, reading it back into a list of readings with a status |

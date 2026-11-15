@@ -20,7 +20,16 @@ import { sha256 } from '../util.js';
 
 /** The report of a job as it would be printed now. For the open job the screen's own layout, results and photos are
  *  used; for any other job they are worked out from the stored copy. */
+/** The job's revision history for the report's document control: revisions saved to a job file and issued reports,
+ *  oldest first. */
+export async function reportHistory(jobId) {
+  const revs = await db.jobRevisions(jobId).catch(() => []);
+  return revs.filter((r) => r.reason === 'file-save' || r.reason === 'issued').sort((a, b) => a.n - b.n)
+    .map((r) => ({ rev: r.rev || '', at: r.at, by: r.by?.name || '', note: r.reason === 'issued' ? 'Report issued (job Complete)' : r.note || 'Saved to a job file' }));
+}
+
 export async function reportHTMLOf(job, opts = S.reportOpts) {
+  if (!opts.history) opts = { ...opts, history: await reportHistory(job.id) };
   if (S.job && job === S.job) return buildReport(job, S.layout, S.calc, S.company, S.photos, opts);
   const j = migrate(structuredClone(job)), layout = buildLayout(j);
   return buildReport(j, layout, api653(j, layout), S.company, await db.jobPhotos(j.id), opts);
@@ -35,7 +44,7 @@ export function askReopenReason(job) {
 /** Freeze the report of a job that has just become Complete: an 'issued' revision holding the report exactly as
  *  printed, and job.issued pointing to it. The caller saves the job. */
 async function issue(job, from) {
-  const opts = { ...S.reportOpts }, html = await reportHTMLOf(job, opts), at = Date.now();
+  const opts = { ...S.reportOpts, history: await reportHistory(job.id) }, html = await reportHTMLOf(job, opts), at = Date.now();
   const hash = await sha256(html);
   const r = await addRevision(job, 'issued', `${STAGE_LABEL[from] || from || '—'} → Complete: report issued`, { issued: { html, opts, appVersion: APP_VERSION, at, hash } });
   job.issued = { n: r.n, at, hash, appVersion: APP_VERSION };

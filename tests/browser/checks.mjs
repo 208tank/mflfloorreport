@@ -1745,6 +1745,89 @@ export default {
     await page.context().close();
   },
 
+  async 'report frame: chapters are numbered in the order chosen, can be switched off, and the choice is kept'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => window.tfi.go('report'));
+    await page.waitForSelector('#reportRoot .report h2.rp-ch');
+    const chapters = () => page.$$eval('#reportRoot h2.rp-ch', (hs) => hs.map((x) => x.textContent.trim()));
+    let ch = await chapters();
+    assert.deepEqual(ch.slice(0, 4), ['1Executive summary', '2Tank identification and design', '3Personnel, equipment and calibration', '4Floor — MFL inspection']);
+    assert.ok(await page.$('#reportRoot .rp-cover'), 'cover'); assert.ok(await page.$('#reportRoot .rp-toc'), 'contents');
+    assert.match(await page.textContent('#reportRoot'), /Table 4-1 API 653 bottom evaluation by area/);
+    assert.match(await page.textContent('#reportRoot'), /Figure 4-1 Floor plan/);
+    // contents lists each numbered section with a link to it
+    const toc = await page.$$eval('#reportRoot .rp-toc a', (as) => as.map((a) => [a.textContent, document.querySelector(a.getAttribute('href')) ? 'ok' : 'missing']));
+    assert.ok(toc.length > 20 && toc.every(([, ok]) => ok === 'ok'), 'every contents entry links to its heading');
+    // switch the executive summary off; move Floor up above Personnel
+    await page.click('.rsec summary');
+    await page.uncheck('[data-act="rsec"][data-id="exec"]');
+    await page.waitForFunction(() => !/Executive summary/.test(document.querySelector('#reportRoot h2.rp-ch')?.textContent));
+    await page.click('[data-act="rsec-up"][data-id="floor"]');
+    await page.waitForFunction(() => document.querySelectorAll('#reportRoot h2.rp-ch')[1]?.textContent.includes('Floor'));
+    ch = await chapters();
+    assert.deepEqual(ch.slice(0, 3), ['1Tank identification and design', '2Floor — MFL inspection', '3Personnel, equipment and calibration']);
+    assert.match(await page.textContent('#reportRoot'), /Table 2-1 API 653 bottom evaluation by area/, 'tables renumber with their chapter');
+    // kept on the device (it is read back at start-up)
+    const saved = await page.evaluate(async () => (await (await import('./js/db.js')).db.getMeta('report:opts')).layout);
+    assert.ok(saved.off.includes('exec') && saved.order.indexOf('floor') < saved.order.indexOf('personnel'), JSON.stringify(saved));
+    // back to the default
+    await page.click('[data-act="rsec-reset"]');
+    await page.waitForFunction(() => document.querySelector('#reportRoot h2.rp-ch')?.textContent.includes('Executive summary'));
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'report frame: the PDF has numbered pages, landscape drawing pages, and follows the page-size and orientation options'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const pdfPages = async () => {
+      await page.evaluate(() => window.tfi.go('report'));
+      await page.waitForSelector('#reportRoot .report h2.rp-ch');
+      await page.waitForTimeout(300);
+      await page.emulateMedia({ media: 'print' });
+      const buf = await page.pdf({ preferCSSPageSize: true, printBackground: true });
+      await page.emulateMedia({ media: 'screen' });
+      return [...buf.toString('latin1').matchAll(/\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/g)].map((m) => (+m[1] > +m[2] ? 'land' : 'port') + ':' + Math.round(+m[1]) + 'x' + Math.round(+m[2]));
+    };
+    let p = await pdfPages();
+    const count = (k) => p.filter((x) => x === k).length;
+    assert.ok(count('port:612x792') > 10, 'Letter portrait pages');
+    assert.ok(count('land:792x612') >= 3, `landscape drawing pages: ${p.join(' ')}`);
+    // the report carries its own page set-up and running header / footer
+    const css = await page.$eval('#reportRoot .report style', (s) => s.textContent);
+    assert.match(css, /@page \{ size: letter portrait/); assert.match(css, /counter\(page\) " of " counter\(pages\)/); assert.match(css, /Tank TK-101/);
+    // A4 and portrait drawings
+    await page.evaluate(() => window.tfi.go('jobs'));
+    await page.selectOption('select[data-cb="pageSize"]', 'a4');
+    await page.evaluate(() => window.tfi.go('report'));
+    await page.waitForSelector('.rsec');
+    await page.click('.rsec summary');
+    await page.selectOption('[data-act="rdraw"]', 'portrait');
+    await page.waitForSelector('#reportRoot .rp-draw.port');
+    p = await pdfPages();
+    assert.ok(p.length > 10 && p.every((x) => x === 'port:595x842'), `all A4 portrait: ${[...new Set(p)].join(' ')}`);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'report frame: an issued report keeps its document control and still matches the live report'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => { delete Window.prototype.showSaveFilePicker; delete window.showSaveFilePicker; });
+    await Promise.all([page.waitForEvent('download'), page.click('#saveFileBtn')]);
+    await page.waitForTimeout(500);
+    await page.evaluate(() => window.tfi.go('setup'));
+    await page.selectOption('select[data-bind="status.stage"]', 'complete');
+    await page.waitForFunction(() => window.tfi.job().issued);
+    await page.waitForTimeout(300);
+    await page.evaluate(() => window.tfi.go('report'));
+    await page.waitForSelector('#issuedBar');
+    assert.doesNotMatch(await page.textContent('#issuedBar'), /different report/);
+    const rep = await page.textContent('#issuedReport');
+    assert.match(rep, /Revision history\s*Rev\s*Date\s*By\s*Description\s*1\s*\d{4}-\d\d-\d\d/, 'the file save is in the revision history');
+    assert.match(rep, /ISSUED/); assert.equal(await page.$('#issuedReport .rp-draft'), null, 'no draft mark on the issued report');
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
 };
 
 /** In the page: create the v3.6.0 database (version 3) with two jobs, a photo, a tank and their cards. Returns the stores. */

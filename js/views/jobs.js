@@ -44,6 +44,7 @@ function viewJobs() {
         <label class="fld"><span class="lbl">Company name</span><span class="ctl"><input data-cb="name" value="${h(c.name)}"></span></label>
         <label class="fld"><span class="lbl">Details (address, phone, certification)</span><span class="ctl"><textarea data-cb="details" rows="3">${h(c.details)}</textarea></span></label>
         <label class="fld"><span class="lbl">Report footer note</span><span class="ctl"><input data-cb="footer" value="${h(c.footer)}"></span></label>
+        <label class="fld"><span class="lbl">Report page size</span><span class="ctl"><select data-cb="pageSize"><option value="letter" ${c.pageSize !== 'a4' ? 'selected' : ''}>Letter (8.5 × 11 in)</option><option value="a4" ${c.pageSize === 'a4' ? 'selected' : ''}>A4 (210 × 297 mm)</option></select></span></label>
         <div class="logo-row">${c.logo ? `<img src="${c.logo}" alt="logo">` : '<span class="muted">No logo</span>'}
           <label class="btn sm">Choose logo<input type="file" accept="image/*" data-act="logo" hidden></label>${c.logo ? '<button class="btn sm ghost" data-act="logo-clear">Remove</button>' : ''}</div>
       </section>
