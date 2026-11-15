@@ -3,9 +3,9 @@ import { db, requestPersistence, dbConfig } from './db.js';
 import { pendingSteps } from './migrations.js';
 import { createSaver, saveErrorText } from './saver.js';
 import { createJournal } from './journal.js';
-import { u, toMm, inVal, fmt, fmtRate } from './units.js';
+import { u, toMm, inVal, fmt } from './units.js';
 import { buildLayout, plateAt, toLocal, itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
-import { api653, RESULTS, RESULT_SHORT, czLimitAuto, plateNominal, NZ_CONN, UT_CLOCK, nozzleWall, statusText } from './calc.js';
+import { api653, RESULT_SHORT, plateNominal, NZ_CONN, UT_CLOCK, nozzleWall, statusText } from './calc.js';
 import { renderMapSVG, MapController } from './map.js';
 import { download, indicationsCSV, platesCSV, nozzlesCSV, shellCSV, roofCSV, settleCSV, svgForExport, svgToPng, fileBase } from './export.js';
 import { legendHTML } from './report.js';
@@ -15,14 +15,13 @@ import { makeDemo } from './demo.js';
 import { rolloutSVG, SHELL_SVG_STYLE } from './shell.js';
 import { buildLoader, readLoader, loaderAreas } from './loader.js';
 import { editionsFor, supplementsFor } from './tables.js';
-import { annularReq } from './design.js';
 import { viewPlace, allDefs, numberDefs } from './sections.js';
 import { tankFromJob, tankKeyOf } from './registry.js';
 import { rowsFromGrid, measuredFromDrawing } from './builder.js';
 import { esc as h } from './util.js';
 import { $, $$, toast, askConfirm, askChoice } from './ui.js';
 import { indCount } from './cards.js';
-import { S, APP_VERSION, RESULT_OPTS, VT_COND, COATING, UT_METHOD, REPAIR_METHOD, NZ_TYPES, nextMark, FT_TYPES } from './app/state.js';
+import { S, APP_VERSION, byNo, RESULT_OPTS, VT_COND, COATING, UT_METHOD, REPAIR_METHOD, NZ_TYPES, nextMark, FT_TYPES } from './app/state.js';
 import { readInput, field, rerenderKeep } from './app/fields.js';
 import { resizeImage } from './app/images.js';
 import { views, after, configureNav, go, renderAll, renderNav, renderView } from './app/nav.js';
@@ -36,8 +35,10 @@ import { nozzleTableHTML, nozzleUTBox } from './views/nozzles.js';
 import { writeStageToFile } from './app/folder.js';
 import './views/dashboard.js';
 import './views/registry.js';
-import { crumbHTML, findingsBox } from './views/sections.js';
+import { crumbHTML } from './views/sections.js';
 import './views/summary.js';
+import { refreshIndTable, refreshPlateTable } from './views/floorlists.js';
+import { refreshApi } from './views/api.js';
 import { refreshSetupPreview, refreshBuilder, relocateOrphans, rowLetter, findSec } from './views/setup.js';
 import { addRevision, baselineRevisions, recoverAfterCrash, runIntegrity, integrityHTML, renderIntegrity } from './views/history.js';
 import { configureHost } from './app/host.js';
@@ -473,7 +474,6 @@ function sideOverview() {
   </div>`;
 }
 
-const byNo = (a, b) => String(a.no).localeCompare(String(b.no), undefined, { numeric: true });
 
 /* -------------------------------------------------------- indication editor */
 
@@ -646,166 +646,6 @@ function plateEditor(key) {
     <div class="ind-list">${inds.map((i) => `<button class="ind-row" data-act="sel-ind" data-id="${i.id}"><span class="dot r-${i.result || 'pending'}"></span><b>${h(i.no)}</b><span>X ${fmt(i.x, 'small', S.job)}</span><span>Y ${fmt(i.y, 'small', S.job)}</span></button>`).join('') || '<p class="muted small">None.</p>'}</div>
     <p class="muted small">${p.kind === 'annular' ? 'Annular X is measured along the shell from the datum seam; Y is measured in from the shell.' : 'X is horizontal and Y vertical on the drawing, measured from the datum corner.'}</p></div>`;
 }
-
-/* ------------------------------------------------------- indications view */
-
-function filteredInds() {
-  const q = S.search.trim().toLowerCase();
-  let list = S.job.indications.filter((i) => (S.resFilter === 'all' || (i.result || 'pending') === S.resFilter || (S.resFilter === 'repair' && S.calc.per.get(i.id)?.repair)));
-  if (q) list = list.filter((i) => { const a = S.calc.per.get(i.id); return [i.no, a?.plate?.label, i.comments, i.vtCond, RESULTS[i.result || 'pending']].join(' ').toLowerCase().includes(q); });
-  const k = S.sort.key, d = S.sort.dir;
-  const val = (i) => { const a = S.calc.per.get(i.id) || {}; return { no: i.no, plate: a.plate?.label, mfl: i.mflPct, res: i.result, ut: i.utMin, vt: i.vtDepth, rem: a.rem, loss: a.lossPct, proj: a.projected, st: a.status }[k]; };
-  return list.sort((a, b) => { const va = val(a), vb = val(b); if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1; return (typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb), undefined, { numeric: true })) * d; });
-}
-
-function viewInds() {
-  const th = (k, label, cls = '') => `<th class="sortable ${cls}${S.sort.key === k ? ' sorted' : ''}" data-act="sort" data-k="${k}">${label}${S.sort.key === k ? (S.sort.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
-  const U = u(S.job);
-  return `<div class="page wide">
-    <div class="page-head"><div><h1>Indications</h1><p class="muted">MFL calls with UT and VT prove-up. Click a row to edit. Thickness in ${U.small}.</p></div>
-      <div class="acts"><button class="btn primary" data-act="ind-new">New indication</button><button class="btn" data-act="exp-ind">Export CSV</button><button class="btn" data-act="utl-down" title="Excel sheet for the UT technician">UT loader ↓</button><button class="btn" data-act="utl-up" title="Upload the completed UT loader sheet">UT loader ↑</button></div></div>
-    <div class="toolbar"><input type="search" placeholder="Search no., plate, remarks…" value="${h(S.search)}" data-act="search" class="search">
-      <select data-act="resfilter">${[['all', 'All results'], ...RESULT_OPTS, ['repair', 'Repairs only']].map(([k, v]) => `<option value="${k}" ${S.resFilter === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
-      <span class="muted small" id="indCount"></span></div>
-    <div class="card flush"><table class="grid inds"><thead><tr>${th('no', 'No.')}${th('plate', 'Plate')}<th class="n">X</th><th class="n">Y</th>${th('mfl', 'MFL %', 'n')}${th('res', 'Result')}${th('ut', 'UT min', 'n')}${th('vt', 'VT pit', 'n')}${th('rem', 'Remaining', 'n')}${th('loss', 'Loss %', 'n')}${th('proj', 't at Oᵣ', 'n')}${th('st', 'Status')}<th>Remarks</th></tr></thead><tbody id="indBody"></tbody></table></div>
-  </div>`;
-}
-after.inds = () => refreshIndTable();
-function refreshIndTable() {
-  const body = $('#indBody'); if (!body) return;
-  const list = filteredInds();
-  body.innerHTML = list.map((i) => {
-    const a = S.calc.per.get(i.id) || {};
-    return `<tr data-act="open-ind" data-id="${i.id}" class="${a.repair ? 'is-rep' : ''}${a.status === 'below MRT' ? ' is-bad' : ''}">
-      <td><b>${h(i.no)}</b>${a.critical ? ' <span class="chip cz">CZ</span>' : ''}</td><td>${a.plate ? h(a.plate.label) : '<span class="bad">?</span>'}</td>
-      <td class="n">${fmt(i.x, 'small', S.job, false)}</td><td class="n">${fmt(i.y, 'small', S.job, false)}</td><td class="n">${i.mflPct ?? '—'}</td>
-      <td><span class="chip r-${i.result || 'pending'}">${RESULT_SHORT[i.result || 'pending']}</span></td>
-      <td class="n">${fmt(i.utMin, 't', S.job, false)}</td><td class="n">${fmt(i.vtDepth, 't', S.job, false)}</td>
-      <td class="n">${fmt(a.rem, 't', S.job, false)}${a.src && a.src !== 'UT' ? `<sup title="${h(a.src)}">${a.src === 'MFL estimate' ? 'M' : 'V'}</sup>` : ''}</td>
-      <td class="n">${a.lossPct != null ? a.lossPct.toFixed(0) : '—'}</td><td class="n">${fmt(a.projected, 't', S.job, false)}</td>
-      <td><span class="st st-${(a.status || '').replace(/\W+/g, '-')}">${h(a.status === 'n/a' ? '' : a.status)}</span></td><td class="rem">${h([i.vtCond, i.comments].filter(Boolean).join('; '))}</td></tr>`;
-  }).join('') || '<tr><td colspan="13" class="empty">No indications match.</td></tr>';
-  const c = $('#indCount'); if (c) c.textContent = `${list.length} of ${S.job.indications.length}`;
-}
-
-function openIndDialog(id) {
-  const ind = S.job.indications.find((i) => i.id === id); if (!ind) return;
-  S.sel = id;
-  const dlg = $('#dlg');
-  $('#dlgBody').innerHTML = indEditor(ind, 'dialog');
-  if (!dlg.open) dlg.showModal();
-}
-
-/* ------------------------------------------------------------ plates view */
-
-function viewPlates() {
-  return `<div class="page wide">
-    <div class="page-head"><div><h1>Plates</h1><p class="muted">Override labels, nominal thickness and MFL scan coverage for individual plates.</p></div>
-      <div class="acts"><button class="btn" data-act="scan-all" data-v="scanned">Mark all scanned</button><button class="btn" data-act="exp-plates">Export CSV</button></div></div>
-    <div class="toolbar"><input type="search" placeholder="Filter plates…" value="${h(S.plateSearch)}" data-act="plate-search" class="search"></div>
-    <div class="card flush"><table class="grid plates"><thead><tr><th>Plate</th><th>Type</th><th class="n">Drawn (${u(S.job).big})</th><th>Length (${u(S.job).big})</th><th>Width (${u(S.job).big})</th><th>Orientation</th><th>Label override</th><th>Nominal t (${u(S.job).small})</th><th>UT min (${u(S.job).small})</th><th>MFL scan</th><th>Datum</th><th class="n">Ind.</th><th>Notes</th></tr></thead><tbody id="plateBody"></tbody></table></div></div>`;
-}
-after.plates = () => refreshPlateTable();
-function refreshPlateTable() {
-  const body = $('#plateBody'); if (!body) return;
-  const q = S.plateSearch.trim().toLowerCase();
-  const counts = new Map(); for (const i of S.job.indications) counts.set(i.plate, (counts.get(i.plate) || 0) + 1);
-  body.innerHTML = S.layout.plates.filter((p) => !q || p.label.toLowerCase().includes(q)).map((p) => {
-    const o = S.job.plates[p.key] || {};
-    const nom = p.kind === 'annular' ? S.job.tank.tAnnular ?? S.job.tank.tBottom : S.job.tank.tBottom;
-    const k = `data-key="${p.key}"`;
-    return `<tr><td><b>${h(p.label)}</b></td><td>${p.kind === 'annular' ? 'Annular' : (p.cut ? 'Cut' : 'Full') + (p.resized ? ' · measured' : '')}</td>
-      <td class="n">${fmt(p.bb.x1 - p.bb.x0, 'big', S.job, false)} × ${fmt(p.bb.y1 - p.bb.y0, 'big', S.job, false)}</td>
-      ${p.kind === 'annular' ? '<td></td><td></td><td></td>' : `<td><input class="num" data-pb="len" data-kind="big" ${k} inputmode="decimal" value="${h(inVal(o.len, 'big', S.job))}" placeholder="${h(inVal(p.std.len, 'big', S.job))}"></td>
-      <td><input class="num" data-pb="wid" data-kind="big" ${k} inputmode="decimal" value="${h(inVal(o.wid, 'big', S.job))}" placeholder="${h(inVal(p.std.wid, 'big', S.job))}"></td>
-      <td><select data-pb="orient" data-kind="text" ${k}>${[['', 'Standard'], ['h', 'Horizontal'], ['v', 'Vertical']].map(([v, l]) => `<option value="${v}" ${(o.orient || '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></td>`}
-      <td><input data-pb="label" data-kind="text" ${k} value="${h(o.label ?? '')}" placeholder="${h(p.autoLabel)}"></td>
-      <td><input data-pb="tNom" data-kind="t" ${k} inputmode="decimal" value="${h(inVal(o.tNom, 't', S.job))}" placeholder="${h(inVal(nom, 't', S.job))}"></td>
-      <td><input data-pb="utMin" data-kind="t" ${k} inputmode="decimal" value="${h(inVal(o.utMin, 't', S.job))}"></td>
-      <td><select data-pb="scan" data-kind="text" ${k}>${[['scanned', 'Scanned'], ['partial', 'Partial'], ['not', 'Not scanned']].map(([v, l]) => `<option value="${v}" ${(o.scan || 'scanned') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
-      <td>${datumSelect(p)}</td>
-      <td class="n">${counts.get(p.key) || ''}</td><td><input data-pb="notes" data-kind="text" ${k} value="${h(o.notes ?? '')}"></td></tr>`;
-  }).join('');
-}
-
-function datumSelect(p) {
-  const opts = p.kind === 'annular' ? [['start', 'Start seam'], ['end', 'End seam']] : [['TL', 'Top-left'], ['TR', 'Top-right'], ['BL', 'Bottom-left'], ['BR', 'Bottom-right']];
-  const cur = p.kind === 'annular' ? (p.datumEnd ? 'end' : 'start') : p.datum.c;
-  return `<select data-act="datum-sel" data-key="${p.key}">${opts.map(([v, l]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
-}
-
-/* --------------------------------------------------------------- API view */
-
-function viewApi() {
-  const met = S.job.units === 'metric';
-  const v = (mm) => (met ? `${mm.toFixed(2)} mm` : `${(mm / 25.4).toFixed(3)} in`);
-  const f = (label, key, kind, extra = {}) => field(label, 'calc.' + key, kind, extra);
-  return `<div class="page">
-  <div class="page-head"><div><h1>API 653 bottom evaluation</h1><p class="muted">Minimum remaining thickness at the next internal inspection (API 653, 5th ed. Addendum 4 (2025), §4.4.5). Check the limits against the edition in force and the tank's design.</p></div></div>
-  ${findingsBox('floor')}
-  <div class="api-grid">
-    <section class="card"><h2>Inputs</h2><div class="fgrid">
-      ${f('Oᵣ — years to next internal inspection', 'Or', 'num', { unit: 'yr', hint: `§6.4.2.2.1: at most ${S.job.tank.rpb ? 30 : 20} years${S.job.tank.rpb ? ' (with RPB)' : ' (30 with an RPB)'}` })}
-      ${f('Tank age (years) — UPᵣ basis', 'years', 'num', { unit: 'yr', hint: 'API 653 §4.4.5.1: UPᵣ is a linear rate over the age of the tank' })}
-      ${f('StPᵣ basis (optional)', 'stprYears', 'num', { unit: 'yr', ph: 'tank age', hint: 'e.g. years since the coating or the last inspection' })}
-      ${f('MFL threshold', 'mflThresholdPct', 'num', { unit: '% of nominal', hint: 'API 653 §4.4.5.1 Note 1: UPᵣ uses the lesser of the threshold and the thinnest unrepaired area' })}
-      ${f('Min. remaining — bottom plates', 'mrtBottom', 't')}
-      ${f('Min. remaining — annular plates', 'mrtAnnular', 't', { ph: S.calc?.ann?.tbl != null ? inVal(S.calc.ann.tbl, 't', S.job) : '', hint: 'Blank = Table 4.5 / API 650 Table 5.1 value + CA (§4.4.6)' })}
-      ${f('Annular corrosion allowance', 'annCA', 't', { hint: 'Added to the table value (§4.4.6.2)' })}<div></div>
-      ${(() => { const a = annularReq(S.job); if (!a) return '<p class="muted small span2">Annular plate minimum (API 653 Table 4.5 / API 650 Table 5.1b): enter the shell courses (course 1 nominal t), the maximum fill height and the product SG to calculate it.</p>'; return `<p class="small span2 ann-req">${h(a.table)}: S<sub>b</sub> = ${Math.round(a.Sb).toLocaleString()} psi with course 1 t = ${fmt(+S.job.shell.courses[0].tNom, 't', S.job)} → minimum annular plate <b>${a.over ? 'beyond the table — engineering evaluation' : fmt(a.tmm, 't', S.job)}</b> ${!a.over ? `<button class="btn sm" data-act="ann-apply" data-v="${a.tmm}">Use for annular plates</button>` : ''}<br><span class="muted">${(S.job.tank.sg ?? 1) >= 1 ? 'SG ≥ 1: S<sub>b</sub> = 2.6 D (H − 1) G / t' : 'SG &lt; 1: S<sub>b</sub> = 2.34 D (H − 1) / t'}, interpolated between stress columns.</span></p>`; })()}
-      <div class="span2 presets"><span class="muted small">Bottom limit presets:</span>
-        <button class="btn sm" data-act="mrt-preset" data-v="2.54">${v(2.54)} — no leak detection / containment</button>
-        <button class="btn sm" data-act="mrt-preset" data-v="1.27">${v(1.27)} — with leak detection &amp; containment</button>
-        <button class="btn sm" data-act="mrt-preset" data-v="1.27">${v(1.27)} — reinforced lining &gt; 0.05 in</button></div>
-      <h3 class="span2" style="margin:8px 0 0">Repair patch plates</h3>
-      ${f('Auto patch repair indications', 'autoPatch', 'bool', { value: S.job.calc.autoPatch !== false, cls: 'span2' })}
-      ${f('Default patch length', 'patchL', 'small', { ph: met ? '300' : '12' })}${f('Default patch width', 'patchW', 'small', { ph: met ? '300' : '12' })}
-      ${f('Extend past the corrosion by at least', 'patchMargin', 'small', { hint: 'API 653 §9.11.1.1 c: 2 in' })}${f('Patch plate thickness', 'patchT', 't', { hint: 'Critical zone: 1/4 in max.' })}<p class="muted small" id="patchSum">${(() => { const pl = patchList(S.job, S.layout, S.calc); return pl.length ? `${pl.length} patch${pl.length > 1 ? 'es' : ''}: ${pl.map((p) => `${p.id} ${fmt(p.L, 'small', S.job, false)} × ${fmt(p.W, 'small', S.job)}${p.kind === 'tomb' ? ' tombstone' : ''}${p.status !== 'OK' ? ' (' + p.status.toLowerCase() + ')' : ''}`).join(', ')}` : 'No patches.'; })()}</p>
-      ${f('Critical zone width (from shell)', 'czDist', 'small')}
-      ${f('Critical zone limit', 'czLimit', 't', { ph: inVal(czLimitAuto(S.job), 't', S.job), hint: `Blank = §4.4.5.4: the smaller of ${met ? '3 mm' : '0.118 in'} and ½ course 1 t-min, not less than ${met ? '2.5 mm' : '0.10 in'}` })}
-      ${f('Reason for an entered critical zone limit', 'czLimitReason', 'text', { ph: 'e.g. isolated pitting, Table 4.4' })}
-      ${f('Lower shell course t-min', 'shellTmin', 't', { hint: 'Optional, for the critical zone limit' })}
-      ${field('Shell toughness (critical-zone patch spacing)', 'tank.shellTough', 'sel', { options: [['', 'Unknown — §9.11.1.2 g applies'], ['known', 'Known (meets API 650 toughness)']] })}
-      ${field('Bottom projection beyond the shell — thickness at the outside weld toe', 'tank.projT', 't', { hint: 'API 653 §4.4.5.7: at least 0.10 in (2.5 mm)' })}
-      ${field('Bottom projection beyond the shell — width', 'tank.projW', 'small', { hint: 'API 653 §4.4.5.7: at least 3/8 in (10 mm)' })}
-      ${f('Product side coated, coating life ≥ Oᵣ (StPᵣ = 0)', 'coated', 'bool', { cls: 'span2' })}
-      ${f('Coating basis confirmed by the engineer despite recorded product-side pitting', 'coatConfirmed', 'bool', { cls: 'span2' })}
-      ${f('Effective cathodic protection (UPᵣ = 0)', 'cp', 'bool', { cls: 'span2' })}
-      ${f('Oᵣ set by an RBI assessment (§6.4.2.2.2)', 'rbi', 'bool', { cls: 'span2' })}
-      ${f('Include pending MFL calls using the MFL % estimate (as soil side)', 'includeUnverified', 'bool', { cls: 'span2' })}
-      ${field('StPᵣ override', 'calc.stprOverride', 't', { unit: u(S.job).rateUnit, ph: 'calculated' })}
-      ${field('UPᵣ override', 'calc.uprOverride', 't', { unit: u(S.job).rateUnit, ph: 'calculated' })}
-    </div></section>
-    <section class="card" id="apiResults"></section>
-  </div></div>`;
-}
-after.api = () => refreshApi();
-function refreshApi() {
-  const el = $('#apiResults'); if (!el) return;
-  const ps = $('#patchSum'); if (ps) { const pl = patchList(S.job, S.layout, S.calc); ps.textContent = pl.length ? `${pl.length} patch${pl.length > 1 ? 'es' : ''}: ${pl.map((p) => `${p.id} ${fmt(p.L, 'small', S.job, false)} × ${fmt(p.W, 'small', S.job)}${p.kind === 'tomb' ? ' tombstone' : ''}${p.status !== 'OK' ? ' (' + p.status.toLowerCase() + ')' : ''}`).join(', ')}` : 'No patches.'; }
-  const c = S.calc, t = (mm) => fmt(mm, 't', S.job), tn = (mm) => fmt(mm, 't', S.job, false);
-  const reps = S.job.indications.filter((i) => c.per.get(i.id)?.repair || c.per.get(i.id)?.status === 'below MRT').sort(byNo);
-  el.innerHTML = `<h2>Results</h2>
-    <p class="formula">MRT = min(RT<sub>bc</sub>, RT<sub>ip</sub>) − O<sub>r</sub>(StP<sub>r</sub> + UP<sub>r</sub>)</p>
-    <div class="rates"><div><span>StP<sub>r</sub> product side</span><b>${fmtRate(c.StPr, S.job)}</b><small>${c.stSrc === 'override' ? 'entered' : c.C.coated && !c.stSrc ? 'coated → 0' : c.stSrc ? 'from ' + h(c.stSrc.no) + (c.stYears !== c.years ? ` over ${c.stYears} yr` : '') : 'no product side loss'}</small></div>
-      <div><span>UP<sub>r</sub> soil side</span><b>${fmtRate(c.UPr, S.job)}</b><small>${c.C.cp ? 'effective CP → 0' : c.upSrc === 'override' ? 'entered' : c.upSrc === 'threshold' ? `MFL threshold ${c.C.mflThresholdPct} %` : c.upSrc ? 'from ' + h(c.upSrc.no) : 'no soil side loss'}</small></div>
-      <div><span>Loss over O<sub>r</sub></span><b>${t(c.Or * c.K)}</b><small>${c.Or} yr × combined rate</small></div></div>
-    <table class="grid"><thead><tr><th>Area (${u(S.job).small})</th><th class="n">RT<sub>ip</sub></th><th class="n">RT<sub>bc</sub></th><th class="n">MRT</th><th class="n">Min.</th><th class="n">Max. O<sub>r</sub></th><th></th></tr></thead><tbody>
-    ${c.regions.map((r) => `<tr><td>${h(r.label)}</td><td class="n">${tn(r.RTip)}</td><td class="n">${tn(r.RTbc)}</td><td class="n"><b>${tn(r.MRT)}</b></td><td class="n">${tn(r.limit)}</td><td class="n">${r.OrMax == null ? '—' : Number.isFinite(r.OrMax) ? Math.max(0, r.OrMax).toFixed(1) + ' yr' : '∞'}</td><td class="${r.ok ? 'ok' : r.ok === false ? 'bad' : ''}">${r.notEvaluated ? 'Not evaluated' : r.ok == null ? '—' : r.ok ? (r.provisional ? `✓ Provisional (${r.provisional} on MFL estimates)` : '✓ OK') : '✕ Fails'}</td></tr>`).join('')}
-    </tbody></table>
-    <p class="muted small">Limits: bottom ${t(c.mBot)}${S.layout.Ri < S.layout.R ? ` · annular ${t(c.mAnn)} (${h(c.ann.src)})` : ''} · critical zone ${t(c.czLim)} (${c.C.czLimit != null ? 'entered' + (c.C.czLimitReason ? ': ' + h(c.C.czLimitReason) : '') : '§4.4.5.4'})${c.projection ? ` · bottom projection ${c.projection.ok === true ? '✓' : c.projection.ok === false ? '✕' : '?'} (§4.4.5.7)` : ''}</p>
-    <p class="muted small">Any unrepaired location thinner than <b>${t(c.regions[0]?.tReq)}</b> today (bottom plates) will be below the minimum after ${c.Or} years at the current rates. Locations set to Repair "Auto" are marked for repair worst-first until the rest pass; rates are then re-derived from what is left unrepaired.</p>
-    ${c.warnings.length ? `<ul class="warn">${c.warnings.map((w) => `<li>${h(w)}</li>`).join('')}</ul>` : ''}
-    <h3>Repairs (${reps.length})</h3>
-    <div class="ind-list">${reps.map((i) => { const a = c.per.get(i.id); return `<button class="ind-row" data-act="open-ind" data-id="${i.id}"><span class="dot r-${i.result}"></span><b>${h(i.no)}</b><span>${h(a.plate?.label)}</span><span class="n">${t(a.rem)}</span><span class="st st-${a.status.replace(/\W+/g, '-')}">${h(statusText(a))}</span></button>`; }).join('') || '<p class="muted small">No repairs required.</p>'}</div>`;
-}
-
-
-
-
-
-
-
 
 /* --------------------------------------------------------------- events --- */
 
@@ -992,12 +832,6 @@ onAction({
   'photo-view': async (el, id, e, act) => {
     { const p = S.photos.find((x) => x.id === id); if (p) { const w = window.open(); w?.document.write(`<title>${h(p.caption || 'Photo')}</title><img src="${p.dataUrl}" style="max-width:100%">`); } return; }
   },
-  'sort': async (el, id, e, act) => {
-    { const k = el.dataset.k; S.sort = { key: k, dir: S.sort.key === k ? -S.sort.dir : 1 }; renderView(); return; }
-  },
-  'scan-all': async (el, id, e, act) => {
-    { if (!(await askConfirm('Mark every plate as scanned?', { ok: 'Mark all scanned' }))) return; for (const p of S.layout.plates) { S.job.plates[p.key] = { ...(S.job.plates[p.key] || {}), scan: 'scanned' }; } commit(); refreshPlateTable(); return; }
-  },
   'exp-defs': async (el, id, e, act) => {
     {
       numberDefs(S.job);
@@ -1014,12 +848,6 @@ onAction({
       if (pl?.sec === k) { renderNav(); return; }
       go(S.ndeTab[k] || 'nde:' + k); return;
     }
-  },
-  'ann-apply': async (el, id, e, act) => {
-    S.job.calc.mrtAnnular = +el.dataset.v; commit(); renderView(); return;
-  },
-  'mrt-preset': async (el, id, e, act) => {
-    S.job.calc.mrtBottom = +el.dataset.v; commit(); renderView(); return;
   },
   'exp-ind': async (el, id, e, act) => {
     return download(fileBase(S.job) + '_indications.csv', indicationsCSV(S.job, S.layout, S.calc), 'text/csv');
@@ -1047,6 +875,14 @@ function closeEditor(el) {
   if (el.closest('dialog')) { $('#dlg').close(); return; }
   S.sel = null; drawMap(); renderSide();
 }
+function openIndDialog(id) {
+  const ind = S.job.indications.find((i) => i.id === id); if (!ind) return;
+  S.sel = id;
+  const dlg = $('#dlg');
+  $('#dlgBody').innerHTML = indEditor(ind, 'dialog');
+  if (!dlg.open) dlg.showModal();
+}
+
 function rerenderEditor(el) {
   const ind = curInd(); if (!ind) return;
   if (el.closest('dialog')) openIndDialog(ind.id); else renderSide();
@@ -1128,9 +964,6 @@ onChange([
   { order: 370, when: (el, act) => act === 'datum-sel', run: async (el, e, act) => {
     { applyDatum(el.dataset.key, el.value); return; }
   } },
-  { order: 380, when: (el, act) => act === 'resfilter', run: async (el, e, act) => {
-    { S.resFilter = el.value; refreshIndTable(); return; }
-  } },
   { order: 390, when: (el, act) => el.id === 'ftType', run: async (el, e, act) => {
     { S.ftType = el.value; setMode('feature'); return; }
   } },
@@ -1161,11 +994,6 @@ document.addEventListener('focusout', (e) => {
   if (el?.dataset?.restored) { delete el.dataset.restored; if (el.value !== el.defaultValue) el.dispatchEvent(new Event('change', { bubbles: true })); }
 });
 
-document.addEventListener('input', (e) => {
-  const el = e.target;
-  if (el.dataset.act === 'search') { S.search = el.value; refreshIndTable(); }
-  if (el.dataset.act === 'plate-search') { S.plateSearch = el.value; refreshPlateTable(); }
-});
 
 const findPlate = (label) => { const q = String(label || '').trim().toLowerCase(); return S.layout.plates.find((p) => p.label.toLowerCase() === q) || null; };
 
@@ -1467,7 +1295,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 }
 
 /* Screens (navigation registry, js/app/nav.js) */
-Object.assign(views, { jobs: viewJobs, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, });
+Object.assign(views, { jobs: viewJobs, map: viewMap, });
 configureHost({ commit: () => commit(), scheduleSave: () => scheduleSave(), checkStorage: () => checkStorage(), recompute: () => recompute(), loadJobs: () => loadJobs(), loadTanks: () => loadTanks(), createJob: (j) => createJob(j), leaveJobOk: () => leaveJobOk(), journal, flushSave: () => flushSave(), renderHeader: () => renderHeader(), openJob: (id, v) => openJob(id, v), importJobFile: (f) => importJobFile(f), rememberFile: (id, fh, w) => rememberFile(id, fh, w), drawMap: () => drawMap(), renderSide: () => renderSide(), setMode: (m) => setMode(m), refreshSetupPreview: () => refreshSetupPreview() });
 configureNav({
   header: () => renderHeader(),

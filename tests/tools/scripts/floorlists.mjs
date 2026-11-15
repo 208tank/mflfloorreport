@@ -1,0 +1,26 @@
+// Indication list, plate list and API 653 screen, for actions-diff.mjs.
+const wait = { js: () => new Promise((r) => setTimeout(r, 400)) };
+export const steps = [
+  { go: 'inds' },
+  { click: '[data-act="sort"] >> nth=2' },
+  { click: '[data-act="sort"] >> nth=2' },
+  { click: '[data-act="sort"] >> nth=0' },
+  { select: 'select[data-act="resfilter"]', value: { index: 2 } },
+  { fill: 'input[data-act="search"]', value: 'I-1', key: 'End' }, wait,
+  { fill: 'input[data-act="search"]', value: '', key: 'End' }, wait,
+  { select: 'select[data-act="resfilter"]', value: { index: 0 } },
+  { go: 'plates' },
+  { fill: 'input[data-act="plate-search"]', value: 'A', key: 'End' }, wait,
+  { fill: 'input[data-pb="utMin"] >> nth=0', value: '0.2' },
+  { select: 'select[data-act="datum-sel"] >> nth=0', value: { index: 1 } },
+  { fill: 'input[data-act="plate-search"]', value: '', key: 'End' }, wait,
+  { click: '[data-act="scan-all"]' },
+  { confirm: 'no' },
+  { click: '[data-act="scan-all"]' },
+  { confirm: 'yes' },
+  { go: 'api' },
+  { click: '[data-act="mrt-preset"] >> nth=0' },
+  { click: '[data-act="ann-apply"] >> nth=0' },
+  { fill: 'input[data-bind="calc.Or"]', value: '15' },
+  { fill: 'input[data-bind="calc.mflThresholdPct"]', value: '30' },
+];
