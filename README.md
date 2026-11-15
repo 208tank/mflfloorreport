@@ -7,6 +7,32 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Data integrity upgrade — stage 5: backup and restore (v3.14.0)
+
+**Jobs → Backups** (below the settings):
+
+- **Back up this device…** writes one backup file (`tfi-backup_<date>.tfibackup.json`) with every job on this device,
+  its photos, its saved revisions and audit trail, the tank registry and the company settings. Choose where it goes
+  (OneDrive, a USB stick — anywhere other than this computer); browsers without the file picker download it. It is
+  written a piece at a time, so devices with many photos don't run out of memory.
+- **Checksum:** every piece of the file is checksummed as it is written and the file ends with a checksum of those.
+  On restore any changed, missing or extra data is found and the file is refused — nothing on the device changes.
+- **Restore from a backup…** checks the file, then shows each job in it next to this device's copy: *new* (added),
+  *same* (nothing to do) or *differs* (with which copy changed later). For each job that differs, choose **Keep this
+  device's copy** (default), **Replace with the backup copy** (this device's copy is kept as a revision first) or
+  **Keep both** (the backup copy is added as a separate job). New registry tanks are added; tanks that differ are
+  replaced only if ticked; company settings are restored if ticked (ticked when this device has none).
+- **One job at a time:** each job is restored in a single transaction. If one fails, that job is left exactly as it was
+  and the others are still restored. Restoring the same backup twice changes nothing.
+- Saved revisions are never lost: a backup revision already on the device is skipped, and one whose number is taken
+  by a different revision is added after the device's last one (its note says so).
+- **Automatic backup** (off by default): every 1, 7, 14 or 30 days, to a `_backups` folder inside the jobs folder
+  linked on the Dashboard, when the app starts and a backup is due. The newest 5 automatic backups are kept. If the
+  browser hasn't allowed the folder this session, the Backups card says a backup is due.
+- Every restore is recorded in the device's import log (file, checksum, what was done to each job).
+- The backup also covers revisions and audit entries that are not in job files, and is the way back to an earlier
+  app version if one is ever needed (an upgraded database can't be opened by an older version).
+
 ## Modular refactoring (v3.12.0 – v3.13.0)
 
 Nothing changes for the user: every screen renders the same HTML, and the calculations, job files and
@@ -733,7 +759,8 @@ every limit is editable.
 | `js/app/header.js` | Header, job file badge, revision text |
 | `js/app/folder.js` | Linked jobs folder: link, scan, write a stage back |
 | `js/app/images.js`, `js/app/menu.js` | Photo / logo helpers; side menu section button |
-| `js/views/*.js` | One module per screen area: dashboard, registry, jobs, setup, floormap, floorlists, api, shell, nozzles, roof, settle, sections, summary, report, codetables, files, history |
+| `js/views/*.js` | One module per screen area: dashboard, registry, jobs, setup, floormap, floorlists, api, shell, nozzles, roof, settle, sections, summary, report, codetables, files, history, backup |
+| `js/backup.js` | Backup file: written in pieces with a checksum, verified, compared with the device |
 | `js/ui.js` | Element lookup, toasts and in-app dialogs |
 | `js/cards.js` | Job summary cards for the Jobs list, Dashboard and registry |
 | `js/util.js` | HTML escaping (the one place it is defined) |

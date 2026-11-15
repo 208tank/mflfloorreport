@@ -1,4 +1,5 @@
 // Jobs screen and Settings: the job list, new / demo / open / duplicate / delete, company and device settings;
+// opening and creating a job (refactoring step 14).
 import { APP_VERSION, S } from '../app/state.js';
 import { after, defineView, go, renderAll, renderView } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
@@ -12,8 +13,8 @@ import { pendingSteps } from '../migrations.js';
 import { copyPhotos, migrate, migrationNotes, newJob, SCHEMA, uid } from '../model.js';
 import { $, askConfirm, toast } from '../ui.js';
 import { esc as h } from '../util.js';
+import { backupCardHTML } from './backup.js';
 import { addRevision, integrityHTML, renderIntegrity } from './history.js';
-// opening and creating a job (refactoring step 14).
 
 function viewJobs() {
   // the open job's card may lag behind its latest change: show the open job's own values
@@ -51,7 +52,8 @@ function viewJobs() {
         <p class="muted">Install the app from the browser's address bar (or the Install button above) so it opens full-window and works without a connection.</p>
         <button class="btn sm" data-act="persist">Ask browser to keep data permanently</button>
       </section>
-    </div></div>`;
+    </div>
+    <section class="card" id="backupCard">${backupCardHTML()}</section></div>`;
 }
 const afterJobs = async () => {
   if (!S.integrity) { const last = await db.getMeta('integrity:last').catch(() => null); const l = $('#integrityLast'); if (l && last) l.textContent = `Last checked ${new Date(last.at).toLocaleString()}: ${last.n ? last.n + ' problem' + (last.n > 1 ? 's' : '') : 'no problems'}`; } else renderIntegrity();

@@ -1,9 +1,9 @@
 // Side menu: the button on a section heading opens or closes that section's group of screens
+// (refactoring step 15). The menu itself is drawn by renderNav in nav.js.
 import { S } from './state.js';
 import { go, renderNav } from './nav.js';
 import { onAction } from './actions.js';
 import { viewPlace } from '../sections.js';
-// (refactoring step 15). The menu itself is drawn by renderNav in nav.js.
 
 onAction({
   'nav-sec': async (el, id, e, act) => {

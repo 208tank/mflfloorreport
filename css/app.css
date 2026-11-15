@@ -796,3 +796,7 @@ dialog.wide-dlg { max-width: 96vw; }
 .integrity-list li { margin: 4px 0; }
 .integrity-list li.error b { color: #b91c1c; }
 .integrity-list li.warning b { color: #a16207; }
+
+/* Backups card (data integrity stage 5) */
+.backup-auto { max-width: 24rem; margin-top: .75rem; }
+.rs-dlg select { min-width: 17rem; }

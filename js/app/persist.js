@@ -1,4 +1,7 @@
 // Saving the open job (refactoring step 14): recalculation, the save queue and the crash-recovery journal,
+// the change count, commit, the checks before leaving a job, loading the jobs list and tank registry,
+// device storage, and saving before a reload. The header is updated through configurePersist (set by app.js),
+// because the header in turn shows this module's change count.
 import { S } from './state.js';
 import { go } from './nav.js';
 import { api653 } from '../calc.js';
@@ -8,9 +11,6 @@ import { createJournal } from '../journal.js';
 import { tankFromJob, tankKeyOf } from '../registry.js';
 import { createSaver, saveErrorText } from '../saver.js';
 import { $, toast } from '../ui.js';
-// the change count, commit, the checks before leaving a job, loading the jobs list and tank registry,
-// device storage, and saving before a reload. The header is updated through configurePersist (set by app.js),
-// because the header in turn shows this module's change count.
 
 /** Header updates the save state triggers: header = redraw the header; fileState = the job file badge only. */
 const ui = { header: () => {}, fileState: () => {} };

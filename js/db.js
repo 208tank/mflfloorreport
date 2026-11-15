@@ -120,6 +120,46 @@ export const db = {
   async jobRevisions(jobId) { return tx('revisions', 'readonly', (s) => reqP(s.index('jobId').getAll(jobId))).then((a) => a.sort((x, y) => x.n - y.n)); },
   async revisionCount(jobId) { return tx('revisions', 'readonly', (s) => reqP(s.index('jobId').count(jobId))); },
   async getRevision(id) { return tx('revisions', 'readonly', (s) => reqP(s.get(id))); },
+  /* ---- backup and restore (data integrity stage 5) ---- */
+  async jobAudit(jobId) { return tx('audit', 'readonly', (s) => reqP(s.index('jobId').getAll(jobId))); },
+  /** Record an import (job file, loader sheet, backup restore): append-only. */
+  async addImport(rec) { return tx('imports', 'readwrite', (s) => reqP(s.add(rec))); },
+  async allImports() { return tx('imports', 'readonly', (s) => reqP(s.getAll())); },
+  /**
+   * Restore one job from a backup in a single transaction (job, card, photos, revisions, audit): if anything
+   * fails, nothing on the device changes. replace = the device copy is replaced: its photos that are not in the
+   * backup are removed. Revisions are append-only: a backup revision already on the device is skipped; one whose
+   * number is taken by a different revision is added after the device's last revision (its note says which).
+   * Audit entries already on the device (same content) are not added twice.
+   */
+  async restoreJob({ job, photos, revisions, audit }, { replace = false } = {}) {
+    const keep = new Set(photos.map((p) => p.id));
+    return txMany(['jobs', 'cards', 'photos', 'revisions', 'audit'], (J, C, P, R, A) => {
+      if (replace) {
+        const r = P.index('jobId').getAllKeys(job.id);
+        r.onsuccess = () => r.result.forEach((k) => { if (!keep.has(k)) P.delete(k); });
+      }
+      J.put(job); C.put(lite(job));
+      for (const p of photos) P.put({ ...p, jobId: job.id });
+      const have = R.index('jobId').getAll(job.id);
+      have.onsuccess = () => {
+        const byId = new Map(have.result.map((x) => [x.id, x]));
+        let n = Math.max(0, ...have.result.map((x) => x.n || 0));
+        const later = [];
+        for (const rv of [...revisions].sort((a, b) => a.n - b.n)) {
+          const cur = byId.get(rv.id);
+          if (!cur) { R.add(rv); n = Math.max(n, rv.n); } else if (JSON.stringify(cur) !== JSON.stringify(rv)) later.push(rv);
+        }
+        for (const rv of later) { n++; R.add({ ...rv, n, id: `${job.id}:${n}`, note: [rv.note, `restored from a backup (was revision ${rv.n} there)`].filter(Boolean).join(' — ') }); }
+      };
+      const had = A.index('jobId').getAll(job.id);
+      had.onsuccess = () => {
+        const seen = new Set(had.result.map(({ seq, ...a }) => JSON.stringify(a)));
+        for (const { seq, ...a } of audit) { const e = { ...a, jobId: job.id }; if (!seen.has(JSON.stringify(e))) A.add(e); }
+      };
+      if (globalThis.__tfiFailRestore === job.id) throw new Error('Test: restore failure');
+    });
+  },
   async migrationLog() { return (await this.getMeta('migrations')) || []; },
   async logMigrations(entries) {
     if (!entries?.length) return;

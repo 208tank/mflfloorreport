@@ -27,6 +27,65 @@ export function poison(XSS) {
   window.tfi.commit();
 }
 
+/* ---- backup and restore (data integrity stage 5) ---- */
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAGCAIAAABxZ0isAAAAEUlEQVR4nGM4YWODFTEMpAQAr9U8AVonTcEAAAAASUVORK5CYII=';
+/** Every record in the stores a backup covers, in a stable order (audit without its auto-numbered key). */
+async function storeSnapshot(page) {
+  return page.evaluate(async () => {
+    const db = await new Promise((res, rej) => { const r = indexedDB.open('tank-floor-inspector'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    const all = (s) => new Promise((res, rej) => { const r = db.transaction(s).objectStore(s).getAll(); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    const by = (a) => a.sort((x, y) => String(x.id ?? JSON.stringify(x)).localeCompare(String(y.id ?? JSON.stringify(y))));
+    const out = {};
+    for (const s of ['jobs', 'photos', 'cards', 'revisions', 'tanks']) out[s] = JSON.stringify(by(await all(s)));
+    out.audit = JSON.stringify(by((await all('audit')).map(({ seq, ...a }) => a)));
+    out.company = JSON.stringify((await all('meta')).find((m) => m.key === 'company')?.value || null);
+    db.close();
+    return out;
+  });
+}
+/** Make a backup the way a user does (download fallback, as in browsers without the file picker). */
+async function takeBackup(page) {
+  await page.evaluate(() => { delete Window.prototype.showSaveFilePicker; delete window.showSaveFilePicker; window.tfi.go('jobs'); });
+  const [d] = await Promise.all([page.waitForEvent('download'), page.click('[data-act="backup-make"]')]);
+  const { readFile } = await import('node:fs/promises');
+  return { name: d.suggestedFilename(), buffer: await readFile(await d.path()) };
+}
+/** Restore a backup through the preview; choices = { jobId: 'keep' | 'replace' | 'both' }. Returns the toast text. */
+async function restoreBackup(page, file, choices = {}, { expectPreview = true } = {}) {
+  await page.evaluate(() => window.tfi.go('jobs'));
+  await page.evaluate(() => { const t = document.querySelector('#toast'); t.innerHTML = ''; t.hidden = true; });
+  await page.setInputFiles('input[data-act="backup-restore"]', { name: file.name, mimeType: 'application/json', buffer: file.buffer });
+  if (!expectPreview) { await page.waitForFunction(() => /can.t be restored/.test(document.querySelector('#toast').textContent)); return page.evaluate(() => document.querySelector('#toast').textContent); }
+  await page.waitForSelector('#dlg[open] .rs-dlg');
+  for (const [id, v] of Object.entries(choices)) await page.selectOption(`#dlg select[data-rj="${id}"]`, v);
+  await page.click('#dlg [data-rs="go"]');
+  await page.waitForFunction(() => /Restored|Nothing needed restoring/.test(document.querySelector('#toast').textContent));
+  return page.evaluate(() => document.querySelector('#toast').textContent);
+}
+/** A device with two jobs, a registry tank, a section photo, settings, a revision and an audit entry. */
+async function richDevice(page) {
+  await page.evaluate(() => window.tfi.go('photos:floor'));
+  await page.setInputFiles('input[data-act="ph-add"]', { name: 'p.png', mimeType: 'image/png', buffer: Buffer.from(PNG, 'base64') });
+  await page.waitForFunction(() => window.__app.photos.length === 1);
+  await page.evaluate(() => window.tfi.go('jobs'));
+  await page.fill('input[data-cb="name"]', 'Backup Test Co'); await page.press('input[data-cb="name"]', 'Tab');
+  await page.click('[data-act="job-demo"]');
+  await page.waitForFunction(() => window.__app.jobs.length === 2 && window.__app.view === 'map' && document.querySelector('#mapbox svg'));
+  await page.evaluate(() => window.tfi.go('reg'));
+  await page.click('[data-act="reg-build"]');
+  await page.waitForFunction(() => window.__app.tanks.length >= 1);
+  await page.evaluate(async () => {
+    const db = await new Promise((res) => { const r = indexedDB.open('tank-floor-inspector'); r.onsuccess = () => res(r.result); });
+    const id = window.__app.jobs[0].id;
+    await new Promise((res, rej) => { const t = db.transaction(['revisions', 'audit'], 'readwrite');
+      t.objectStore('revisions').put({ id: id + ':1', jobId: id, n: 1, rev: 0, at: 1, by: { name: '', id: 'dev-x', method: 'device' }, reason: 'manual', note: 'test', appVersion: 'x', schema: 4, hash: 'h', job: { id }, photoIds: [] });
+      t.objectStore('audit').add({ jobId: id, at: 2, action: 'test-edit', by: 'dev-x' });
+      t.oncomplete = res; t.onerror = () => rej(t.error); });
+    db.close();
+  });
+  await page.waitForTimeout(800); // let the open job's save settle
+}
+
 export default {
   async 'security: user text from a job file never runs as script on any page'({ browser, url, appPage }) {
     const page = await appPage(browser, url);
@@ -725,6 +784,7 @@ export default {
     const id = await page.evaluate(() => window.tfi.job().id);
     await page.evaluate(() => { document.querySelector('#toast').hidden = true; window.tfi.go('jobs'); });
     await page.click(`[data-act="job-open"][data-id="${id}"]`);
+    await page.waitForFunction(() => window.__app.view === 'map' && document.querySelector('#mapbox svg'));
     await page.waitForTimeout(400);
     assert.equal(await page.isVisible('#toast'), false);
     assert.deepEqual(page.errors, []);
@@ -829,7 +889,122 @@ export default {
     assert.deepEqual(after.migrations, []);
     assert.deepEqual(errors, []);
     await ctx.close();
-  }
+  },
+
+  async 'backup: back up → restore on an empty device gives identical stores (checksummed file)'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await richDevice(page);
+    const before = await storeSnapshot(page);
+    const file = await takeBackup(page);
+    assert.match(file.name, /^tfi-backup_.*\.tfibackup\.json$/);
+    assert.match(await page.textContent('#backupLast'), /Last backup .*2 jobs, 1 photo/);
+    await page.context().close();
+    // a new browser profile = a wiped device
+    const fresh = await appPage(browser, url, { demo: false });
+    const msg = await restoreBackup(fresh, file);
+    assert.match(msg, /Restored 2 jobs from the backup/);
+    const after = await storeSnapshot(fresh);
+    for (const k of Object.keys(before)) assert.equal(after[k], before[k], `store ${k} differs after restore`);
+    // restoring the same backup again changes nothing
+    const again = await restoreBackup(fresh, file);
+    assert.match(again, /Nothing needed restoring/);
+    assert.deepEqual(await storeSnapshot(fresh), after);
+    assert.deepEqual(fresh.errors, []);
+    await fresh.context().close();
+  },
+
+  async 'backup: a damaged backup is refused and nothing changes'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const file = await takeBackup(page);
+    const before = await storeSnapshot(page);
+    const text = file.buffer.toString('utf8');
+    const damaged = { name: file.name, buffer: Buffer.from(text.replace('"TK-101"', '"TK-1O1"')) };
+    assert.notEqual(damaged.buffer.toString(), text);
+    assert.match(await restoreBackup(page, damaged, {}, { expectPreview: false }), /checksum does not match.*Nothing was changed/s);
+    const cut = { name: file.name, buffer: file.buffer.subarray(0, Math.floor(file.buffer.length / 2)) };
+    assert.match(await restoreBackup(page, cut, {}, { expectPreview: false }), /not a readable backup file.*Nothing was changed/s);
+    assert.deepEqual(await storeSnapshot(page), before);
+    await page.context().close();
+  },
+
+  async 'backup: a job that fails to restore is left untouched; the others are restored in full'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await richDevice(page);
+    const ids = await page.evaluate(() => window.__app.jobs.map((j) => j.id));
+    const file = await takeBackup(page);
+    await page.context().close();
+    const fresh = await appPage(browser, url, { demo: false });
+    await fresh.evaluate((id) => { window.__tfiFailRestore = id; }, ids[0]);
+    const msg = await restoreBackup(fresh, file);
+    assert.match(msg, /Restored 1 job\. Not restored \(left as they were\)/);
+    const s = await storeSnapshot(fresh), has = (store, id) => JSON.parse(s[store]).some((r) => r.id === id || r.jobId === id);
+    for (const store of ['jobs', 'cards', 'photos', 'revisions', 'audit']) assert.equal(has(store, ids[0]), false, `${store} has records of the failed job`);
+    assert.equal(has('jobs', ids[1]), true);
+    await fresh.context().close();
+  },
+
+  async 'backup: replacing a job keeps a revision of the device copy; "keep both" adds a separate copy'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const file = await takeBackup(page);
+    const id = await page.evaluate(() => window.tfi.job().id);
+    await page.evaluate(() => window.tfi.go('setup'));
+    await page.fill('input[data-bind="info.client"]', 'Changed after the backup'); await page.press('input[data-bind="info.client"]', 'Tab');
+    await page.waitForTimeout(500);
+    const msg = await restoreBackup(page, file, { [id]: 'replace' });
+    assert.match(msg, /Restored 1 job from the backup \(1 replaced\).*open job was replaced/s);
+    const st = await storeSnapshot(page);
+    const job = JSON.parse(st.jobs).find((j) => j.id === id);
+    assert.equal(job.info.client, 'Demo Energy Ltd.');
+    const revs = JSON.parse(st.revisions).filter((r) => r.jobId === id);
+    assert.ok(revs.some((r) => r.reason === 'before-replace' && r.job.info.client === 'Changed after the backup'), 'device copy kept as a revision');
+    // change it again and keep both
+    await page.click(`[data-act="job-open"][data-id="${id}"]`);
+    await page.waitForFunction(() => window.__app.view === 'map' && document.querySelector('#mapbox svg'));
+    await page.evaluate(() => window.tfi.go('setup'));
+    await page.fill('input[data-bind="info.client"]', 'Second change'); await page.press('input[data-bind="info.client"]', 'Tab');
+    await page.waitForTimeout(500);
+    await restoreBackup(page, file, { [id]: 'both' });
+    const jobs = JSON.parse((await storeSnapshot(page)).jobs);
+    assert.equal(jobs.length, 2);
+    assert.ok(jobs.some((j) => j.id === id && j.info.client === 'Second change'));
+    assert.ok(jobs.some((j) => j.id !== id && /from backup/.test(j.info.tankId) && j.info.client === 'Demo Energy Ltd.'));
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'backup: automatic backups go to the jobs folder (_backups, newest 5 kept); without access the card says one is due'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => {
+      const fakeDir = (perm) => { const files = new Map(), dirs = new Map(); return { kind: 'directory', files, dirs,
+        async queryPermission() { return perm; }, async getDirectoryHandle(n) { if (!dirs.has(n)) dirs.set(n, fakeDir(perm)); return dirs.get(n); },
+        async getFileHandle(n) { return { kind: 'file', name: n, async createWritable() { let buf = ''; return { async write(c) { buf += c; }, async close() { files.set(n, buf); }, async abort() {} }; } }; },
+        async *entries() { for (const [n] of files) yield [n, { kind: 'file' }]; for (const [n, v] of dirs) yield [n, v]; },
+        async removeEntry(n) { files.delete(n); } }; };
+      window.__fakeDir = fakeDir('granted'); window.__app.dash.dir = window.__fakeDir;
+      const real = Date.now.bind(Date); window.__shift = 0; Date.now = () => real() + window.__shift;
+      window.tfi.go('jobs');
+    });
+    const backups = () => page.evaluate(() => [...(window.__fakeDir.dirs.get('_backups')?.files.keys() || [])].sort());
+    for (let k = 0; k < 7; k++) {
+      await page.evaluate((k) => { window.__shift = k * 8 * 86400000; document.querySelector('#toast').hidden = true; }, k);
+      await page.selectOption('select[data-backup-days]', k % 2 ? '7' : '1');
+      await page.waitForFunction((n) => (window.__fakeDir.dirs.get('_backups')?.files.size || 0) >= Math.min(n, 5) && /Automatic backup made/.test(document.querySelector('#toast').textContent), k + 1);
+    }
+    const names = await backups();
+    assert.equal(names.length, 5, names.join(', '));
+    assert.ok(names.every((n) => /^tfi-backup_auto_.*\.tfibackup\.json$/.test(n)));
+    const newest = JSON.parse(await page.evaluate((n) => window.__fakeDir.dirs.get('_backups').files.get(n), names.at(-1)));
+    assert.equal(newest.format, 'tank-floor-inspector-backup');
+    assert.match(await page.textContent('#backupLast'), /to the jobs folder/);
+    // a folder the browser hasn't allowed this session: no backup, the card says one is due
+    await page.evaluate(() => { window.__app.dash.dir = { ...window.__fakeDir, queryPermission: async () => 'prompt' }; window.__shift += 30 * 86400000; });
+    await page.selectOption('select[data-backup-days]', '30');
+    await page.waitForFunction(() => /automatic backup is due/i.test(document.querySelector('#backupLast').textContent));
+    assert.equal((await backups()).length, 5);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
 };
 
 /** In the page: create the v3.6.0 database (version 3) with two jobs, a photo, a tank and their cards. Returns the stores. */
