@@ -137,7 +137,8 @@ the checksum still matches. For each one:
   revision number isn't taken back, and photos that are no longer on this device are reported. A Complete job can't be
   restored until it is reopened (stage 8b).
 
-Pruning old revisions (keep the last 15 checkpoints and 5 others, never the issued one) comes with stage 10.
+Old revisions are pruned since stage 12 (the newest 15 checkpoints and 5 others are kept; file-save and issued
+revisions always are).
 
 ## Data integrity upgrade — stage 7: duplicate imports (v3.16.0)
 
@@ -243,7 +244,8 @@ redraws one screen asks of another — the floor map, its side panel and mode, a
 
 - **When:** a quick check runs in the background a moment after the app starts and only speaks up if it
   finds something. A full check (which also opens every photo and verifies every revision's checksum)
-  runs from Settings → This device → **Check data on this device**.
+  runs from Jobs → This device → **Check data on this device**. Since stage 9 it also checks each job's
+  audit trail.
 - **What:** jobs that can't be read or updated to the current version, values that aren't numbers,
   duplicate indications, indications on plates missing from the layout, links to registry tanks that are
   gone; job list entries that are missing, out of date or have no job; photos whose job is gone (and no
