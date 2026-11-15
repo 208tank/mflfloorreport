@@ -28,9 +28,10 @@ registers its screen with `defineView` and its buttons with `onAction` / `onChan
 | 4 | v3.12.3 | Fixed roof, floating roof and rim seal (`views/roof.js`) |
 | 5 | v3.12.4 | Shell (`views/shell.js`), nozzles (`views/nozzles.js`) |
 | 6 | v3.12.5 | Revisions, crash recovery and the data check (`views/history.js`) |
+| 7 | v3.12.6 | Dashboard (`views/dashboard.js`); the linked jobs folder (`app/folder.js`) |
 
-Screen modules can't import `app.js`, so the few app-level steps they need that haven't moved yet (`commit`, `loadJobs`, the
-recovery journal, and the floor map and setup redraws the nozzle editor triggers) are handed over at start-up through `js/app/host.js`.
+Screen modules can't import `app.js`, so the few app-level steps they need that haven't moved yet (saving and loading, the
+recovery journal, opening and importing job files, and the floor map and setup redraws) are handed over at start-up through `js/app/host.js`.
 
 ## Data integrity upgrade — stage 4: database integrity check (v3.11.0)
 

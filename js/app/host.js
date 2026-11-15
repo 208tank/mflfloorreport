@@ -9,6 +9,12 @@ export const host = {
   loadJobs: () => { throw new Error('host.loadJobs used before configureHost'); },
   /** The recovery journal of unsaved changes (created with the save queue). */
   journal: null,
+  /** Job file and save steps (steps 13–14): write now, header, open, import a file, remember its file handle. */
+  flushSave: () => { throw new Error('host.flushSave used before configureHost'); },
+  renderHeader: () => { throw new Error('host.renderHeader used before configureHost'); },
+  openJob: () => { throw new Error('host.openJob used before configureHost'); },
+  importJobFile: () => { throw new Error('host.importJobFile used before configureHost'); },
+  rememberFile: () => { throw new Error('host.rememberFile used before configureHost'); },
   /** Floor map redraws (step 12) and the tank setup preview (step 10), used by the nozzle editor. */
   drawMap: () => { throw new Error('host.drawMap used before configureHost'); },
   renderSide: () => { throw new Error('host.renderSide used before configureHost'); },

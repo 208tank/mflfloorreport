@@ -1,7 +1,7 @@
 // Runs the same sequence of edits on two copies of the app and compares, after every step, the open job's
 // data and the screen HTML. Used to confirm a refactoring step leaves a screen's behaviour unchanged.
 //   node tests/tools/actions-diff.mjs <old app folder> <new app folder> <script name in tests/tools/scripts/>
-// A script is a list of steps: { go }, { fill, value, key? } (typed, then Tab unless key says otherwise), { click }, { select, value } (value may be { index }), { check }, { at, x, y } (click a point on a drawing), { js } (run code in the page, e.g. pick a map item),
+// A script is a list of steps: { go }, { fill, value, key? } (typed, then Tab unless key says otherwise), { click }, { select, value } (value may be { index }), { check }, { at, x, y } (click a point on a drawing), { js } (run code in the page, e.g. pick a map item), { drag, to },
 // { confirm: 'yes' | 'no' }. Ids and times are made repeatable (fixed clock, seeded random numbers).
 import { serve, launch } from '../browser/lib.mjs';
 import { resolve, sep } from 'node:path';
@@ -31,6 +31,7 @@ async function run(dir) {
     else if (s.check) await page.click(s.check);
     else if (s.at) await page.click(s.at, { position: { x: s.x, y: s.y } });
     else if (s.js) await page.evaluate(s.js);
+    else if (s.drag) await page.dragAndDrop(s.drag, s.to);
     else if (s.confirm) await page.click(`[data-cf="${s.confirm}"]`);
     } catch (err) { await browser.close(); srv.close(); throw new Error(`${dir}: step ${n + 1} ${JSON.stringify(s)} failed: ${err.message.split('\n')[0]}`); }
     await page.waitForTimeout(300);

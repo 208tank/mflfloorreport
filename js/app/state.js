@@ -1,7 +1,7 @@
 // Shared application state and constants (refactoring step 1, moved unchanged from app.js).
 import { RESULTS } from '../calc.js';
 
-export const APP_VERSION = '3.12.5';
+export const APP_VERSION = '3.12.6';
 
 export const S = {
   jobs: [], tanks: [], reg: { q: '', open: new Set() }, job: null, layout: null, calc: null, photos: [], company: {},
@@ -42,3 +42,6 @@ export function nextMark(type) {
   return pre + (max + 1);
 }
 export const FT_TYPES = [['column', 'Roof column'], ['sump', 'Sump'], ['patch', 'Patch plate / repair'], ['nozzle', 'Nozzle / fitting'], ['manway', 'Manway'], ['other', 'Other']];
+
+/** Today's date as YYYY-MM-DD (UTC). */
+export const todayISO = () => new Date().toISOString().slice(0, 10);
