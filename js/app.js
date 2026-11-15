@@ -5,21 +5,19 @@ import { createSaver, saveErrorText } from './saver.js';
 import { createJournal } from './journal.js';
 import { u, toMm, inVal, fmt, fmtRate, UNITS } from './units.js';
 import { buildLayout, stackSections, suggestCount, halfChord, plateAt, toLocal, itemFloor, angleOf, refCornerName, datumName, orientName } from './geometry.js';
-import { api653, RESULTS, RESULT_SHORT, czLimitAuto, plateNominal, NZ_CONN, UT_CLOCK, nozzleUT, nozzleWall, statusText } from './calc.js';
+import { api653, RESULTS, RESULT_SHORT, czLimitAuto, plateNominal, NZ_CONN, UT_CLOCK, nozzleWall, statusText } from './calc.js';
 import { renderMapSVG, MapController } from './map.js';
-import { ROOF_NOTE, hasFixed, hasFloating, floatingLayout, plateUT, pointStatus } from './roof.js';
 import { download, indicationsCSV, platesCSV, nozzlesCSV, shellCSV, roofCSV, settleCSV, svgForExport, svgToPng, fileBase } from './export.js';
-import { legendHTML, buildDefReport } from './report.js';
+import { legendHTML } from './report.js';
 import { patchList, patchOf } from './patches.js';
 import { newJob, migrate, nextNo, uid, setPath, STAGES, STAGE_LABEL, copyPhotos, SCHEMA, FILE_VERSION, migrationNotes } from './model.js';
 import { makeDemo } from './demo.js';
 import { shellHeight, rolloutSVG, SHELL_SVG_STYLE } from './shell.js';
 import { buildLoader, readLoader, loaderAreas } from './loader.js';
-import { sealEval, activeStds } from './seal.js';
 import { CODES, editionsFor, supplementsFor, jointOptions } from './tables.js';
 import { annularReq } from './design.js';
-import { SECTIONS, SEC, CHILDREN, viewPlace, childView, findings, allDefs, numberDefs, STATUS_TEXT, NDE_METHODS, NDE_RESULTS, CONDITIONS, PRIORITIES, PRIORITY_LABEL, STATUSES, typicalNDE, typicalObs, newObs, newNDE, newRec } from './sections.js';
-import { EQ_TYPES, EQ_LABEL, EQ_DETAIL_PH, newEquip, suggestEquip, equipName, equipLine, calState, equipUse, useByMethod } from './equipment.js';
+import { viewPlace, allDefs, numberDefs } from './sections.js';
+import { equipName } from './equipment.js';
 import { SCOPE, inScope, tankFromJob, diffFromTank, tankKeyOf } from './registry.js';
 import { newRow, rowsFromGrid, rowsCentreBlock, coverage, newPlate, newMeasuredSection, measuredFromDrawing } from './builder.js';
 import { esc as h } from './util.js';
@@ -27,17 +25,20 @@ import { $, $$, toast, askConfirm, askChoice } from './ui.js';
 import { indCount } from './cards.js';
 import { S, APP_VERSION, RESULT_OPTS, VT_COND, COATING, UT_METHOD, REPAIR_METHOD, NZ_TYPES, nextMark, FT_TYPES } from './app/state.js';
 import { readInput, field, focusSel, rerenderKeep } from './app/fields.js';
-import { views, childViews, after, configureNav, go, renderAll, renderNav, renderView } from './app/nav.js';
+import { resizeImage } from './app/images.js';
+import { views, after, configureNav, go, renderAll, renderNav, renderView } from './app/nav.js';
 import { onAction, onChange } from './app/actions.js';
 import './views/codetables.js';
 import './views/report.js';
 import { refreshSettle } from './views/settle.js';
-import { refreshRoof, rStatus } from './views/roof.js';
-import { refreshShell, shellBuildHTML, shellEvalHTML } from './views/shell.js';
+import { refreshRoof } from './views/roof.js';
+import { refreshShell, shellBuildHTML } from './views/shell.js';
 import { nozzleTableHTML, nozzleUTBox } from './views/nozzles.js';
 import { writeStageToFile } from './app/folder.js';
 import './views/dashboard.js';
 import './views/registry.js';
+import { crumbHTML, findingsBox } from './views/sections.js';
+import './views/summary.js';
 import { addRevision, baselineRevisions, recoverAfterCrash, runIntegrity, integrityHTML, renderIntegrity } from './views/history.js';
 import { configureHost } from './app/host.js';
 
@@ -1035,304 +1036,9 @@ function refreshApi() {
 
 
 
-/* ------------------------------------------------------------ tank sections */
-
-function crumbHTML(pl) {
-  const sec = SEC.get(pl.sec), ch = CHILDREN.find(([c]) => c === pl.child)?.[1];
-  const tabs = pl.child === 'nde' ? `<div class="sec-tabs">${[['nde:' + pl.sec, 'NDE scope'], ...sec.nde].map(([v, l]) => `<button class="sec-tab${S.view === v ? ' on' : ''}" data-go="${v}">${l}</button>`).join('')}</div>` : '';
-  return `<div class="crumb${pl.child === 'nde' && S.view === 'map' ? ' over-map' : ''}"><span>${h(sec.label)}</span><b>›</b><span>${ch}</span>${tabs}</div>`;
-}
-const secData = (k) => (S.job.secs[k] = S.job.secs[k] || { nde: [], obs: [], recs: [] });
-const secPhotos = (k) => S.photos.filter((p) => p.sec === k).sort((a, b) => (a.n || 0) - (b.n || 0) || a.created - b.created);
-const photoNo = (p) => `${(SEC.get(p.sec)?.label || '').replace(/\s.*/, '').slice(0, 2).toUpperCase()}-${p.n || '?'}`;
-const condChip = (c) => (c ? `<span class="cond c-${c}">${(CONDITIONS.find(([k]) => k === c) || [])[1]}</span>` : '');
-
-function sxIn(kind, sec, it, f, type = 'text', extra = '') {
-  const v = it[f] ?? '';
-  if (type === 'area') return `<textarea data-sx="${kind}" data-sec="${sec}" data-iid="${it.id}" data-f="${f}" rows="2" ${extra}>${h(v)}</textarea>`;
-  return `<input data-sx="${kind}" data-sec="${sec}" data-iid="${it.id}" data-f="${f}" ${type === 'date' ? 'type="date"' : ''} value="${h(v)}" ${extra}>`;
-}
-function sxSel(kind, sec, it, f, opts) {
-  return `<select data-sx="${kind}" data-sec="${sec}" data-iid="${it.id}" data-f="${f}">${opts.map((o) => { const [k, l] = Array.isArray(o) ? o : [o, o || '—']; return `<option value="${h(k)}" ${String(it[f] ?? '') === String(k) ? 'selected' : ''}>${h(l)}</option>`; }).join('')}</select>`;
-}
-function secHead(sec, title, sub, acts = '') {
-  return `<div class="page-head"><div><h1>${h(SEC.get(sec).label)} — ${title}</h1><p class="muted">${sub}</p></div><div class="acts">${acts}</div></div>`;
-}
-
-/* NDE scope */
-function viewNDE() {
-  const k = viewPlace(S.view).sec, sec = SEC.get(k), d = secData(k), F = findings(S.job, S.layout, S.calc)[k];
-  const rows = d.nde.map((it) => `<tr><td>${sxSel('nde', k, it, 'method', NDE_METHODS)}</td><td>${sxIn('nde', k, it, 'extent', 'text', 'placeholder="Extent / coverage"')}</td><td>${sxIn('nde', k, it, 'proc', 'text', 'placeholder="Procedure / technique"')}</td><td>${sxIn('nde', k, it, 'tech', 'text', 'placeholder="Technician, level"')}</td><td>${sxIn('nde', k, it, 'date', 'date')}</td><td>${eqPicker(k, it)}</td><td>${sxSel('nde', k, it, 'result', NDE_RESULTS)}</td><td>${sxIn('nde', k, it, 'notes', 'text', 'placeholder="Results / notes"')}</td><td><button aria-label="Remove" class="btn sm icon ghost danger" data-act="sx-del" data-kind="nde" data-sec="${k}" data-iid="${it.id}" title="Remove">✕</button></td></tr>`).join('') || '<tr><td colspan="8" class="empty">No NDE methods set up yet.</td></tr>';
-  return `<div class="page wide">${secHead(k, 'NDE', 'Set up the NDE methods for this part of the tank and record their results. Enter the readings on the data pages (tabs above).')}
-    <section class="card"><div class="sp-head"><h2>NDE methods and results</h2><span class="muted small">${d.nde.length} method${d.nde.length === 1 ? '' : 's'}</span></div>
-      <div class="tblwrap"><table class="grid sxt nde-t"><thead><tr><th>Method</th><th>Extent / coverage</th><th>Procedure / technique</th><th>Technician</th><th>Date</th><th>Equipment</th><th>Result</th><th>Notes</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
-      <div class="acts row-acts"><button class="btn sm" data-act="sx-add" data-kind="nde" data-sec="${k}">+ Method</button><button class="btn sm" data-act="sx-typ" data-kind="nde" data-sec="${k}">Add typical methods</button></div></section>
-    ${sec.nde.length ? `<section class="card"><h2>Data entry</h2><div class="nde-links">${sec.nde.map(([v, l]) => `<button class="btn" data-go="${v}">${l} →</button>`).join('')}</div>
-      ${F.lines.length ? `<h3>Results so far</h3><ul class="flist">${F.lines.map((x) => `<li>${x}</li>`).join('')}</ul>` : '<p class="muted small">No results entered yet.</p>'}</section>` : `<section class="card"><p class="muted">No instrument data pages for this section — record the inspection under NDE methods, Observations and Photos.</p></section>`}
-  </div>`;
-}
-
-
-/* ---------------------------------------------------------------- equipment */
-// One list per job. NDE methods (per section) pick the items they used; the report pulls the details.
-
-function eqChips(it) {
-  const by = new Map((S.job.equipment || []).map((e) => [e.id, e]));
-  const sel = (it.equip || []).map((id) => by.get(id)).filter(Boolean);
-  const d = S.job.info.inspDate;
-  return sel.length ? sel.map((e) => `<span class="eq-chip ${calState(e, d)}" title="${h(EQ_LABEL[e.type] + ' — ' + equipLine(e))}">${h(equipName(e))}${e.serial ? `<small> ${h(e.serial)}</small>` : ''}</span>`).join('') : '<span class="muted">Select…</span>';
-}
-function eqPicker(sec, it) {
-  const list = S.job.equipment || [], have = new Set(it.equip || []);
-  const groups = EQ_TYPES.filter(([t]) => list.some((e) => e.type === t));
-  return `<details class="eqpick" data-iid="${it.id}"><summary>${eqChips(it)}</summary><div class="eqpop">
-    ${list.length ? groups.map(([t, l]) => `<div class="eq-grp">${h(l)}</div>${list.filter((e) => e.type === t).map((e) => `<label class="chk"><input type="checkbox" data-eqpick="${e.id}" data-sec="${sec}" data-iid="${it.id}" ${have.has(e.id) ? 'checked' : ''}><span>${h(equipName(e))}${e.serial ? ` <small class="muted">S/N ${h(e.serial)}</small>` : ''}${calState(e, S.job.info.inspDate) === 'expired' ? ' <small class="bad">cal. expired</small>' : ''}</span></label>`).join('')}`).join('')
-      : '<p class="muted small">No equipment listed for this job yet.</p>'}
-    <div class="eq-pop-foot"><button class="btn sm ghost" data-go="equip">Edit equipment list →</button></div></div></details>`;
-}
-
-function viewEquip() {
-  const j = S.job, list = j.equipment || [], use = equipUse(j, SECTIONS, inScope), d = j.info.inspDate;
-  const typeSel = (e) => `<select data-eq="type" data-id="${e.id}">${EQ_TYPES.map(([k, l]) => `<option value="${k}" ${e.type === k ? 'selected' : ''}>${h(l)}</option>`).join('')}</select>`;
-  const inp = (e, f, ph = '', type = 'text', cls = '') => `<input data-eq="${f}" data-id="${e.id}" ${type === 'date' ? 'type="date"' : ''} value="${h(e[f] ?? '')}" placeholder="${h(ph)}" class="${cls}">`;
-  const cs = (e) => { const c = calState(e, d); return c === 'expired' ? '<span class="st st-below-MRT">Expired</span>' : c === 'soon' ? '<span class="st st-warn">Due ≤ 30 days</span>' : ''; };
-  const rows = list.map((e) => `<tr class="${calState(e, d) === 'expired' ? 'is-bad' : ''}">
-      <td>${typeSel(e)}</td><td>${inp(e, 'make', 'Make')}</td><td>${inp(e, 'model', 'Model / description')}</td><td>${inp(e, 'serial', 'Serial / ID', 'text', 'sn')}</td>
-      <td>${inp(e, 'calDate', '', 'date')}</td><td>${inp(e, 'calDue', '', 'date')}${cs(e)}</td>
-      <td>${inp(e, 'details', EQ_DETAIL_PH[e.type] || 'Settings / details')}${e.type === 'mfl' ? `<label class="eq-thr">Reporting threshold ${inp(e, 'threshold', '%', 'text', 'xs')} %</label>` : ''}</td>
-      <td class="small eq-use">${useByMethod(use.get(e.id)).map((u) => `<div>${h(u)}</div>`).join('') || '<span class="muted">Not picked yet</span>'}</td>
-      <td><button aria-label="Duplicate (e.g. a second probe)" class="btn sm icon ghost" data-act="eq-dup" data-id="${e.id}" title="Duplicate (e.g. a second probe)">⧉</button><button aria-label="Remove" class="btn sm icon ghost danger" data-act="eq-del" data-id="${e.id}" title="Remove">✕</button></td></tr>`).join('');
-  const others = S.jobs.filter((x) => x.id !== j.id && (x.equipment || []).length);
-  const unassigned = list.filter((e) => !use.has(e.id)).length;
-  return `<div class="page wide eq-page"><div class="page-head"><div><h1>Equipment</h1><p class="muted">List every instrument, probe, block and tool on this job once. Under each section's <b>NDE</b> page, pick the items each method used — the report lists the equipment with serials and calibration, and shows it against each method.</p></div>
-    <div class="acts">${others.length ? `<select id="eqCopyFrom"><option value="">Copy from another job…</option>${others.map((x) => `<option value="${x.id}">${h([x.info?.tankId, x.info?.reportNo, x.info?.inspDate].filter(Boolean).join(' · ') || 'Job')} (${x.equipment.length})</option>`).join('')}</select>` : ''}</div></div>
-    <section class="card"><div class="sp-head"><h2>Equipment list</h2><span class="muted small">${list.length} item${list.length === 1 ? '' : 's'}${unassigned && list.length ? ` · ${unassigned} not picked under any NDE method` : ''}</span></div>
-      <div class="tblwrap"><table class="grid eq-t"><thead><tr><th>Type</th><th>Make</th><th>Model / description</th><th>Serial no.</th><th>Calibrated</th><th>Cal. due</th><th>Settings / details</th><th>Used for</th><th></th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="9" class="empty">No equipment yet — add it with the buttons below.</td></tr>'}</tbody></table></div>
-      <div class="eq-add"><span class="muted small">Add:</span>${EQ_TYPES.filter(([k]) => k !== 'other').slice(0, 10).map(([k, l]) => `<button class="btn sm" data-act="eq-add" data-type="${k}">+ ${h(l.replace(/ \\(.*\\)$/, ''))}</button>`).join('')}<button class="btn sm" data-act="eq-add" data-type="other">+ Other</button></div>
-    </section>
-    <section class="card"><h2>Picked by section</h2>
-      ${SECTIONS.filter((s) => inScope(j, s.key)).map((s) => { const nde = secData(s.key).nde; return `<div class="eq-sec"><b>${h(s.label)}</b> ${nde.length ? nde.map((n) => `<span class="eq-m">${h(n.method)}: ${(n.equip || []).length ? (n.equip || []).map((id) => list.find((e) => e.id === id)).filter(Boolean).map((e) => h(equipName(e))).join(', ') : '<span class="muted">none picked</span>'}</span>`).join('') : '<span class="muted small">no NDE methods yet</span>'} <button class="btn sm ghost" data-go="nde:${s.key}">NDE →</button></div>`; }).join('')}
-      <p class="muted small">When you choose a method on an NDE page, matching equipment from this list is picked automatically (e.g. MFL floor scan → MFL scanner and reference plate; UT thickness → gauge, probe and block). Adjust it there.</p></section>
-  </div>`;
-}
-
-/* Observations */
-function viewObs() {
-  const k = viewPlace(S.view).sec, d = secData(k), ph = secPhotos(k);
-  const rows = d.obs.map((o, i) => { const lp = ph.filter((p) => p.obs === o.id); return `<div class="obs-row c-${o.cond || 'x'}"><div class="obs-no">${i + 1}</div>
-    <div class="obs-main"><div class="obs-top">${sxIn('obs', k, o, 'item', 'text', 'class="obs-item" placeholder="Item / component"')}${sxIn('obs', k, o, 'loc', 'text', 'placeholder="Location"')}${sxSel('obs', k, o, 'cond', CONDITIONS)}<button aria-label="Remove" class="btn sm icon ghost danger" data-act="sx-del" data-kind="obs" data-sec="${k}" data-iid="${o.id}" title="Remove">✕</button></div>
-    ${sxIn('obs', k, o, 'text', 'area', 'placeholder="Observation"')}
-    ${lp.length ? `<div class="obs-ph">${lp.map((p) => `<button class="thumb" data-act="ph-open" data-id="${p.id}" title="${h(p.caption || photoNo(p))}">${photoFig(p, true)}<span>${photoNo(p)}</span></button>`).join('')}</div>` : ''}
-    <div class="obs-acts"><button class="linkbtn" data-act="obs-rec" data-sec="${k}" data-iid="${o.id}">→ Make a recommendation</button></div></div></div>`; }).join('') || '<p class="muted">No observations yet. Add your own, or start from the typical items for this part of the tank.</p>';
-  return `<div class="page">${secHead(k, 'Observations', 'Record what you saw. Rate each item; items rated poor are flagged on the Analysis and Recommendations pages. Link photos from the Photos page.')}
-    <section class="card">${rows}<div class="acts row-acts"><button class="btn sm" data-act="sx-add" data-kind="obs" data-sec="${k}">+ Observation</button><button class="btn sm" data-act="sx-typ" data-kind="obs" data-sec="${k}">Add typical items</button></div></section></div>`;
-}
-
-/* Photos */
-function annoSVG(p, cls = 'anno') {
-  const W = 1000, H = Math.round(1000 * ((p.h || 3) / (p.w || 4)));
-  const sw = 6, out = [`<svg class="${cls}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><defs><marker id="ah-${p.id}" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0 0L10 5 0 10z" fill="context-stroke"/></marker></defs>`];
-  for (const a of p.anno || []) {
-    const c = a.c || '#ff2d2d';
-    if (a.t === 'arrow') out.push(`<line x1="${a.x1}" y1="${a.y1}" x2="${a.x2}" y2="${a.y2}" stroke="${c}" stroke-width="${sw}" stroke-linecap="round" marker-end="url(#ah-${p.id})"/>`);
-    else if (a.t === 'ell') out.push(`<ellipse cx="${a.x}" cy="${a.y}" rx="${Math.abs(a.rx)}" ry="${Math.abs(a.ry)}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
-    else if (a.t === 'rect') out.push(`<rect x="${Math.min(a.x, a.x + a.w)}" y="${Math.min(a.y, a.y + a.h)}" width="${Math.abs(a.w)}" height="${Math.abs(a.h)}" fill="none" stroke="${c}" stroke-width="${sw}"/>`);
-    else if (a.t === 'pen') out.push(`<polyline points="${a.pts.map((q) => q.join(',')).join(' ')}" fill="none" stroke="${c}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`);
-    else if (a.t === 'text') out.push(`<text x="${a.x}" y="${a.y}" font-size="${a.s || 44}" font-family="system-ui,Arial,sans-serif" font-weight="700" fill="${c}" stroke="#000" stroke-width="1.5" paint-order="stroke">${h(a.txt)}</text>`);
-  }
-  out.push('</svg>');
-  return out.join('');
-}
-function photoFig(p, small = false) { return `<span class="phfig${small ? ' sm' : ''}"><img src="${p.dataUrl}" alt="">${(p.anno || []).length ? annoSVG(p) : ''}</span>`; }
-
-function viewPhotos() {
-  const k = viewPlace(S.view).sec, d = secData(k), ph = secPhotos(k);
-  const cards = ph.map((p) => `<figure class="phcard">
-      <button class="phbtn" data-act="ph-anno" data-id="${p.id}" title="Annotate">${photoFig(p)}</button>
-      <div class="phmeta"><b>${photoNo(p)}</b><input data-ph="${p.id}" data-f="caption" value="${h(p.caption || '')}" placeholder="Caption">
-        <textarea data-ph="${p.id}" data-f="comment" rows="2" placeholder="Comment">${h(p.comment || '')}</textarea>
-        <label class="small muted">Observation <select data-ph="${p.id}" data-f="obs"><option value="">—</option>${d.obs.map((o, i) => `<option value="${o.id}" ${p.obs === o.id ? 'selected' : ''}>${i + 1}. ${h(o.item || 'Observation')}</option>`).join('')}</select></label>
-        <label class="chk small"><input type="checkbox" data-ph="${p.id}" data-f="inReport" ${p.inReport !== false ? 'checked' : ''}><span>In report</span></label>
-        <div class="acts"><button class="btn sm" data-act="ph-anno" data-id="${p.id}">Annotate</button><button class="btn sm ghost danger" data-act="ph-del" data-id="${p.id}">Delete</button></div></div></figure>`).join('');
-  return `<div class="page wide">${secHead(k, 'Photos', 'Add photos, caption and comment them, and mark them up with arrows, circles, boxes and text. Photos are numbered in the order added.',
-    `<label class="btn primary">+ Add photos<input type="file" accept="image/*" multiple data-act="ph-add" data-sec="${k}" hidden></label>`)}
-    ${cards ? `<div class="phgrid">${cards}</div>` : '<section class="card"><p class="muted">No photos yet. Use “Add photos” — on a tablet or phone this opens the camera.</p></section>'}</div>`;
-}
-
-/* photo annotation editor */
-const ANNO_COLORS = ['#ff2d2d', '#ffd400', '#22c55e', '#1f6feb', '#ffffff', '#111111'];
-function openAnno(id) {
-  const p = S.photos.find((x) => x.id === id); if (!p) return;
-  const st = { tool: 'arrow', c: ANNO_COLORS[0], anno: JSON.parse(JSON.stringify(p.anno || [])), draft: null };
-  const dlg = $('#dlg'), W = 1000, H = Math.round(1000 * ((p.h || 3) / (p.w || 4)));
-  const paint = () => {
-    const tmp = { ...p, anno: st.draft ? [...st.anno, st.draft] : st.anno };
-    $('#annoLayer').innerHTML = annoSVG(tmp, 'anno edit');
-    $$('#annoTools [data-tool]').forEach((b) => b.classList.toggle('on', b.dataset.tool === st.tool));
-    $$('#annoTools [data-col]').forEach((b) => b.classList.toggle('on', b.dataset.col === st.c));
-  };
-  $('#dlgBody').innerHTML = `<div class="anno-dlg"><div class="ed-head"><h2>Annotate ${photoNo(p)}</h2><button aria-label="Close" class="btn sm ghost" data-anno="close">✕</button></div>
-    <div class="anno-tools" id="annoTools">${[['arrow', '↗ Arrow'], ['ell', '◯ Circle'], ['rect', '▭ Box'], ['pen', '✎ Pen'], ['text', 'T Text']].map(([t, l]) => `<button class="btn sm" data-tool="${t}">${l}</button>`).join('')}
-      <span class="spacer"></span>${ANNO_COLORS.map((c) => `<button class="swatch" data-col="${c}" style="background:${c}" title="${c}"></button>`).join('')}
-      <span class="spacer"></span><button class="btn sm" data-anno="undo">Undo</button><button class="btn sm" data-anno="clear">Clear</button></div>
-    <div class="anno-stage"><img src="${p.dataUrl}" alt=""><div id="annoLayer"></div></div>
-    <div class="ed-foot"><span class="muted small">Drag on the photo to draw. Text: click where the label goes.</span><span><button class="btn" data-anno="close">Cancel</button> <button class="btn primary" data-anno="save">Save</button></span></div></div>`;
-  dlg.classList.add('wide-dlg'); if (!dlg.open) dlg.showModal();
-  paint();
-  const layer = $('#annoLayer');
-  const pt = (e) => { const r = layer.getBoundingClientRect(); return [Math.round(((e.clientX - r.left) / r.width) * W), Math.round(((e.clientY - r.top) / r.height) * H)]; };
-  layer.onpointerdown = (e) => {
-    const [x, y] = pt(e);
-    if (st.tool === 'text') { askText('Label text').then((txt) => { if (txt) { st.anno.push({ t: 'text', x, y, txt, c: st.c, s: 44 }); paint(); } }); return; }
-    layer.setPointerCapture(e.pointerId);
-    st.draft = st.tool === 'arrow' ? { t: 'arrow', x1: x, y1: y, x2: x, y2: y, c: st.c } : st.tool === 'ell' ? { t: 'ell', x, y, rx: 0, ry: 0, c: st.c, x0: x, y0: y } : st.tool === 'rect' ? { t: 'rect', x, y, w: 0, h: 0, c: st.c } : { t: 'pen', pts: [[x, y]], c: st.c };
-    paint();
-  };
-  layer.onpointermove = (e) => {
-    const d = st.draft; if (!d) return; const [x, y] = pt(e);
-    if (d.t === 'arrow') { d.x2 = x; d.y2 = y; } else if (d.t === 'ell') { d.x = (d.x0 + x) / 2; d.y = (d.y0 + y) / 2; d.rx = (x - d.x0) / 2; d.ry = (y - d.y0) / 2; } else if (d.t === 'rect') { d.w = x - d.x; d.h = y - d.y; } else d.pts.push([x, y]);
-    paint();
-  };
-  layer.onpointerup = () => {
-    const d = st.draft; st.draft = null; if (!d) return;
-    const tiny = d.t === 'arrow' ? Math.hypot(d.x2 - d.x1, d.y2 - d.y1) < 8 : d.t === 'ell' ? Math.abs(d.rx) + Math.abs(d.ry) < 6 : d.t === 'rect' ? Math.abs(d.w) + Math.abs(d.h) < 8 : d.pts.length < 2;
-    if (!tiny) { if (d.t === 'ell') { delete d.x0; delete d.y0; d.x = Math.round(d.x); d.y = Math.round(d.y); d.rx = Math.round(d.rx); d.ry = Math.round(d.ry); } st.anno.push(d); }
-    paint();
-  };
-  $('#annoTools').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.tool) st.tool = b.dataset.tool; if (b.dataset.col) st.c = b.dataset.col; if (b.dataset.anno === 'undo') st.anno.pop(); if (b.dataset.anno === 'clear') st.anno = []; paint(); };
-  $('#dlgBody').querySelectorAll('[data-anno="close"]').forEach((b) => (b.onclick = () => { dlg.close(); dlg.classList.remove('wide-dlg'); }));
-  $('#dlgBody').querySelector('[data-anno="save"]').onclick = async () => { p.anno = st.anno; await db.putPhoto(p); dlg.close(); dlg.classList.remove('wide-dlg'); renderView(); toast('Annotations saved.'); };
-}
-function askText(label) {
-  return new Promise((resolve) => {
-    const d = $('#confirmDlg');
-    d.innerHTML = `<form method="dialog" class="cf"><p>${h(label)}</p><input id="askTxt" autocomplete="off"><div class="acts"><button class="btn" value="cancel">Cancel</button><button class="btn primary" value="ok">OK</button></div></form>`;
-    d.showModal(); setTimeout(() => $('#askTxt')?.focus(), 30);
-    d.onclose = () => resolve(d.returnValue === 'ok' ? $('#askTxt')?.value.trim() : null);
-  });
-}
-async function imgDims(dataUrl) { return new Promise((res) => { const im = new Image(); im.onload = () => res([im.naturalWidth, im.naturalHeight]); im.onerror = () => res([4, 3]); im.src = dataUrl; }); }
-
-/* Analysis */
-function findingsBox(k) {
-  const F = findings(S.job, S.layout, S.calc)[k];
-  return `<section class="card"><div class="sp-head"><h2>Findings</h2><span class="sres-chip s-${F.status}">${STATUS_TEXT[F.status]}</span></div>
-    ${F.lines.length ? `<ul class="flist">${F.lines.map((x) => `<li>${x}</li>`).join('')}</ul>` : '<p class="muted small">No results yet.</p>'}
-    ${F.items.length ? `<h3>Items needing action</h3><ul class="flist bad">${F.items.map((it) => `<li><b>${PRIORITY_LABEL[it.priority] || ''}</b> — ${h(it.finding)}</li>`).join('')}</ul><div class="acts"><button class="btn sm" data-go="recs:${k}">Go to recommendations →</button></div>` : ''}</section>`;
-}
-function viewAnalysis() {
-  const k = viewPlace(S.view).sec;
-  let body = '';
-  if (k === 'shell') body = shellEvalHTML() || '<section class="card"><p class="muted">Add the shell courses on the Shell UT page.</p></section>';
-  else if (k === 'froof' || k === 'flroof') body = roofAnalysisHTML(k);
-  else if (k === 'nozzles') body = nozzleAnalysisHTML();
-  else if (k === 'settle') body = `<section class="card"><p class="muted small">The full calculations, charts and tables are on the <button class="linkbtn" data-go="settle">Settlement survey</button> page.</p></section>`;
-  else if (k === 'found') body = `<section class="card"><h2>Foundation condition</h2>${(() => { const obs = secData('found').obs; return obs.length ? `<table class="grid small"><thead><tr><th>Item</th><th>Location</th><th>Condition</th><th>Observation</th></tr></thead><tbody>${obs.map((o) => `<tr><td>${h(o.item)}</td><td>${h(o.loc)}</td><td>${condChip(o.cond)}</td><td>${h(o.text)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No foundation observations yet.</p>'; })()}<p class="muted small">Foundation evaluation per API 653 4.5 (and Annex B for settlement). There are no thickness calculations for the foundation.</p></section>`;
-  return `<div class="page wide">${secHead(k, 'Analysis', 'Calculated results and the findings that need action.')}${findingsBox(k)}${body}</div>`;
-}
-after['sec:an'] = () => {};
-function roofAnalysisHTML(k) {
-  const job = S.job;
-  if (k === 'froof') {
-    if (!hasFixed(job)) return '<section class="card"><p class="muted">No fixed roof.</p></section>';
-    const pts = (job.roof.fixed.pts || []).map((p) => ({ p, s: pointStatus(job, p) }));
-    return `<section class="card"><h2>Fixed roof readings</h2><table class="grid small"><thead><tr><th>Point</th><th class="n">Angle</th><th class="n">Reading</th><th class="n">Loss</th><th>Status</th></tr></thead><tbody>${pts.map(({ p, s }) => `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td>${h(p.label)}</td><td class="n">${p.angle ?? '—'}°</td><td class="n">${fmt(s.t, 't', job)}</td><td class="n">${s.lossPct != null ? s.lossPct.toFixed(0) + '%' : '—'}</td><td>${rStatus(s.status)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No readings.</td></tr>'}</tbody></table><p class="muted small">t-min ${fmt(job.roof.fixed.tMin, 't', job)} (API 653 §4.2.1.2). ${h(ROOF_NOTE)}</p></section>`;
-  }
-  if (!hasFloating(job)) return '<section class="card"><p class="muted">No floating roof.</p></section>';
-  const res = activeStds(job.roof.seal).map((sk) => { const ev = sealEval(job, sk); return `<tr class="${ev.overall === 'Not compliant' ? 'is-bad' : ''}"><td>${h(ev.L.name)}</td><td><b>${ev.overall}</b></td><td class="small">${ev.fails ? h(ev.repair) : ''}</td></tr>`; }).join('');
-  const lay = floatingLayout(job), deck = lay.plates.filter((p) => p.kind !== 'annular').map((p) => ({ p, s: plateUT(job, p) })).filter((x) => x.s.min != null).sort((a, b) => a.s.min - b.s.min).slice(0, 10);
-  return `<section class="card"><h2>Rim seal compliance</h2><table class="grid small"><tbody>${res || '<tr><td class="empty">No standard selected.</td></tr>'}</tbody></table><p class="muted small">Details on the <button class="linkbtn" data-go="seal">Rim seal</button> page.</p></section>
-    <section class="card"><h2>Thinnest deck plates</h2><table class="grid small"><thead><tr><th>Plate</th><th class="n">Min.</th><th class="n">Loss</th><th>Status</th></tr></thead><tbody>${deck.map(({ p, s }) => `<tr class="${s.status === 'Below t-min' ? 'is-bad' : ''}"><td>${h(p.label)}</td><td class="n">${fmt(s.min, 't', job)}</td><td class="n">${s.lossPct != null ? s.lossPct.toFixed(0) + '%' : '—'}</td><td>${rStatus(s.status)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No readings.</td></tr>'}</tbody></table></section>`;
-}
-function nozzleAnalysisHTML() {
-  const job = S.job, list = (job.nozzles || []).slice().sort((a, b) => (+a.angle || 0) - (+b.angle || 0));
-  return `<section class="card"><h2>Nozzle neck evaluation</h2><table class="grid small"><thead><tr><th>Mark</th><th>Type</th><th class="n">Size</th><th class="n">Nominal</th><th class="n">t-min</th><th class="n">Min. reading</th><th class="n">Loss</th><th>Status</th></tr></thead><tbody>
-    ${list.map((n) => { const r = nozzleUT(n, job), w = nozzleWall(n, job); return `<tr class="${r.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${h(n.mark)}</b></td><td>${h(n.type)}</td><td class="n">${fmt(n.size, 'small', job)}</td><td class="n">${fmt(w.tNom, 't', job, false)}${w.nomTbl ? '<sup>T</sup>' : ''}</td><td class="n">${fmt(w.tMin, 't', job, false)}${w.minTbl ? '<sup>T</sup>' : ''}</td><td class="n">${r.count ? fmt(r.min, 't', job, false) : '—'}</td><td class="n">${r.lossPct != null ? r.lossPct.toFixed(0) + '%' : '—'}</td><td>${rStatus(r.status)}</td></tr>`; }).join('') || '<tr><td colspan="8" class="empty">No nozzles.</td></tr>'}
-    </tbody></table><p class="muted small"><sup>T</sup> from the nozzle neck table for the construction code (Code tables).</p></section>`;
-}
-
-/* Recommendations */
-function viewRecs() {
-  const k = viewPlace(S.view).sec, d = secData(k), F = findings(S.job, S.layout, S.calc)[k], ph = secPhotos(k);
-  const used = new Set(d.recs.map((r) => r.auto).filter(Boolean));
-  const sugg = F.items.filter((it) => !used.has(it.key));
-  const rows = d.recs.map((r) => `<div class="rec-row p-${r.priority}${r.status === 'Closed' ? ' closed' : ''}">
-    <div class="rec-top"><b class="rec-no">${r.def ? h(r.no || 'D-?') : 'Rec.'}</b>${sxSel('recs', k, r, 'priority', PRIORITIES)}${sxIn('recs', k, r, 'due', 'text', 'placeholder="Due / timing" class="due"')}${sxSel('recs', k, r, 'status', STATUSES)}
-      <label class="chk small"><input type="checkbox" data-sx="recs" data-sec="${k}" data-iid="${r.id}" data-f="def" ${r.def ? 'checked' : ''}><span>Deficiency</span></label><button aria-label="Remove" class="btn sm icon ghost danger" data-act="sx-del" data-kind="recs" data-sec="${k}" data-iid="${r.id}" title="Remove">✕</button></div>
-    <div class="rec-grid"><label>Finding / deficiency${sxIn('recs', k, r, 'finding', 'area')}</label><label>Recommended action${sxIn('recs', k, r, 'action', 'area')}</label></div>
-    <div class="rec-bot">${sxIn('recs', k, r, 'loc', 'text', 'placeholder="Location"')}${sxIn('recs', k, r, 'ref', 'text', 'placeholder="Code reference"')}<select data-sx="recs" data-sec="${k}" data-iid="${r.id}" data-f="photo"><option value="">Photo —</option>${ph.map((p) => `<option value="${p.id}" ${r.photo === p.id ? 'selected' : ''}>${photoNo(p)} ${h(p.caption || '')}</option>`).join('')}</select></div></div>`).join('') || '<p class="muted">No recommendations yet.</p>';
-  return `<div class="page wide">${secHead(k, 'Recommendations', 'Recommended repairs and actions. Items ticked as deficiencies get a number (D-001…) and appear in the Deficiencies list and the client deficiency report.')}
-    ${sugg.length ? `<section class="card sugg"><div class="sp-head"><h2>Suggested from the analysis</h2><button class="btn sm primary" data-act="rec-all" data-sec="${k}">Add all</button></div>${sugg.map((it) => `<div class="sugg-row"><span class="pchip p-${it.priority}">${it.priority}</span><span>${h(it.finding)}${it.action ? `<br><small class="muted">${h(it.action)}</small>` : ''}</span><button class="btn sm" data-act="rec-from" data-sec="${k}" data-key="${h(it.key)}">Add</button></div>`).join('')}</section>` : ''}
-    <section class="card">${rows}<div class="acts row-acts"><button class="btn sm" data-act="sx-add" data-kind="recs" data-sec="${k}">+ Recommendation</button></div></section></div>`;
-}
-
-/* ------------------------------------------------------------ executive summary */
-const CONDITION_OPTS = ['', 'Fit for continued service', 'Fit for continued service after the listed repairs', 'Not fit for service until repaired', 'Further evaluation required'];
-function viewSummary() {
-  const job = S.job, F = findings(job, S.layout, S.calc), defs = allDefs(job), open = defs.filter((d) => d.status !== 'Closed');
-  const rows = SECTIONS.map((s) => { const f = F[s.key], n = open.filter((d) => d.sec === s.key).length; return `<tr><td><button class="linkbtn" data-go="${childView(s.key, 'an')}">${h(s.label)}</button></td><td><span class="sres-chip s-${f.status}">${STATUS_TEXT[f.status]}</span></td><td class="small">${f.lines.slice(0, 3).join('<br>') || '<span class="muted">—</span>'}</td><td class="n">${n ? `<button class="linkbtn" data-go="defs">${n}</button>` : '—'}</td></tr>`; }).join('');
-  const pri = open.filter((d) => ['P1', 'P2'].includes(d.priority));
-  return `<div class="page wide"><div class="page-head"><div><h1>Executive summary</h1><p class="muted">The first page of the report: overall condition, scope, summary of findings and priority items. The component table updates from the inspection data.</p></div>
-    <div class="acts"><button class="btn" data-go="defs">Deficiencies</button><button class="btn primary" data-go="report">Report</button></div></div>
-    <section class="card"><div class="fgrid">
-      ${field('Overall condition', 'summary.condition', 'sel', { options: CONDITION_OPTS.map((x) => [x, x || '—']), cls: 'span2' })}
-      ${field('Return to service', 'summary.rts', 'text', { ph: 'e.g. after P1 / P2 repairs are complete' })}${field('Next external inspection', 'summary.nextExt', 'text', { ph: 'date or interval' })}
-      ${field('Next internal inspection', 'summary.nextInt', 'text', { ph: S.calc?.Or ? `e.g. ${S.calc.Or} years (bottom MRT)` : '' })}${field('Next UT thickness inspection', 'summary.nextUT', 'text')}
-    </div></section>
-    <section class="card"><div class="sp-head"><h2>Condition by component</h2><span class="muted small">${open.length} open deficienc${open.length === 1 ? 'y' : 'ies'}</span></div>
-      <div class="tblwrap"><table class="grid"><thead><tr><th>Component</th><th>Condition</th><th>Key results</th><th class="n">Open deficiencies</th></tr></thead><tbody>${rows}</tbody></table></div></section>
-    <section class="card"><div class="sp-head"><h2>Scope</h2><button class="btn sm" data-act="sum-draft" data-f="scope">Draft from the NDE set-up</button></div>${field('', 'summary.scope', 'area', { rows: 4, ph: 'What was inspected and how' })}</section>
-    <section class="card"><div class="sp-head"><h2>Summary of findings</h2><button class="btn sm" data-act="sum-draft" data-f="narrative">Draft from the findings</button></div>${field('', 'summary.narrative', 'area', { rows: 8, ph: 'Main findings and conclusions' })}</section>
-    ${pri.length ? `<section class="card"><h2>Priority items (P1 / P2)</h2><ul class="flist bad">${pri.map((d) => `<li><b>${h(d.no || '')}</b> ${h(d.secLabel)}: ${h(d.finding)}${d.action ? ` — <i>${h(d.action)}</i>` : ''}</li>`).join('')}</ul></section>` : ''}
-  </div>`;
-}
-function draftSummary(f) {
-  const job = S.job, I = job.info, F = findings(job, S.layout, S.calc);
-  if (f === 'scope') {
-    const parts = SECTIONS.map((s) => { const m = secData(s.key).nde; return m.length ? `${s.label}: ${m.map((x) => x.method + (x.extent ? ' (' + x.extent + ')' : '')).join(', ')}.` : ''; }).filter(Boolean);
-    return `${job.info.inspDate ? 'On ' + job.info.inspDate + ', ' : ''}an API 653 inspection of tank ${I.tankId || ''}${I.site ? ' at ' + I.site : ''} was carried out.${parts.length ? '\n' + parts.join('\n') : ''}`;
-  }
-  const defs = allDefs(job).filter((d) => d.status !== 'Closed');
-  const lines = SECTIONS.map((s) => { const x = F[s.key]; if (x.status === 'none') return ''; return `${s.label}: ${STATUS_TEXT[x.status].toLowerCase()}. ${x.lines.slice(0, 2).map((l) => l.replace(/<[^>]+>/g, '')).join(' ')}`; }).filter(Boolean);
-  return `${lines.join('\n')}${defs.length ? `\n\n${defs.length} deficienc${defs.length === 1 ? 'y is' : 'ies are'} listed in the deficiency report, ${defs.filter((d) => ['P1', 'P2'].includes(d.priority)).length} of them to be completed before return to service.` : ''}`;
-}
-
-function viewDefs() {
-  const job = S.job; numberDefs(job);
-  const f = S.defFilter || 'open';
-  let defs = allDefs(job); const all = defs.length;
-  if (f === 'open') defs = defs.filter((d) => d.status !== 'Closed'); else if (f === 'closed') defs = defs.filter((d) => d.status === 'Closed');
-  const rows = defs.map((d) => `<tr class="p-${d.priority}${d.status === 'Closed' ? ' closed' : ''}"><td><b>${h(d.no || '')}</b></td><td><button class="linkbtn" data-go="recs:${d.sec}">${h(d.secLabel)}</button>${d.loc ? `<br><small class="muted">${h(d.loc)}</small>` : ''}</td><td class="small">${h(d.finding)}</td><td class="small">${h(d.action)}</td>
-    <td>${sxSel('recs', d.sec, d, 'priority', PRIORITIES.map(([k]) => [k, k]))}</td><td>${sxIn('recs', d.sec, d, 'due', 'text', 'class="due"')}</td><td>${sxSel('recs', d.sec, d, 'status', STATUSES)}${d.closedOn ? `<br><small class="muted">${h(d.closedOn)}</small>` : ''}</td><td>${sxIn('recs', d.sec, d, 'client', 'text', 'placeholder="Client comment / work order"')}</td>
-    <td class="small muted">${d.history?.length ? h(d.history[d.history.length - 1].date) : ''}</td></tr>`).join('') || `<tr><td colspan="9" class="empty">${all ? 'Nothing in this filter.' : 'No deficiencies yet — tick “Deficiency” on a recommendation, or add them from the Recommendations pages.'}</td></tr>`;
-  const S2 = job.summary;
-  return `<div class="page wide"><div class="page-head"><div><h1>Deficiencies</h1><p class="muted">Every recommendation marked as a deficiency, from all parts of the tank. Update status and client comments here, then issue the deficiency report to the client.</p></div>
-    <div class="acts"><button class="btn" data-act="exp-defs">Export CSV</button><button class="btn" data-act="def-issue">Issue update${S2.defRev ? ' ' + (S2.defRev + 1) : ''}</button><button class="btn primary" data-go="defrep">Deficiency report</button></div></div>
-    <section class="card"><div class="sp-head"><div class="seg">${[['open', 'Open'], ['closed', 'Closed'], ['all', 'All']].map(([k, l]) => `<button class="btn sm${f === k ? ' on' : ''}" data-act="def-filter" data-k="${k}">${l}</button>`).join('')}</div><span class="muted small">${all} total · last issued ${h(S2.issued || '—')}${S2.defRev ? ' (update ' + S2.defRev + ')' : ''}</span></div>
-      <div class="tblwrap"><table class="grid deflog"><thead><tr><th>No.</th><th>Component</th><th>Deficiency</th><th>Recommended action</th><th>Priority</th><th>Due</th><th>Status</th><th>Client comment</th><th>Updated</th></tr></thead><tbody>${rows}</tbody></table></div></section></div>`;
-}
-function viewDefRep() {
-  return `<div class="report-tools no-print"><div><h1>Deficiency report</h1><p class="muted small">For updating the client. Print or save as PDF.</p></div><div class="acts"><button class="btn" data-go="defs">← Deficiencies</button><button class="btn primary" data-act="print">Print / Save PDF</button></div></div>
-    <div class="report-preview" id="defRoot"></div>`;
-}
-after.defrep = () => { numberDefs(S.job); $('#defRoot').innerHTML = buildDefReport(S.job, S.company, S.photos); };
-
-
 /* --------------------------------------------------------------- events --- */
 
 /* Button actions (data-act), registered with the action registry (js/app/actions.js). */
-const _phanno = async (el, id, e, act) => {
-  openAnno(id); return;
-};
-const _recfrom = async (el, id, e, act) => {
-  {
-    const k = el.dataset.sec, F = findings(S.job, S.layout, S.calc)[k], d = secData(k), used = new Set(d.recs.map((r) => r.auto));
-    const items = F.items.filter((it) => !used.has(it.key) && (act === 'rec-all' || it.key === el.dataset.key));
-    for (const it of items) d.recs.push(newRec({ finding: it.finding.replace(/<[^>]+>/g, ''), loc: it.loc, action: it.action, priority: it.priority, ref: it.ref, auto: it.key, def: it.priority !== 'P5' }));
-    numberDefs(S.job); commit(); renderView(); renderNav(); return;
-  }
-};
 onAction({
   'job-new': async (el, id, e, act) => {
     { const j = newJob(); return createJob(j); }
@@ -1570,31 +1276,6 @@ onAction({
   'exp-shell-svg': async (el, id, e, act) => {
     return download(fileBase(S.job) + '_shell-rollout.svg', rolloutSVG(S.job, { print: true }).replace(/(<svg[^>]*>)/, '$1' + SHELL_SVG_STYLE), 'image/svg+xml');
   },
-  'eq-add': async (el, id, e, act) => {
-    {
-      const e = newEquip(el.dataset.type || 'other'); (S.job.equipment = S.job.equipment || []).push(e);
-      // pick it for existing methods that use this type and have nothing of that type yet
-      for (const sx of SECTIONS) for (const n of secData(sx.key).nde) if (suggestEquip([e], n.method).length && !(n.equip || []).some((id) => S.job.equipment.find((x) => x.id === id)?.type === e.type)) n.equip = [...(n.equip || []), e.id];
-      commit(); renderView(); setTimeout(() => $(`[data-eq="make"][data-id="${e.id}"]`)?.focus(), 30); return;
-    }
-  },
-  'eq-dup': async (el, id, e, act) => {
-    {
-      const src = (S.job.equipment || []).find((x) => x.id === id); if (!src) return;
-      const e = newEquip(src.type, { ...src, id: undefined, serial: '' }); e.id = newEquip().id;
-      S.job.equipment.splice(S.job.equipment.indexOf(src) + 1, 0, e); commit(); renderView(); setTimeout(() => $(`[data-eq="serial"][data-id="${e.id}"]`)?.focus(), 30); return;
-    }
-  },
-  'eq-del': async (el, id, e, act) => {
-    {
-      const e = (S.job.equipment || []).find((x) => x.id === id); if (!e) return;
-      const used = equipUse(S.job, SECTIONS).get(id) || [];
-      if (!(await askConfirm(`Remove ${equipName(e)}${e.serial ? ' (S/N ' + e.serial + ')' : ''} from the equipment list?${used.length ? `\n\nIt is picked for: ${used.join('; ')}.` : ''}`, { ok: 'Remove', danger: true }))) return;
-      S.job.equipment = S.job.equipment.filter((x) => x.id !== id);
-      for (const sx of SECTIONS) for (const n of secData(sx.key).nde) if (n.equip) n.equip = n.equip.filter((x) => x !== id);
-      commit(); renderView(); return;
-    }
-  },
   'exp-noz': async (el, id, e, act) => {
     return download(fileBase(S.job) + '_nozzles.csv', nozzlesCSV(S.job), 'text/csv');
   },
@@ -1617,64 +1298,6 @@ onAction({
   },
   'scan-all': async (el, id, e, act) => {
     { if (!(await askConfirm('Mark every plate as scanned?', { ok: 'Mark all scanned' }))) return; for (const p of S.layout.plates) { S.job.plates[p.key] = { ...(S.job.plates[p.key] || {}), scan: 'scanned' }; } commit(); refreshPlateTable(); return; }
-  },
-  'sx-add': async (el, id, e, act) => {
-    {
-      const k = el.dataset.sec, kind = el.dataset.kind, it = kind === 'nde' ? newNDE() : kind === 'obs' ? newObs() : newRec();
-      secData(k)[kind].push(it); if (kind === 'recs') numberDefs(S.job); commit(); renderView(); renderNav();
-      setTimeout(() => $(`[data-iid="${it.id}"][data-f="${kind === 'nde' ? 'extent' : kind === 'obs' ? 'item' : 'finding'}"]`)?.focus(), 40); return;
-    }
-  },
-  'sx-del': async (el, id, e, act) => {
-    {
-      const k = el.dataset.sec, kind = el.dataset.kind, d = secData(k);
-      if (kind === 'recs' && !(await askConfirm('Remove this recommendation?', { ok: 'Remove', danger: true }))) return;
-      d[kind] = d[kind].filter((x) => x.id !== el.dataset.iid);
-      if (kind === 'obs') for (const p of S.photos.filter((p) => p.obs === el.dataset.iid)) { delete p.obs; await db.putPhoto(p); }
-      commit(); renderView(); renderNav(); return;
-    }
-  },
-  'sx-typ': async (el, id, e, act) => {
-    {
-      const k = el.dataset.sec, kind = el.dataset.kind, d = secData(k);
-      const have = new Set(d[kind].map((x) => (kind === 'nde' ? x.method : x.item)));
-      const add = (kind === 'nde' ? typicalNDE(k) : typicalObs(k)).filter((x) => !have.has(kind === 'nde' ? x.method : x.item));
-      if (kind === 'nde') for (const x of add) x.equip = suggestEquip(S.job.equipment, x.method);
-      d[kind].push(...add); commit(); renderView(); renderNav(); toast(add.length ? `Added ${add.length} item${add.length > 1 ? 's' : ''}.` : 'The typical items are already there.'); return;
-    }
-  },
-  'rec-from': _recfrom,
-  'rec-all': _recfrom,
-  'obs-rec': async (el, id, e, act) => {
-    {
-      const k = el.dataset.sec, o = secData(k).obs.find((x) => x.id === el.dataset.iid); if (!o) return;
-      const ph = S.photos.find((p) => p.obs === o.id);
-      secData(k).recs.push(newRec({ finding: [o.item, o.text].filter(Boolean).join(': '), loc: o.loc, priority: o.cond === 'poor' ? 'P3' : 'P4', photo: ph?.id || '', obs: o.id }));
-      numberDefs(S.job); commit(); go('recs:' + k); return;
-    }
-  },
-  'ph-anno': _phanno,
-  'ph-open': _phanno,
-  'ph-del': async (el, id, e, act) => {
-    {
-      if (!(await askConfirm('Delete this photo and its annotations?', { ok: 'Delete', danger: true }))) return;
-      await db.deletePhoto(id); S.photos = S.photos.filter((p) => p.id !== id); S.job.updated = Date.now(); scheduleSave(); renderView(); renderNav(); return;
-    }
-  },
-  'sum-draft': async (el, id, e, act) => {
-    {
-      const f = el.dataset.f;
-      if ((S.job.summary[f] || '').trim() && !(await askConfirm('Replace the current text with a new draft?', { ok: 'Replace' }))) return;
-      S.job.summary[f] = draftSummary(f); commit(); renderView(); return;
-    }
-  },
-  'def-filter': async (el, id, e, act) => {
-    S.defFilter = el.dataset.k; renderView(); return;
-  },
-  'def-issue': async (el, id, e, act) => {
-    {
-      const S2 = S.job.summary; S2.defRev = (S2.defRev || 0) + 1; S2.issued = new Date().toISOString().slice(0, 10); commit(); toast(`Deficiency report update ${S2.defRev} issued ${S2.issued}.`); go('defrep'); return;
-    }
   },
   'exp-defs': async (el, id, e, act) => {
     {
@@ -1820,54 +1443,6 @@ onChange([
   { order: 270, when: (el, act) => el.matches('[data-cb]'), run: async (el, e, act) => {
     { S.company[el.dataset.cb] = el.value; await db.setMeta('company', S.company); return; }
   } },
-  { order: 290, when: (el, act) => el.matches('[data-ph]'), run: async (el, e, act) => {
-    {
-    const p = S.photos.find((x) => x.id === el.dataset.ph); if (!p) return;
-    const f = el.dataset.f; p[f] = el.type === 'checkbox' ? el.checked : el.value;
-    await db.putPhoto(p); S.job.updated = Date.now(); scheduleSave(); if (f === 'obs') renderView(); return;
-  }
-  } },
-  { order: 300, when: (el, act) => el.matches('[data-eq]'), run: async (el, e, act) => {
-    {
-    const e = (S.job.equipment || []).find((x) => x.id === el.dataset.id); if (!e) return;
-    e[el.dataset.eq] = el.value.trim(); commit();
-    if (el.tagName === 'SELECT' || el.type === 'date') renderView();
-    return;
-  }
-  } },
-  { order: 310, when: (el, act) => el.matches('[data-eqpick]'), run: async (el, e, act) => {
-    {
-    const it = secData(el.dataset.sec).nde.find((x) => x.id === el.dataset.iid); if (!it) return;
-    const set = new Set(it.equip || []); el.checked ? set.add(el.dataset.eqpick) : set.delete(el.dataset.eqpick);
-    it.equip = (S.job.equipment || []).map((e) => e.id).filter((x) => set.has(x)); commit();
-    const sm = el.closest('details')?.querySelector('summary'); if (sm) sm.innerHTML = eqChips(it);
-    return;
-  }
-  } },
-  { order: 320, when: (el, act) => el.id === 'eqCopyFrom' && el.value, run: async (el, e, act) => {
-    {
-    const src = await db.getJob(el.value); el.value = '';
-    if (!src?.equipment?.length) return;
-    const have = new Set((S.job.equipment || []).map((e) => [e.type, e.serial, e.model].join('|')));
-    const add = src.equipment.filter((e) => !have.has([e.type, e.serial, e.model].join('|'))).map((e) => ({ ...JSON.parse(JSON.stringify(e)), id: newEquip().id }));
-    S.job.equipment = [...(S.job.equipment || []), ...add];
-    for (const sx of SECTIONS) for (const n of secData(sx.key).nde) if (!(n.equip || []).length) n.equip = suggestEquip(S.job.equipment, n.method);
-    commit(); renderView(); toast(add.length ? `${add.length} item${add.length === 1 ? '' : 's'} copied — check the calibration dates.` : 'Those items are already on the list.'); return;
-  }
-  } },
-  { order: 330, when: (el, act) => el.matches('[data-sx]'), run: async (el, e, act) => {
-    {
-    const list = secData(el.dataset.sec)[el.dataset.sx] || [], it = list.find((x) => x.id === el.dataset.iid); if (!it) return;
-    const f = el.dataset.f, v = el.type === 'checkbox' ? el.checked : el.value;
-    if (el.dataset.sx === 'nde' && f === 'method' && !(it.equip || []).length) it.equip = suggestEquip(S.job.equipment, v);
-    if (f === 'status' && it.status !== v) { it.history = it.history || []; const d = new Date().toISOString().slice(0, 10); it.history.push({ date: d, status: v }); if (v === 'Closed') it.closedOn = d; else delete it.closedOn; }
-    it[f] = v;
-    if (f === 'def' && v) numberDefs(S.job);
-    commit();
-    if (el.tagName === 'SELECT' || el.type === 'checkbox') { renderView(); renderNav(); }
-    return;
-  }
-  } },
   { order: 340, when: (el, act) => el.matches('[data-photo-cap]'), run: async (el, e, act) => {
     { const p = S.photos.find((x) => x.id === el.dataset.photoCap); if (p) { p.caption = el.value; await db.putPhoto(p); } return; }
   } },
@@ -1891,16 +1466,6 @@ onChange([
   } },
   { order: 420, when: (el, act) => act === 'logo', run: async (el, e, act) => {
     { const f = el.files[0]; if (!f) return; S.company.logo = await resizeImage(f, 600, 'image/png'); await db.setMeta('company', S.company); renderView(); return; }
-  } },
-  { order: 430, when: (el, act) => act === 'ph-add', run: async (el, e, act) => {
-    {
-    const k = el.dataset.sec; let n = Math.max(0, ...S.photos.filter((p) => p.sec === k).map((p) => p.n || 0));
-    for (const f of el.files) {
-      try { const dataUrl = await resizeImage(f, 1800); const [w, hh] = await imgDims(dataUrl); const p = { id: uid(), jobId: S.job.id, sec: k, n: ++n, dataUrl, w, h: hh, caption: '', comment: '', anno: [], created: Date.now() }; await db.putPhoto(p); S.photos.push(p); }
-      catch { toast('Could not read ' + f.name); }
-    }
-    el.value = ''; S.job.updated = Date.now(); scheduleSave(); renderView(); renderNav(); checkStorage(); return;
-  }
   } },
   { order: 440, when: (el, act) => act === 'photo-add', run: async (el, e, act) => {
     {
@@ -2171,13 +1736,6 @@ async function importJobFile(file) {
   } catch (err) { toast('Could not open the file: ' + err.message); return null; }
 }
 
-async function resizeImage(file, max, type = 'image/jpeg') {
-  const bmp = await createImageBitmap(file);
-  const sc = Math.min(1, max / Math.max(bmp.width, bmp.height));
-  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * sc); c.height = Math.round(bmp.height * sc);
-  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-  return c.toDataURL(type, 0.82);
-}
 
 /* ---------------------------------------------------------------- misc --- */
 
@@ -2233,9 +1791,8 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 }
 
 /* Screens (navigation registry, js/app/nav.js) */
-Object.assign(views, { jobs: viewJobs, equip: viewEquip, setup: viewSetup, summary: viewSummary, defs: viewDefs, defrep: viewDefRep, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, });
-Object.assign(childViews, { nde: viewNDE, obs: viewObs, photos: viewPhotos, an: viewAnalysis, recs: viewRecs });
-configureHost({ commit: () => commit(), recompute: () => recompute(), loadJobs: () => loadJobs(), loadTanks: () => loadTanks(), createJob: (j) => createJob(j), leaveJobOk: () => leaveJobOk(), journal, flushSave: () => flushSave(), renderHeader: () => renderHeader(), openJob: (id, v) => openJob(id, v), importJobFile: (f) => importJobFile(f), rememberFile: (id, fh, w) => rememberFile(id, fh, w), drawMap: () => drawMap(), renderSide: () => renderSide(), setMode: (m) => setMode(m), refreshSetupPreview: () => refreshSetupPreview() });
+Object.assign(views, { jobs: viewJobs, setup: viewSetup, map: viewMap, inds: viewInds, plates: viewPlates, api: viewApi, });
+configureHost({ commit: () => commit(), scheduleSave: () => scheduleSave(), checkStorage: () => checkStorage(), recompute: () => recompute(), loadJobs: () => loadJobs(), loadTanks: () => loadTanks(), createJob: (j) => createJob(j), leaveJobOk: () => leaveJobOk(), journal, flushSave: () => flushSave(), renderHeader: () => renderHeader(), openJob: (id, v) => openJob(id, v), importJobFile: (f) => importJobFile(f), rememberFile: (id, fh, w) => rememberFile(id, fh, w), drawMap: () => drawMap(), renderSide: () => renderSide(), setMode: (m) => setMode(m), refreshSetupPreview: () => refreshSetupPreview() });
 configureNav({
   header: () => renderHeader(),
   leaveRegistry: () => { if (saver.pending()) flushSave(); S.job = null; recompute(); S.photos = []; },

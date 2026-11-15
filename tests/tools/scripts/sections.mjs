@@ -1,0 +1,57 @@
+// Tank section screens and equipment, for actions-diff.mjs: NDE scope, equipment picks, observations,
+// recommendations (manual, from findings, from an observation), photos (add, edit, annotate, delete), equipment list.
+const last = (q) => `${q} >> nth=-1`;
+const wait = { js: () => new Promise((r) => setTimeout(r, 800)) };
+export const steps = [
+  // NDE scope
+  { go: 'nde:floor' },
+  { click: '[data-act="sx-typ"]' },
+  { click: '[data-act="sx-add"][data-kind="nde"]' },
+  { select: last('select[data-sx="nde"][data-f="method"]'), value: { index: 2 } },
+  { fill: last('input[data-sx="nde"][data-f="extent"]'), value: '100% of floor plates' },
+  { fill: last('input[data-sx="nde"][data-f="date"]'), value: '2026-11-10' },
+  { click: last('details.eqpick > summary') },
+  { js: () => document.querySelector('details.eqpick[open] input[data-eqpick]').click() },
+  { click: last('[data-act="sx-del"][data-kind="nde"]') },
+  // observations
+  { go: 'obs:floor' },
+  { click: '[data-act="sx-typ"]' },
+  { click: '[data-act="sx-add"][data-kind="obs"]' },
+  { fill: last('[data-sx="obs"][data-f="item"]'), value: 'Sump' },
+  { fill: last('[data-sx="obs"][data-f="text"]'), value: 'Pitting at the sump weld' },
+  { select: last('select[data-sx="obs"][data-f="cond"]'), value: { index: 3 } },
+  { click: last('[data-act="obs-rec"]') },
+  // recommendations
+  { go: 'recs:floor' },
+  { click: '[data-act="rec-from"]' },
+  { click: '[data-act="rec-all"]' },
+  { click: '[data-act="sx-add"][data-kind="recs"]' },
+  { fill: last('[data-sx="recs"][data-f="finding"]'), value: 'Coating breakdown' },
+  { select: last('select[data-sx="recs"][data-f="priority"]'), value: { index: 1 } },
+  { check: last('input[data-sx="recs"][data-f="def"]') },
+  { select: last('select[data-sx="recs"][data-f="status"]'), value: { index: 2 } },
+  { click: last('[data-act="sx-del"][data-kind="recs"]') },
+  { confirm: 'no' },
+  { click: last('[data-act="sx-del"][data-kind="recs"]') },
+  { confirm: 'yes' },
+  // photos
+  { go: 'photos:floor' },
+  { upload: 'input[data-act="ph-add"]' }, wait,
+  { fill: last('input[data-ph][data-f="caption"]'), value: 'Sump weld' },
+  { fill: last('textarea[data-ph][data-f="comment"]'), value: 'Looking north' },
+  { select: last('select[data-ph][data-f="obs"]'), value: { index: 1 } },
+  { check: last('input[data-ph][data-f="inReport"]') },
+  { click: last('button.btn[data-act="ph-anno"]') },
+  { click: '#dlgBody [data-anno="save"]' }, wait,
+  { click: last('[data-act="ph-del"]') },
+  { confirm: 'yes' },
+  // equipment list
+  { go: 'equip' },
+  { click: '[data-act="eq-add"] >> nth=0' },
+  { fill: last('input[data-eq="serial"]'), value: 'SN-0042' },
+  { fill: last('input[data-eq="calDue"]'), value: '2027-01-31' },
+  { select: last('select[data-eq="type"]'), value: { index: 2 } },
+  { click: last('[data-act="eq-dup"]') },
+  { click: last('[data-act="eq-del"]') },
+  { confirm: 'yes' },
+];

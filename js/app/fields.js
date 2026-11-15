@@ -53,3 +53,13 @@ export function rerenderKeep(c, html) {
   c.innerHTML = html;
   if (key) { const n = c.querySelector(key); if (n) { n.focus(); try { n.select(); } catch { /* */ } } }
 }
+
+/** Inputs and selects for a section record (NDE, observation, recommendation): data-sx / data-sec / data-iid / data-f. */
+export function sxIn(kind, sec, it, f, type = 'text', extra = '') {
+  const v = it[f] ?? '';
+  if (type === 'area') return `<textarea data-sx="${kind}" data-sec="${sec}" data-iid="${it.id}" data-f="${f}" rows="2" ${extra}>${h(v)}</textarea>`;
+  return `<input data-sx="${kind}" data-sec="${sec}" data-iid="${it.id}" data-f="${f}" ${type === 'date' ? 'type="date"' : ''} value="${h(v)}" ${extra}>`;
+}
+export function sxSel(kind, sec, it, f, opts) {
+  return `<select data-sx="${kind}" data-sec="${sec}" data-iid="${it.id}" data-f="${f}">${opts.map((o) => { const [k, l] = Array.isArray(o) ? o : [o, o || '—']; return `<option value="${h(k)}" ${String(it[f] ?? '') === String(k) ? 'selected' : ''}>${h(l)}</option>`; }).join('')}</select>`;
+}

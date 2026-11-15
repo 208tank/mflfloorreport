@@ -1,7 +1,7 @@
 // Shared application state and constants (refactoring step 1, moved unchanged from app.js).
 import { RESULTS } from '../calc.js';
 
-export const APP_VERSION = '3.12.7';
+export const APP_VERSION = '3.12.8';
 
 export const S = {
   jobs: [], tanks: [], reg: { q: '', open: new Set() }, job: null, layout: null, calc: null, photos: [], company: {},
@@ -45,3 +45,7 @@ export const FT_TYPES = [['column', 'Roof column'], ['sump', 'Sump'], ['patch', 
 
 /** Today's date as YYYY-MM-DD (UTC). */
 export const todayISO = () => new Date().toISOString().slice(0, 10);
+
+/** A section's NDE scope, observations and recommendations (created on first use), and its photos in order. */
+export const secData = (k) => (S.job.secs[k] = S.job.secs[k] || { nde: [], obs: [], recs: [] });
+export const secPhotos = (k) => S.photos.filter((p) => p.sec === k).sort((a, b) => (a.n || 0) - (b.n || 0) || a.created - b.created);

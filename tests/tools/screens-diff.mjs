@@ -4,7 +4,7 @@
 import { serve, launch } from '../browser/lib.mjs';
 import { resolve, sep } from 'node:path';
 const [oldDir, newDir] = process.argv.slice(2);
-const VIEWS = ['dash', 'reg', 'jobs', 'equip', 'setup', 'summary', 'defs', 'map', 'inds', 'plates', 'api', 'shell', 'roofF', 'roofL', 'seal', 'nozzles', 'settle', 'ref', 'report', 'nde:floor', 'obs:floor', 'photos:floor', 'recs:floor', 'an:floor', 'obs:shell', 'recs:settle'];
+const VIEWS = ['dash', 'reg', 'jobs', 'equip', 'setup', 'summary', 'defs', 'map', 'inds', 'plates', 'api', 'shell', 'roofF', 'roofL', 'seal', 'nozzles', 'settle', 'ref', 'report', 'nde:floor', 'obs:floor', 'photos:floor', 'recs:floor', 'an:floor', 'obs:shell', 'recs:settle', 'defrep', 'equip', 'an:shell', 'an:froof', 'an:nozzles', 'photos:shell'];
 async function capture(dir) {
   const browser = await launch();
   const { srv, url } = await serve(new Map(), {}, resolve(dir) + sep);

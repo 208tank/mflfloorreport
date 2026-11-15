@@ -30,6 +30,7 @@ registers its screen with `defineView` and its buttons with `onAction` / `onChan
 | 6 | v3.12.5 | Revisions, crash recovery and the data check (`views/history.js`) |
 | 7 | v3.12.6 | Dashboard (`views/dashboard.js`); the linked jobs folder (`app/folder.js`) |
 | 8 | v3.12.7 | Tank registry (`views/registry.js`) |
+| 9 | v3.12.8 | Section screens and equipment (`views/sections.js`), summary and deficiencies (`views/summary.js`); image helpers (`app/images.js`) |
 
 Screen modules can't import `app.js`, so the few app-level steps they need that haven't moved yet (saving and loading, the
 recovery journal, opening and importing job files, and the floor map and setup redraws) are handed over at start-up through `js/app/host.js`.
@@ -253,7 +254,7 @@ Nothing in `tests/` or `package.json` is used by the app, which still has no dep
   two copies of the app and reports any difference in the HTML. Used to confirm a refactoring step
   changes nothing on screen.
 - `node tests/tools/actions-diff.mjs <old copy> <new copy> <script>` — runs a scripted sequence of edits
-  (`tests/tools/scripts/`) on both copies and compares the job data, registry records, screen and focus after every step.
+  (`tests/tools/scripts/`) on both copies and compares the job data, registry and photo records, screen and focus after every step.
 - After a deliberate, reviewed change to a calculation or the report, re-record the golden outputs
   with `UPDATE_GOLDEN=1 node --test tests/*.test.mjs` and review the diff before committing.
 

@@ -1,11 +1,12 @@
 // Runs the same sequence of edits on two copies of the app and compares, after every step, the open job's
-// data, the tank registry records and the screen HTML. Used to confirm a refactoring step leaves a screen's behaviour unchanged.
+// data, the tank registry records, the photo records and the screen HTML. Used to confirm a refactoring step leaves a screen's behaviour unchanged.
 //   node tests/tools/actions-diff.mjs <old app folder> <new app folder> <script name in tests/tools/scripts/>
-// A script is a list of steps: { go }, { fill, value, key? } (typed, then Tab unless key says otherwise), { click }, { select, value } (value may be { index }), { check }, { at, x, y } (click a point on a drawing), { js } (run code in the page, e.g. pick a map item), { drag, to },
+// A script is a list of steps: { go }, { fill, value, key? } (typed, then Tab unless key says otherwise), { click }, { select, value } (value may be { index }), { check }, { at, x, y } (click a point on a drawing), { js } (run code in the page, e.g. pick a map item), { drag, to }, { upload } (a small photo into a file input),
 // { confirm: 'yes' | 'no' }, { confirmIf } (answer only if a confirmation is showing). Ids and times are made repeatable (fixed clock, seeded random numbers).
 import { serve, launch } from '../browser/lib.mjs';
 import { resolve, sep } from 'node:path';
 const [oldDir, newDir, name] = process.argv.slice(2);
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAGCAIAAABxZ0isAAAAEUlEQVR4nGM4YWODFTEMpAQAr9U8AVonTcEAAAAASUVORK5CYII='; // an 8×6 px photo for upload steps
 const { steps } = await import(`./scripts/${name}.mjs`);
 
 async function run(dir) {
@@ -32,13 +33,14 @@ async function run(dir) {
     else if (s.at) await page.click(s.at, { position: { x: s.x, y: s.y } });
     else if (s.js) await page.evaluate(s.js);
     else if (s.drag) await page.dragAndDrop(s.drag, s.to);
+    else if (s.upload) await page.setInputFiles(s.upload, { name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from(PNG, 'base64') });
     else if (s.confirm) await page.click(`[data-cf="${s.confirm}"]`);
     else if (s.confirmIf) { if (await page.isVisible(`[data-cf="${s.confirmIf}"]`)) await page.click(`[data-cf="${s.confirmIf}"]`); }
     } catch (err) { await browser.close(); srv.close(); throw new Error(`${dir}: step ${n + 1} ${JSON.stringify(s)} failed: ${err.message.split('\n')[0]}`); }
     await page.waitForTimeout(300);
     out.push(await page.evaluate(() => {
       const j = structuredClone(window.tfi.job() || { none: true }); delete j.updated; delete j.edits; delete j.editAreas;
-      return { job: JSON.stringify(j), tanks: JSON.stringify((window.__app.tanks || []).map(({ updated, ...t }) => t)), main: document.querySelector('#main').innerHTML, focus: document.activeElement?.outerHTML?.slice(0, 120) || '' };
+      return { job: JSON.stringify(j), tanks: JSON.stringify((window.__app.tanks || []).map(({ updated, ...t }) => t)), photos: JSON.stringify((window.__app.photos || []).map(({ dataUrl, ...p }) => p)), main: document.querySelector('#main').innerHTML, focus: document.activeElement?.outerHTML?.slice(0, 120) || '' };
     }));
   }
   await browser.close(); srv.close();
@@ -48,13 +50,13 @@ const norm = (s) => s.replace(/v3\.\d+\.\d+/g, 'vX');
 const a = await run(oldDir), b = await run(newDir);
 let diffs = 0;
 steps.forEach((s, i) => {
-  for (const part of ['job', 'tanks', 'main', 'focus']) {
+  for (const part of ['job', 'tanks', 'photos', 'main', 'focus']) {
     const x = norm(a.out[i][part]), y = norm(b.out[i][part]);
     if (x !== y) { diffs++; let k = 0; while (x[k] === y[k]) k++; console.log(`DIFF step ${i + 1} ${JSON.stringify(s)} ${part} @${k}\n  old: …${x.slice(Math.max(0, k - 80), k + 120)}\n  new: …${y.slice(Math.max(0, k - 80), k + 120)}`); }
   }
 });
 if (a.errors.length || b.errors.length) { diffs++; console.log('page errors', { old: a.errors, new: b.errors }); }
-const changed = a.out.filter((o, i) => i && (o.job !== a.out[i - 1].job || o.tanks !== a.out[i - 1].tanks)).length;
+const changed = a.out.filter((o, i) => i && (o.job !== a.out[i - 1].job || o.tanks !== a.out[i - 1].tanks || o.photos !== a.out[i - 1].photos)).length;
 console.log(diffs ? `${diffs} difference(s)` : `all ${steps.length} steps identical (${changed} changed the job)`);
-if (process.env.VERBOSE) steps.forEach((s, i) => { if (i && a.out[i].job === a.out[i - 1].job && a.out[i].tanks === a.out[i - 1].tanks) console.log(`  step ${i + 1} left the job unchanged: ${JSON.stringify(s)}`); });
+if (process.env.VERBOSE) steps.forEach((s, i) => { if (i && a.out[i].job === a.out[i - 1].job && a.out[i].tanks === a.out[i - 1].tanks && a.out[i].photos === a.out[i - 1].photos) console.log(`  step ${i + 1} left the job unchanged: ${JSON.stringify(s)}`); });
 process.exit(diffs ? 1 : 0);
