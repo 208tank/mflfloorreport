@@ -7,6 +7,24 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Data integrity upgrade — stage 8b: Complete freezes the report and locks the job (v3.17.1)
+
+**Marking a job Complete** (from Setup or the Dashboard) issues its report: the report is kept exactly as printed, with
+its checksum, the report options and the app version, in an *Issued* revision. The job then shows **Locked** and a
+**Reopen** button in the header.
+
+**A locked job is read-only.** On the job's screens the fields and editing buttons are disabled, and the map only
+selects. Viewing, filtering, the report, exports and saving to a file still work. A change that gets past the screens
+is refused when saving: the stored job is put back and the change is dropped.
+
+**The Report screen** shows the issued report, not a new one. If this version of the app would print the same data
+differently (after an update, say), a note says so and **Compare side by side** shows both. The issued report doesn't
+change.
+
+**Reopening** (the header button, or moving the job to another stage in Setup or on the Dashboard) asks why. The reason
+is kept in the job's stage history and in its revision. Reopen from the header goes back to Peer review, which stays
+editable. Marking it Complete again issues a new report; the earlier one stays in Revisions.
+
 ## Data integrity upgrade — stage 8a: revisions and the Revisions screen (v3.17.0)
 
 A revision is a complete, checksummed copy of the job kept on this device. Revisions are never changed. One is now kept:
@@ -814,6 +832,8 @@ every limit is editable.
 | `js/app/persist.js` | Saving the open job: recalculation, save queue, crash journal, change count, `commit` |
 | `js/app/header.js` | Header, job file badge, revision text |
 | `js/app/folder.js` | Linked jobs folder: link, scan, write a stage back |
+| `js/app/stage.js` | Every stage change: revisions, issuing the report at Complete, the reason to reopen |
+| `js/app/lock.js` | The Complete lock on the job's screens and in the action dispatch |
 | `js/app/revisions.js` | Keeping revisions: on file save, stage change, import, restore; the daily checkpoint; content checksum; the Complete lock test |
 | `js/app/images.js`, `js/app/menu.js` | Photo / logo helpers; side menu section button |
 | `js/views/*.js` | One module per screen area: dashboard, registry, jobs, setup, floormap, floorlists, api, shell, nozzles, roof, settle, sections, summary, report, codetables, files, history, backup, revisions |

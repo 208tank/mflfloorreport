@@ -2,6 +2,7 @@
 // features, plates and nozzles, and the indication editor dialog (refactoring step 12).
 import { byNo, COATING, FT_TYPES, nextMark, NZ_TYPES, REPAIR_METHOD, RESULT_OPTS, S, UT_METHOD, VT_COND } from '../app/state.js';
 import { field, readInput } from '../app/fields.js';
+import { lockedNow } from '../app/lock.js';
 import { defineView, go, redraw, renderNav } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
 import { checkStorage, commit } from '../app/persist.js';
@@ -392,6 +393,7 @@ function rerenderEditor(el) {
 
 export function setMode(m) {
   if (m === 'place' && !S.sel) m = 'select';
+  if (lockedNow()) m = 'select'; // a Complete job: look and select only
   S.mode = m;
   $$('[data-act="mode"]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m || (m === 'place' && b.dataset.mode === 'add')));
   drawMap();

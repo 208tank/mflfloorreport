@@ -3,7 +3,7 @@
 import { SEC } from './sections.js';
 
 /** Fields that record a job's file and save bookkeeping rather than its content. */
-export const BOOKKEEPING = ['rev', 'savedAt', 'revisions', 'updated', 'edits', 'editAreas'];
+export const BOOKKEEPING = ['rev', 'savedAt', 'revisions', 'updated', 'edits', 'editAreas', 'issued'];
 
 const AREA = { info: 'Job', tank: 'Tank', layout: 'Floor layout', calc: 'API 653 settings', status: 'Stage', summary: 'Executive summary', shell: 'Shell', roof: 'Roof', settle: 'Settlement', plates: 'Plate', indications: 'Indication', features: 'Floor feature', nozzles: 'Nozzle', equipment: 'Equipment', secs: 'Section', scope: 'Scope', units: 'Units' };
 const IGNORE = new Set([...BOOKKEEPING, 'status.history']);

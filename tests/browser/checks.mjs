@@ -1219,6 +1219,122 @@ export default {
     await page.context().close();
   },
 
+  async 'complete lock: Complete freezes the report, locks the job, and Reopen asks for a reason'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => window.tfi.go('setup'));
+    await page.selectOption('select[data-bind="status.stage"]', 'complete');
+    await page.waitForSelector('#jobTitle [data-act="reopen"]');
+    await page.waitForFunction(() => window.tfi.job().issued);
+    await page.waitForTimeout(300);
+    const iss = await page.evaluate(async () => {
+      const { db } = await import('./js/db.js'), { sha256 } = await import('./js/util.js');
+      const j = window.tfi.job(), r = await db.getRevision(`${j.id}:${j.issued?.n}`);
+      return { issued: j.issued, reason: r?.reason, note: r?.note, hashOk: r && (await sha256(r.issued.html)) === r.issued.hash, hasReport: /class="report/.test(r?.issued.html || ''), stored: (await db.getJob(j.id)).issued?.n };
+    });
+    assert.equal(iss.reason, 'issued'); assert.match(iss.note, /→ Complete: report issued/);
+    assert.ok(iss.hashOk && iss.hasReport, 'the frozen report is stored with a matching checksum');
+    assert.equal(iss.stored, iss.issued.n, 'job.issued is saved on the device');
+    // locked: job fields disabled, the stage field and navigation are not
+    await page.waitForFunction(() => document.querySelector('input[data-bind="info.client"]')?.disabled);
+    assert.equal(await page.$eval('select[data-bind="status.stage"]', (e) => e.disabled), false);
+    // a change that gets past the disabled field is refused and put back
+    await page.evaluate(() => { const el = document.querySelector('input[data-bind="info.client"]'); el.disabled = false; el.value = 'Sneaky'; el.dispatchEvent(new Event('change', { bubbles: true })); });
+    await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(() => window.tfi.job().info.client), 'Demo Energy Ltd.');
+    assert.equal(await page.$eval('input[data-bind="info.client"]', (e) => e.value), 'Demo Energy Ltd.');
+    // the save backstop: a change made straight to the job is not saved, and the stored job comes back
+    await page.evaluate(async () => { const { commit, flushSave } = await import('./js/app/persist.js'); window.tfi.job().info.client = 'Behind the screens'; commit(); await flushSave(); });
+    await page.waitForFunction(() => window.tfi.job().info.client === 'Demo Energy Ltd.');
+    assert.equal(await page.evaluate(async () => (await (await import('./js/db.js')).db.getJob(window.tfi.job().id)).info.client), 'Demo Energy Ltd.');
+    // the map: select only
+    await page.evaluate(() => window.tfi.go('map'));
+    await page.waitForSelector('[data-act="mode"][data-mode="add"]');
+    await page.evaluate(() => document.querySelector('[data-act="mode"][data-mode="add"]').click());
+    assert.equal(await page.evaluate(() => window.__app.mode), 'select');
+    // the Report shows the issued report
+    await page.evaluate(() => window.tfi.go('report'));
+    await page.waitForSelector('#issuedBar');
+    const bar = await page.textContent('#issuedBar');
+    assert.match(bar, /Issued report.*checksum ✓/s); assert.doesNotMatch(bar, /different report/);
+    assert.ok(await page.$('#issuedReport .report'));
+    // Reopen: cancel keeps it locked; a reason is required
+    await page.click('#jobTitle [data-act="reopen"]');
+    await page.waitForSelector('#confirmDlg[open] #askText');
+    assert.equal(await page.$eval('#confirmDlg [data-cf="yes"]', (b) => b.disabled), true);
+    await page.click('#confirmDlg [data-cf="no"]');
+    await page.waitForTimeout(200);
+    assert.equal(await page.evaluate(() => window.tfi.job().status.stage), 'complete');
+    await page.click('#jobTitle [data-act="reopen"]');
+    await page.fill('#askText', 'Client asked for nozzle readings');
+    await page.click('#confirmDlg [data-cf="yes"]');
+    await page.waitForFunction(() => window.tfi.job().status.stage === 'review');
+    const after = await page.evaluate(async () => {
+      const { db } = await import('./js/db.js'), j = window.tfi.job();
+      for (let i = 0; i < 60; i++) { const revs = await db.jobRevisions(j.id); const r = revs.find((x) => x.reason === 'stage' && /Reopened/.test(x.note)); if (r) return { note: r.note, hist: j.status.history.at(-1) }; await new Promise((res) => setTimeout(res, 50)); }
+      return null;
+    });
+    assert.match(after.note, /Complete → Peer review.*Reopened: Client asked for nozzle readings/);
+    assert.equal(after.hist.reason, 'Client asked for nozzle readings');
+    assert.equal(await page.$('#jobTitle [data-act="reopen"]'), null);
+    await page.evaluate(() => window.tfi.go('setup'));
+    await page.waitForSelector('input[data-bind="info.client"]');
+    assert.equal(await page.$eval('input[data-bind="info.client"]', (e) => e.disabled), false, 'unlocked after reopening');
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'complete lock: the Report flags a report this version would produce differently, and compares them'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => window.tfi.go('setup'));
+    await page.selectOption('select[data-bind="status.stage"]', 'complete');
+    await page.waitForFunction(() => window.tfi.job().issued);
+    await page.waitForTimeout(300);
+    // pretend the report was issued by an older version that printed it differently
+    await page.evaluate(async () => {
+      const { db } = await import('./js/db.js'), { sha256 } = await import('./js/util.js'), j = window.tfi.job();
+      const r = await db.getRevision(`${j.id}:${j.issued.n}`);
+      r.issued.html = r.issued.html.replace('Demo Energy Ltd.', 'Demo Energy Limited'); r.issued.hash = await sha256(r.issued.html);
+      await new Promise((res, rej) => { const q = indexedDB.open('tank-floor-inspector'); q.onsuccess = () => { const t = q.result.transaction('revisions', 'readwrite'); t.objectStore('revisions').put(r); t.oncomplete = () => { q.result.close(); res(); }; t.onerror = rej; }; });
+    });
+    await page.evaluate(() => window.tfi.go('report'));
+    await page.waitForSelector('#issuedBar.differs');
+    assert.match(await page.textContent('#issuedBar'), /different report/);
+    assert.match(await page.textContent('#issuedReport'), /Demo Energy Limited/, 'the issued report is shown as issued');
+    await page.click('[data-act="rev-issued-cmp"]');
+    await page.waitForSelector('#dlg[open] .issued-cmp');
+    const cols = await page.$$eval('#dlg .issued-cmp > div', (d) => d.map((x) => x.textContent));
+    assert.match(cols[0], /Demo Energy Limited/); assert.match(cols[1], /Demo Energy Ltd\./);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'complete lock: the Dashboard issues a stored job at Complete and asks why when it is moved back'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const id = await page.evaluate(() => window.tfi.job().id);
+    // put the job away, so the Dashboard changes the stored copy (as for a job that isn't open)
+    await page.evaluate(async () => { const { flushSave, recompute } = await import('./js/app/persist.js'); await flushSave(); window.__app.job = null; window.__app.photos = []; recompute(); window.tfi.go('dash'); });
+    assert.equal(await page.evaluate(() => window.tfi.job()), null, 'no job open');
+    const sel = `select[data-stage-of="${id}"]`;
+    await page.waitForSelector(sel);
+    await page.selectOption(sel, 'complete');
+    const iss = await page.evaluate(async (id) => { const { db } = await import('./js/db.js'); for (let i = 0; i < 60; i++) { const j = await db.getJob(id); if (j.issued) { const r = await db.getRevision(`${id}:${j.issued.n}`); return { reason: r.reason, html: !!r.issued?.html }; } await new Promise((res) => setTimeout(res, 50)); } return null; }, id);
+    assert.deepEqual(iss, { reason: 'issued', html: true });
+    await page.waitForSelector(sel);
+    await page.selectOption(sel, 'reporting');
+    await page.waitForSelector('#confirmDlg[open] #askText');
+    await page.click('#confirmDlg [data-cf="no"]');
+    await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(async (id) => (await (await import('./js/db.js')).db.getJob(id)).status.stage, id), 'complete', 'cancelled: still Complete');
+    assert.equal(await page.$eval(sel, (e) => e.value), 'complete', 'the board shows it unchanged');
+    await page.selectOption(sel, 'reporting');
+    await page.fill('#askText', 'Typo in the client name');
+    await page.click('#confirmDlg [data-cf="yes"]');
+    await page.waitForFunction(async (id) => (await (await import('./js/db.js')).db.getJob(id)).status.stage === 'reporting', id);
+    assert.equal(await page.evaluate(async (id) => (await (await import('./js/db.js')).db.getJob(id)).status.history.at(-1).reason, id), 'Typo in the client name');
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
 };
 
 /** In the page: create the v3.6.0 database (version 3) with two jobs, a photo, a tank and their cards. Returns the stores. */

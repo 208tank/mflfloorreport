@@ -804,3 +804,15 @@ dialog.wide-dlg { max-width: 96vw; }
 /* Revisions (data integrity stage 8) */
 .grid.revs td { vertical-align: top; }
 .rev-report { max-height: 70vh; overflow: auto; border: 1px solid var(--line, #ddd); padding: 12px; }
+
+/* Data integrity stage 8b: the Complete lock and the issued report */
+.job-title .locked { font-style: normal; font-size: 11px; font-weight: 600; margin-left: 4px; padding: 1px 7px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); vertical-align: 1px; }
+.job-title .btn.sm { margin-left: 6px; padding: 1px 8px; min-height: 0; font-size: 11px; vertical-align: 1px; }
+.locked-off { opacity: .55; cursor: not-allowed; }
+.issued-bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 8px 12px; margin: 0 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.issued-bar.differs { border-color: #d97706; }
+.issued-bar .grow { flex: 1; min-width: 200px; }
+.issued-cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.issued-cmp > div { min-width: 0; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+.issued-cmp h4 { margin: 0 0 6px; }
+@media print { .issued-bar { display: none; } }

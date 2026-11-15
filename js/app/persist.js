@@ -3,8 +3,8 @@
 // device storage, and saving before a reload. The header is updated through configurePersist (set by app.js),
 // because the header in turn shows this module's change count.
 import { S } from './state.js';
-import { go } from './nav.js';
-import { checkpointIfDue } from './revisions.js';
+import { go, renderAll } from './nav.js';
+import { checkpointIfDue, contentHash, isLocked } from './revisions.js';
 import { api653 } from '../calc.js';
 import { db, requestPersistence } from '../db.js';
 import { buildLayout } from '../geometry.js';
@@ -46,9 +46,22 @@ async function writeCurrent() {
     await db.putTank(t); await loadTanks();
     return;
   }
+  if (isLocked(job) && (await refusedAsLocked(job))) return;
   await checkpointIfDue(job.id).catch((e) => console.warn('Checkpoint', e)); // stage 8: never blocks the save
   await db.putJob(job);
   renderFileState();
+}
+/** The Complete lock's backstop (stage 8b): a Complete job whose stored copy is Complete too may only change in its
+ *  bookkeeping (file revision, save times, the issued record). Anything else that got past the screens is refused:
+ *  the stored job is put back on screen and the unsaved change is dropped. */
+async function refusedAsLocked(job) {
+  const stored = await db.getJob(job.id);
+  if (!isLocked(stored) || (await contentHash(stored)) === (await contentHash(job))) return false;
+  console.warn('Refused a change to a Complete job');
+  journal.clear(job.id);
+  if (S.job === job) { S.job = stored; recompute(); renderAll(); }
+  toast('This job is Complete, so that change was not saved. Reopen it first.');
+  return true;
 }
 let saveErrToast = 0;
 function showSaveState(st, err) {

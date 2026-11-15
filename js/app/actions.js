@@ -22,6 +22,10 @@ export function onChange(list) {
   }
   changes.sort((a, b) => a.order - b.order);
 }
+/** A check every click and change passes first (the Complete lock, stage 8b): guard(el, 'click' | 'change')
+ *  returns false to refuse it. */
+let guard = () => true;
+export function setActionGuard(fn) { guard = fn; }
 /** Registered action names (for tests). */
 export const actionNames = () => Object.keys(actions);
 
@@ -34,10 +38,11 @@ document.addEventListener('click', async (e) => {
   const id = el.dataset.id;
   const menu = el.closest('details.menu'); if (menu) menu.open = false;
   const fn = actions[act];
-  if (fn) return fn(el, id, e, act);
+  if (fn && guard(el, 'click')) return fn(el, id, e, act);
 });
 
 document.addEventListener('change', async (e) => {
   const el = e.target, act = el.dataset?.act;
+  if (el.dataset && !guard(el, 'change')) return;
   for (const c of changes) if (c.when(el, act)) return c.run(el, e, act);
 });
