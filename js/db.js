@@ -121,7 +121,10 @@ export const db = {
   async revisionCount(jobId) { return tx('revisions', 'readonly', (s) => reqP(s.index('jobId').count(jobId))); },
   async getRevision(id) { return tx('revisions', 'readonly', (s) => reqP(s.get(id))); },
   /* ---- backup and restore (data integrity stage 5) ---- */
-  async jobAudit(jobId) { return tx('audit', 'readonly', (s) => reqP(s.index('jobId').getAll(jobId))); },
+  async jobAudit(jobId) { return tx('audit', 'readonly', (s) => reqP(s.index('jobId').getAll(jobId))).then((a) => a.sort((x, y) => x.seq - y.seq)); },
+  /** Append audit entries (stage 9): append-only, in one transaction. Resolves their seq numbers. */
+  async addAudit(entries) { return tx('audit', 'readwrite', (s) => Promise.all(entries.map((e) => reqP(s.add(e))))); },
+  async allAudit() { return tx('audit', 'readonly', (s) => reqP(s.getAll())); },
   /** Record an import (job file, loader sheet, backup restore): append-only. */
   async addImport(rec) { return tx('imports', 'readwrite', (s) => reqP(s.add(rec))); },
   async allImports() { return tx('imports', 'readonly', (s) => reqP(s.getAll())); },

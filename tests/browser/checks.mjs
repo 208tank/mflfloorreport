@@ -759,7 +759,8 @@ export default {
       const text = await (await hnd.getFile()).text(), f = JSON.parse(text);
       const rv = await db.getRevision(`${id}:${job.issued.n}`);
       const issued = { n: rv.n, at: rv.issued.at, by: rv.by, appVersion: rv.issued.appVersion, opts: rv.issued.opts, hash: rv.issued.hash, job: rv.job, html: f.issued.html };
-      const expected = JSON.stringify({ format: 'tank-floor-inspector', version: 2, saved: f.saved, rev: f.rev, job: f.job, photos: await db.jobPhotos(id), issued, appVersion: f.appVersion });
+      const audit = await db.jobAudit(id); // stage 9: the audit trail follows the issued report
+      const expected = JSON.stringify({ format: 'tank-floor-inspector', version: 2, saved: f.saved, rev: f.rev, job: f.job, photos: await db.jobPhotos(id), issued, ...(audit.length ? { audit } : {}), appVersion: f.appVersion });
       const back = await readIssued(f.issued, f.photos);
       return { same: text === expected, refs: (f.issued.html.match(/"tfi-photo:ph\d"/g) || []).length, inline: f.issued.html.includes('AAAAAAAAAA'), back: back.html === rv.issued.html };
     });
@@ -958,6 +959,9 @@ export default {
     const restored = JSON.parse(after.revisions).filter((r) => r.reason === 'restore');
     assert.deepEqual(restored.map((r) => r.jobId).sort(), JSON.parse(before.jobs).map((j) => j.id).sort(), 'one restore revision per job');
     after.revisions = JSON.stringify(JSON.parse(after.revisions).filter((r) => r.reason !== 'restore'));
+    // …and one 'restore' line in its audit trail (stage 9)
+    assert.equal(JSON.parse(after.audit).filter((e) => e.source === 'restore').length, JSON.parse(before.jobs).length, 'one restore audit entry per job');
+    after.audit = JSON.stringify(JSON.parse(after.audit).filter((e) => e.source !== 'restore'));
     for (const k of Object.keys(before)) assert.equal(after[k], before[k], `store ${k} differs after restore`);
     // restoring the same backup again changes nothing
     const again = await restoreBackup(fresh, file);
@@ -1412,6 +1416,113 @@ export default {
     await third.waitForFunction(() => window.tfi.job()?.status.stage === 'complete');
     await third.waitForTimeout(500);
     assert.equal(await third.evaluate(() => window.tfi.job().issued), undefined, 'not kept as the issued report');
+    assert.deepEqual(third.errors, []);
+    await third.context().close();
+  },
+
+  async 'audit: typing, stage changes, the loader sheet and restores are logged with their source; the Audit trail screen filters them'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const id = await page.evaluate(() => window.tfi.job().id);
+    const entries = () => page.evaluate(async (jid) => (await (await import('./js/db.js')).db.jobAudit(jid)), id);
+    const waitFor = (src, n = 1) => page.evaluate(async ([jid, s, k]) => { const { db } = await import('./js/db.js'); for (let i = 0; i < 100; i++) { if ((await db.jobAudit(jid)).filter((e) => e.source === s).length >= k) return; await new Promise((r) => setTimeout(r, 50)); } throw new Error('no ' + s + ' entry'); }, [id, src, n]);
+    // typing
+    await page.evaluate(() => window.tfi.go('setup'));
+    await page.fill('input[data-bind="info.client"]', 'Audit Client'); await page.press('input[data-bind="info.client"]', 'Tab');
+    await waitFor('edit');
+    let e = (await entries()).find((x) => x.source === 'edit');
+    assert.deepEqual(e.changes.map((c) => [c.area, c.field, c.before, c.after]), [['Job', 'client', 'Demo Energy Ltd.', 'Audit Client']]);
+    assert.ok(e.by.id.startsWith('dev-') && e.hash);
+    // a stage change
+    await page.selectOption('select[data-bind="status.stage"]', 'reporting');
+    await waitFor('stage');
+    e = (await entries()).find((x) => x.source === 'stage');
+    assert.deepEqual(e.changes.filter((c) => c.field === 'stage').map((c) => [c.before, c.after]), [['upcoming', 'reporting']]);
+    // the loader sheet: a reading changed in the sheet
+    const ind = await page.evaluate(() => { const i = window.tfi.job().indications.find((x) => x.no); return { id: i.id, no: i.no, ut: i.utMin }; });
+    const bytes = await page.evaluate(async (iid) => { const { buildLoader } = await import('./js/loader.js'); const j = structuredClone(window.tfi.job()); j.indications.find((x) => x.id === iid).utMin = 4.321; return [...new Uint8Array(await (await buildLoader(j)).arrayBuffer())]; }, ind.id);
+    await page.setInputFiles('#utlInput', { name: 'readings.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(bytes) });
+    await page.waitForSelector('#confirmDlg[open]'); await page.click('#confirmDlg [data-cf="yes"]');
+    await waitFor('loader');
+    e = (await entries()).find((x) => x.source === 'loader');
+    assert.equal(e.note, 'readings.xlsx');
+    assert.ok(e.changes.some((c) => c.field === 'utMin' && c.item === ind.no && c.path === `indications.${ind.id}.utMin`), JSON.stringify(e.changes));
+    // restoring a revision
+    await page.evaluate(() => window.tfi.go('revs'));
+    await page.waitForSelector('#revList table');
+    await page.click('#revList tbody tr:has-text("Stage changed") [data-act="rev-restore"]');
+    await page.click('#confirmDlg [data-cf="yes"]');
+    await waitFor('restore');
+    e = (await entries()).find((x) => x.source === 'restore');
+    assert.match(e.note, /^Revision \d+$/); assert.ok(e.changes.some((c) => c.field === 'utMin'), 'the restore undoes the sheet’s reading');
+    // every entry follows the one before it
+    const all = await entries();
+    for (let i = 1; i < all.length; i++) assert.equal(all[i].prev, all[i - 1].hash, `entry ${i} follows entry ${i - 1}`);
+    // the screen
+    await page.evaluate(() => window.tfi.go('audit'));
+    await page.waitForSelector('#audList table');
+    assert.match(await page.textContent('#audState'), /every entry matches its checksum/);
+    await page.selectOption('#audSrc', 'loader');
+    let rows = await page.$$eval('#audList tbody tr', (t) => t.map((r) => r.textContent));
+    assert.ok(rows.length >= 1 && rows.every((r) => /Excel loader sheet/.test(r)));
+    await page.selectOption('#audSrc', '');
+    await page.fill('#audText', 'client');
+    rows = await page.$$eval('#audList tbody tr', (t) => t.map((r) => r.textContent));
+    assert.ok(rows.length >= 1 && rows.every((r) => /client/i.test(r)), rows.join('\n'));
+    assert.ok(rows.some((r) => /Demo Energy Ltd\..*Audit Client/.test(r)));
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-act="exp-audit"]')]);
+    const { readFile } = await import('node:fs/promises');
+    assert.match(await readFile(await dl.path(), 'utf8'), /^﻿When,By,Source,Note,Section,Item,Field,Path,Before,After\r\n.*info\.client,Demo Energy Ltd\.,Audit Client/s);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'audit: the trail travels in the job file and joins the other device’s; a changed entry is not kept'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => window.tfi.go('setup'));
+    await page.fill('input[data-bind="info.client"]', 'Travelled'); await page.press('input[data-bind="info.client"]', 'Tab');
+    await page.evaluate(async () => { const { db } = await import('./js/db.js'); for (let i = 0; i < 100 && !(await db.jobAudit(window.tfi.job().id)).some((e) => e.source === 'edit'); i++) await new Promise((r) => setTimeout(r, 50)); });
+    await page.evaluate(() => { delete Window.prototype.showSaveFilePicker; delete window.showSaveFilePicker; });
+    const [d] = await Promise.all([page.waitForEvent('download'), page.click('#saveFileBtn')]);
+    const { readFile } = await import('node:fs/promises');
+    const text = await readFile(await d.path(), 'utf8'), file = JSON.parse(text);
+    assert.ok(Array.isArray(file.audit) && file.audit.some((e) => e.changes.some((c) => c.after === 'Travelled')), 'the file carries the audit trail');
+    await page.context().close();
+
+    const other = await appPage(browser, url);
+    const open = async (pg, name, data) => {
+      await pg.evaluate(() => window.tfi.go('jobs'));
+      await pg.setInputFiles('#openFileInput', { name, mimeType: 'application/json', buffer: Buffer.from(typeof data === 'string' ? data : JSON.stringify(data)) });
+    };
+    await open(other, 'a.json', text);
+    await other.waitForFunction(() => window.tfi.job()?.info.client === 'Travelled');
+    const got = await other.evaluate(async () => {
+      const { db } = await import('./js/db.js'), { verifyAudit } = await import('./js/audit.js'), j = window.tfi.job();
+      for (let i = 0; i < 40 && !(await db.jobAudit(j.id)).some((e) => e.source === 'import'); i++) await new Promise((r) => setTimeout(r, 50));
+      const a = await db.jobAudit(j.id);
+      return { sources: a.map((e) => e.source), problems: (await verifyAudit(a)).length, note: a.find((e) => e.source === 'import')?.note };
+    });
+    assert.deepEqual(got.sources.filter((s) => s !== 'import'), file.audit.map((e) => e.source), 'the file’s entries, in order');
+    assert.match(got.note, /Opened from a\.json/);
+    assert.equal(got.problems, 0, 'the merged trail verifies');
+    // opening the same file again: already on this device, nothing added twice
+    await open(other, 'a.json', text);
+    await other.waitForSelector('#confirmDlg[open]'); await other.click('#confirmDlg [data-cf="ok"]');
+    await other.waitForTimeout(300);
+    const n1 = await other.evaluate(async () => (await (await import('./js/db.js')).db.jobAudit(window.tfi.job().id)).length);
+    assert.equal(n1, got.sources.length);
+    await other.context().close();
+
+    // a file with one entry changed: a warning, and that entry is left out
+    const bad = JSON.parse(text); bad.audit[0].changes = [];
+    const third = await appPage(browser, url);
+    await open(third, 'b.json', bad);
+    await third.waitForSelector('#confirmDlg[open]');
+    assert.match(await third.textContent('#confirmDlg'), /1 of the file’s \d+ audit entr(y|ies) does not match its checksum and is not kept/);
+    await third.click('#confirmDlg [data-cf="open"]');
+    await third.waitForFunction(() => window.tfi.job()?.info.client === 'Travelled');
+    const n2 = await third.evaluate(async () => { const { db } = await import('./js/db.js'); for (let i = 0; i < 40; i++) { const a = await db.jobAudit(window.tfi.job().id); if (a.some((e) => e.source === 'import')) return a.filter((e) => e.source !== 'import').length; await new Promise((r) => setTimeout(r, 50)); } return -1; });
+    assert.equal(n2, file.audit.length - 1);
+    assert.ok(n1 > 0);
     assert.deepEqual(third.errors, []);
     await third.context().close();
   },

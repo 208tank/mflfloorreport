@@ -12,6 +12,7 @@ import { buildLayout } from './geometry.js';
 import { SEC } from './sections.js';
 import { sha256 } from './util.js';
 import { readIssued } from './issuedfile.js';
+import { entryIntact } from './audit.js';
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const blank = (v) => v === null || v === undefined || v === '';
@@ -133,6 +134,12 @@ export async function validateJobFile(data, { schema = Infinity, fileVersion = I
     else if (job.status?.stage !== 'complete') warn('The file has an issued report, but the job is not Complete: the issued report is not kept.');
     else issued = r;
   } else if (job.status?.stage === 'complete' && (data.version || 1) >= 2) warn('The job is Complete but the file has no issued report: its report will be the one this version of the app produces.');
+  const audit = [];
   if (data.audit !== undefined && !Array.isArray(data.audit)) warn('The file’s audit trail is not a list: it is not kept.');
-  return { errors, warnings, job, issued };
+  else if (Array.isArray(data.audit)) {
+    for (const e of data.audit) if (await entryIntact(e)) audit.push(e);
+    const bad = data.audit.length - audit.length;
+    if (bad) warn(`${bad} of the file’s ${data.audit.length} audit entries ${bad === 1 ? 'does' : 'do'} not match ${bad === 1 ? 'its checksum' : 'their checksums'} and ${bad === 1 ? 'is' : 'are'} not kept.`);
+  }
+  return { errors, warnings, job, issued, audit };
 }

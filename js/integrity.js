@@ -8,12 +8,13 @@
 import { migrate, SCHEMA } from './model.js';
 import { buildLayout } from './geometry.js';
 import { canonicalJSON } from './util.js';
+import { verifyAudit } from './audit.js';
 
 const fin = (v) => v === null || v === undefined || v === '' || Number.isFinite(+v);
 
 /**
  * data: { jobs: [job], cards: [card], photos: [{ id, jobId, indId?, ok? }], revisions: [{ id, jobId, n, hash, job? }],
- *         tanks: [tank], metaKeys: [key] }
+ *         tanks: [tank], metaKeys: [key], audit?: [entry] }
  * opts.hash(job) → Promise<hex> verifies revision checksums (full check; skipped when absent or rev.job is missing).
  * opts.lite(job) → the card a job should have.
  */
@@ -72,6 +73,17 @@ export async function checkIntegrity(data, { hash = null, lite = null, yieldEver
     if (!hash || !r.job) continue;
     if ((await hash(r.job)) !== r.hash) add({ code: 'rev-hash', severity: 'error', id: r.id, jobId: r.jobId, message: `Revision ${r.n} of ${r.job?.info?.tankId || r.jobId} does not match its checksum: it has been changed or damaged since it was saved. It is kept as it is.` });
     await pause();
+  }
+
+  // audit trail (stage 9, full check): every entry matches its checksum and the entry before it is there
+  if (hash && data.audit) {
+    const byJob = new Map();
+    for (const e of data.audit) { if (!byJob.has(e.jobId)) byJob.set(e.jobId, []); byJob.get(e.jobId).push(e); }
+    for (const [jobId, list] of byJob) {
+      const name = jobs.get(jobId)?.info?.tankId || jobId;
+      for (const p of await verifyAudit(list)) add({ code: p.kind === 'gap' ? 'audit-gap' : 'audit-hash', severity: 'error', id: p.entry.seq, jobId, message: `${name}: ${p.message} It is kept as it is.` });
+      await pause();
+    }
   }
 
   // settings that point at jobs that are gone

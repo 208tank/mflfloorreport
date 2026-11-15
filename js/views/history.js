@@ -6,6 +6,7 @@ import { go } from '../app/nav.js';
 import { onAction } from '../app/actions.js';
 import { journal, loadJobs } from '../app/persist.js';
 import { addRevision } from '../app/revisions.js';
+import { logChange } from '../app/auditlog.js';
 import { db, lite } from '../db.js';
 import { checkIntegrity, SAFE_REPAIRS } from '../integrity.js';
 import { recoveryDiff } from '../journal.js';
@@ -37,6 +38,7 @@ export async function recoverAfterCrash() {
       await addRevision(stored, 'before-replace', 'Before restoring changes after an unexpected close');
       await db.putJob(migrate(e.job));
       await addRevision(migrate(e.job), 'restore', 'Recovered after an unexpected close').catch((err) => console.warn('Revision', err));
+      await logChange(stored.id, stored, migrate(e.job), 'recovery', 'Changes that had not reached the device when the app closed').catch((err) => console.warn('Audit', err));
       restored++;
     }
     if (choice === 'restore' || choice === 'discard') journal.remove(e.job.id); // no answer (dialog dismissed): ask again next time
@@ -49,8 +51,8 @@ export async function recoverAfterCrash() {
 export async function runIntegrity(full = true, quiet = false) {
   S.integrity = { ...(S.integrity || {}), running: true }; renderIntegrity();
   try {
-    const [jobs, cards, photos, revisions, tanks, metaKeys] = await Promise.all([db.allJobs(), db.allCards(), db.photoIndex(full), full ? db.allRevisions() : db.revisionHeads(), db.allTanks(), db.metaKeys()]);
-    const problems = await checkIntegrity({ jobs, cards, photos, revisions, tanks, metaKeys }, { hash: full ? sha256 : null, lite, yieldEvery: 5 });
+    const [jobs, cards, photos, revisions, tanks, metaKeys, audit] = await Promise.all([db.allJobs(), db.allCards(), db.photoIndex(full), full ? db.allRevisions() : db.revisionHeads(), db.allTanks(), db.metaKeys(), full ? db.allAudit() : null]);
+    const problems = await checkIntegrity({ jobs, cards, photos, revisions, tanks, metaKeys, audit }, { hash: full ? sha256 : null, lite, yieldEvery: 5 });
     S.integrity = { at: Date.now(), full, problems, counts: { jobs: jobs.length, photos: photos.length, revisions: revisions.length } };
     await db.setMeta('integrity:last', { at: S.integrity.at, full, n: problems.length, errors: problems.filter((p) => p.severity === 'error').length });
     if (quiet && problems.length) toast(`The data check found ${problems.length} problem${problems.length > 1 ? 's' : ''} on this device.`, { label: 'Review', fn: () => { go('jobs'); setTimeout(() => $('#integrityRes')?.scrollIntoView(), 50); } });

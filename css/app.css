@@ -816,3 +816,10 @@ dialog.wide-dlg { max-width: 96vw; }
 .issued-cmp > div { min-width: 0; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
 .issued-cmp h4 { margin: 0 0 6px; }
 @media print { .issued-bar { display: none; } }
+
+/* Data integrity stage 9: the audit trail */
+.aud-filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
+.aud-filters .fld { min-width: 160px; }
+.aud-filters .grow { flex: 1; min-width: 220px; }
+.grid.aud td { vertical-align: top; }
+.grid.aud td.nw { white-space: nowrap; }

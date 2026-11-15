@@ -7,6 +7,7 @@ import { renderAll } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
 import { flushSave, loadJobs, loadTanks, recompute } from '../app/persist.js';
 import { addRevision, whoAmI } from '../app/revisions.js';
+import { forgetAudit, logChange } from '../app/auditlog.js';
 import { BACKUP_TYPES, backupName, backupPieces, entryAsCopy, planRestore, verifyBackup } from '../backup.js';
 import { db } from '../db.js';
 import { download } from '../export.js';
@@ -160,6 +161,8 @@ async function applyRestore(fileName, data, plan, choice, opts) {
       else if (a === 'both') { entry = entryAsCopy(p.entry, { job: uid(), photo: () => uid() }); await db.restoreJob(entry); }
       else await db.restoreJob(entry);
       await addRevision(entry.job, 'restore', `Restored from backup ${fileName}`).catch((e) => console.warn('Revision', e));
+      forgetAudit(entry.job.id);
+      await logChange(entry.job.id, a === 'replace' ? p.device : entry.job, entry.job, 'restore', `Restored from backup ${fileName}${a === 'both' ? ' as a copy' : ''}`).catch((e) => console.warn('Audit', e));
       done[a]++;
     } catch (e) { failed.push(`${p.entry.job.info?.tankId || p.id} (${e.message})`); }
   }

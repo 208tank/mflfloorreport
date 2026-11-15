@@ -5,6 +5,7 @@
 import { S } from './state.js';
 import { go, renderAll } from './nav.js';
 import { checkpointIfDue, contentHash, isLocked } from './revisions.js';
+import { auditWrite, hasAuditBase, recordWrite, setAuditBase } from './auditlog.js';
 import { api653 } from '../calc.js';
 import { db, requestPersistence } from '../db.js';
 import { buildLayout } from '../geometry.js';
@@ -48,7 +49,9 @@ async function writeCurrent() {
   }
   if (isLocked(job) && (await refusedAsLocked(job))) return;
   await checkpointIfDue(job.id).catch((e) => console.warn('Checkpoint', e)); // stage 8: never blocks the save
+  const w = auditWrite(job, hasAuditBase(job.id) ? null : await db.getJob(job.id)); // stage 9: what this write changes
   await db.putJob(job);
+  await recordWrite(w).catch((e) => console.warn('Audit', e)); // never blocks the save
   renderFileState();
 }
 /** The Complete lock's backstop (stage 8b): a Complete job whose stored copy is Complete too may only change in its
@@ -59,7 +62,7 @@ async function refusedAsLocked(job) {
   if (!isLocked(stored) || (await contentHash(stored)) === (await contentHash(job))) return false;
   console.warn('Refused a change to a Complete job');
   journal.clear(job.id);
-  if (S.job === job) { S.job = stored; recompute(); renderAll(); }
+  if (S.job === job) { S.job = stored; setAuditBase(stored); recompute(); renderAll(); }
   toast('This job is Complete, so that change was not saved. Reopen it first.');
   return true;
 }

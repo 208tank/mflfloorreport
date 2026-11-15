@@ -9,7 +9,7 @@ import { isLocked } from './revisions.js';
 import { $, toast } from '../ui.js';
 
 /** Screens that don't edit the open job: never locked. */
-const FREE_VIEWS = new Set(['dash', 'reg', 'jobs', 'report', 'revs', 'ref', 'defrep']);
+const FREE_VIEWS = new Set(['dash', 'reg', 'jobs', 'report', 'revs', 'audit', 'ref', 'defrep']);
 /** Buttons and fields that only look, navigate, select, filter or export: allowed on a locked job. */
 const VIEW_ONLY = new Set(['zoom-in', 'zoom-out', 'zoom-fit', 'filter', 'sort', 'def-filter', 'toggle', 'resfilter', 'search', 'plate-search',
   'ind-nav', 'ind-pick', 'ind-show', 'ind-zoom', 'ind-close', 'open-ind', 'sel-ind', 'close-sel', 'photo-view', 'rsel', 'rsel-close', 'rsel-nav',

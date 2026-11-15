@@ -6,6 +6,7 @@ import { defineView, renderAll } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
 import { commit, flushSave } from '../app/persist.js';
 import { addRevision, BOOKKEEPING, isLocked, REASON_LABEL } from '../app/revisions.js';
+import { auditSource } from '../app/auditlog.js';
 import { api653 } from '../calc.js';
 import { db } from '../db.js';
 import { buildLayout } from '../geometry.js';
@@ -76,7 +77,7 @@ async function restoreRevision(r) {
   const cur = S.job, job = migrate(structuredClone(r.job));
   for (const k of BOOKKEEPING) { if (cur[k] === undefined) delete job[k]; else job[k] = cur[k]; }
   job.edits = (cur.edits || 0) + 1; job.editAreas = [...new Set([...(cur.editAreas || []), 'Restored revision'])];
-  S.job = job; S.photos = await db.jobPhotos(job.id); commit(); await flushSave();
+  S.job = job; S.photos = await db.jobPhotos(job.id); auditSource('restore', `Revision ${r.n}`); commit(); await flushSave();
   await addRevision(S.job, 'restore', `Restored revision ${r.n} (${REASON_LABEL[r.reason] || r.reason}, ${fmtAt(r.at)})`);
   const gone = (r.photoIds || []).filter((k) => !S.photos.some((p) => p.id === k)).length;
   renderAll();

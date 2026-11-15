@@ -7,6 +7,7 @@ import { appReload, changesText, checkStorage, fileChanges, leaveJobOk, loadJobs
 import { renderHeader } from '../app/header.js';
 import { resizeImage } from '../app/images.js';
 import { addRevision } from '../app/revisions.js';
+import { logChange, setAuditBase } from '../app/auditlog.js';
 import { indCount } from '../cards.js';
 import { db, requestPersistence } from '../db.js';
 import { makeDemo } from '../demo.js';
@@ -90,7 +91,9 @@ export async function openJob(id, view = 'map') {
     return toast(`This job could not be updated to the current version (${e.message}). It has not been changed; save a backup and report the problem.`);
   }
   if (log.length) db.logMigrations(log).catch(() => {});
-  S.job = mj;
+  // stage 9: log what the update changed (the migrated job is saved by the first write after opening)
+  if (steps) await logChange(id, j, mj, 'migration', `Updated from schema ${j.schema || 1} to ${SCHEMA}`).catch((e) => console.warn('Audit', e));
+  S.job = mj; setAuditBase(mj);
   S.photos = await db.jobPhotos(id);
   const fh = await db.getMeta('fh:' + id).catch(() => null);
   S.fileName = fh?.name || null;

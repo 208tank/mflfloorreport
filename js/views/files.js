@@ -6,6 +6,7 @@ import { onAction, onChange } from '../app/actions.js';
 import { checkStorage, commit, fileChanges, flushSave, loadJobs, loadTanks, saver, writeNow } from '../app/persist.js';
 import { renderHeader } from '../app/header.js';
 import { addRevision, whoAmI } from '../app/revisions.js';
+import { auditSource, logChange, mergeAudit } from '../app/auditlog.js';
 import { db } from '../db.js';
 import { classifyImport } from '../duplicates.js';
 import { download, fileBase, indicationsCSV, nozzlesCSV, platesCSV, roofCSV, settleCSV, shellCSV, svgForExport, svgToPng } from '../export.js';
@@ -249,6 +250,9 @@ export async function importJobFile(file) {
     if (exists && job.id === oldId) await addRevision(exists, 'before-replace', `Before opening ${file.name} over it`);
     await db.replaceJob(job, photos, exists && job.id === oldId ? oldId : null);
     await addRevision(job, 'import', `Opened from ${file.name}`).catch((e) => console.warn('Revision', e));
+    // stage 9: the file's audit trail joins this device's, then a line for opening it (with what it changed here)
+    await mergeAudit(job.id, v.audit).catch((e) => console.warn('Audit', e));
+    await logChange(job.id, exists && job.id === oldId ? exists : job, job, 'import', `Opened from ${file.name}${exists ? (job.id === oldId ? ', replacing the job on this device' : ', kept as a copy') : ''}`).catch((e) => console.warn('Audit', e));
     await keepIssued(job, v.issued, file.name);
     record(exists ? (job.id === oldId ? 'replaced' : 'kept-both') : dup.kind === 'possible' ? 'added-separately' : 'opened', job.id);
     await loadJobs(); toast(`Opened ${file.name}`); await openJob(job.id); checkStorage();
@@ -272,9 +276,11 @@ async function uploadLoader(file) {
   if (res.errors.length) lines.push('', `${res.errors.length} cell${res.errors.length > 1 ? 's' : ''} could not be read and will be skipped:`, ...res.errors.slice(0, 8).map((e) => '• ' + e), ...(res.errors.length > 8 ? [`• … and ${res.errors.length - 8} more`] : []));
   if (!res.total && !res.infoChanges) { toast(`${file.name}: no new or changed readings${res.errors.length ? ` (${res.errors.length} cell${res.errors.length > 1 ? 's' : ''} could not be read)` : ''}.`); return; }
   if (!(await askConfirm(`Update the report from ${file.name}?\n\n${lines.join('\n')}\n\nBlank cells in the sheet do not erase existing readings.`, { ok: `Update ${res.total} reading${res.total === 1 ? '' : 's'}` }))) return;
+  if (!(await flushSave())) { toast('Nothing was updated: the latest changes could not be saved to this device first.'); return; }
+  auditSource('loader', file.name); // stage 9: these changes are logged as coming from the sheet
   res.apply();
   S.job.utLoads = [...(S.job.utLoads || []), { at: Date.now(), file: file.name, count: res.total, tech: res.info.tech || '' }].slice(-50);
-  commit(); renderAll();
+  commit(); await flushSave(); renderAll();
   toast(`Updated ${res.total} reading${res.total === 1 ? '' : 's'} from ${file.name}.`);
 }
 

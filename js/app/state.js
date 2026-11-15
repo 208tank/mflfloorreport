@@ -1,7 +1,7 @@
 // Shared application state and constants (refactoring step 1, moved unchanged from app.js).
 import { RESULTS } from '../calc.js';
 
-export const APP_VERSION = '3.17.2';
+export const APP_VERSION = '3.18.0';
 
 export const S = {
   jobs: [], tanks: [], reg: { q: '', open: new Set() }, job: null, layout: null, calc: null, photos: [], company: {},
@@ -25,6 +25,7 @@ export const VIEWS_END = [
   ['defs', 'Deficiencies', 'M12 3 2 20h20zM12 10v4M12 17h.01'],
   ['ref', 'Code tables', 'M4 4h16v16H4zM4 9h16M4 14h16M9 4v16'],
   ['revs', 'Revisions', 'M12 7v5l3 2M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4'],
+  ['audit', 'Audit trail', 'M9 4h6v3H9zM6 6h3M15 6h3v14H6V6M9 11h6M9 15h6'],
   ['report', 'Report', 'M6 3h9l4 4v14H6zM14 3v5h5']
 ];
 export const CHILD_ICON = { nde: 'M3 12h4l3-8 4 16 3-8h4', obs: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', photos: 'M4 7h4l2-3h4l2 3h4v12H4zM12 10a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', an: 'M4 19V5M4 19h16M8 15l4-5 3 3 5-6', recs: 'M9 11l3 3 8-8M20 12v7H4V5h11' };

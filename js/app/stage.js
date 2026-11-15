@@ -8,6 +8,7 @@ import { onAction } from './actions.js';
 import { writeStageToFile } from './folder.js';
 import { renderAll } from './nav.js';
 import { addRevision, isLocked, stageRevision } from './revisions.js';
+import { auditSource, logChange } from './auditlog.js';
 import { api653 } from '../calc.js';
 import { jobCard } from '../cards.js';
 import { db } from '../db.js';
@@ -51,10 +52,12 @@ export async function changeStage(jobOrId, to) {
   if (from === to) return false;
   let reason = '';
   if (isLocked(job)) { reason = await askReopenReason(job); if (reason === null) return false; }
-  const now = Date.now();
+  const now = Date.now(), before = open ? null : structuredClone(job);
+  const note = reason ? 'Reopened: ' + reason : to === 'complete' ? 'Report issued' : '';
   job.status.stage = to;
   (job.status.history = job.status.history || []).push(reason ? { stage: to, at: now, reason } : { stage: to, at: now });
-  if (open) { commit(); await flushSave(); } else { job.updated = now; await db.putJob(job); }
+  if (open) { auditSource('stage', note); commit(); await flushSave(); }
+  else { job.updated = now; await db.putJob(job); await logChange(job.id, before, job, 'stage', note).catch((e) => console.warn('Audit', e)); }
   if (to === 'complete') {
     await issue(job, from).catch((e) => console.warn('Issue', e));
     if (open) await writeNow(); else await db.putJob(job);

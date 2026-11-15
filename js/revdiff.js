@@ -14,35 +14,43 @@ const LIST = { courses: 'Course', zones: 'Zone', edge: 'Edge area', dep: 'Depres
 const SUB = { nde: 'NDE', obs: 'Observations', recs: 'Recommendations', courses: 'Courses', rd: 'UT readings (station › elevation)', ut: 'UT readings', pont: 'Pontoons', el: 'Station elevations' };
 const show = (v) => (v === undefined || v === null || v === '' ? '—' : typeof v === 'object' ? JSON.stringify(v).slice(0, 80) + (JSON.stringify(v).length > 80 ? '…' : '') : String(v));
 
-/** Rows { area, item, field, before, after } for everything that differs between job a and job b. */
-export function diffJobs(a, b) {
+/** Values as the audit trail keeps them: text and numbers as they are, anything else as its JSON. */
+const raw = (v) => (v === undefined ? null : v !== null && typeof v === 'object' ? JSON.stringify(v) : v);
+
+/** Rows { area, item, field, before, after } for everything that differs between job a and job b.
+ *  For the screen, values are shortened text. { raw: true } (the audit trail) keeps them whole, and an added or
+ *  removed item carries its content. Each row also has `path`, where the value lives (e.g. indications.ab12.mflPct). */
+export function diffJobs(a, b, { raw: keep = false } = {}) {
   const rows = [];
-  const add = (where, field, before, after) => rows.push({ ...where, field, before: show(before), after: show(after) });
-  const walk = (x, y, path, where, key = '') => {
+  const val = keep ? raw : show;
+  const add = (where, field, before, after, path = '') => rows.push({ ...where, field, before: val(before), after: val(after), ...(keep ? { path } : {}) });
+  // path: the field's pattern ('[]' for any item, used for IGNORE); loc: where it is (item ids spelled out)
+  const walk = (x, y, path, where, key = '', loc = '') => {
     if (IGNORE.has(path)) return;
     if (JSON.stringify(x) === JSON.stringify(y)) return;
     if (keyed(x) || keyed(y)) {
       const list = LIST[key], name = (o, arr) => `${where.item ? where.item + ' › ' : ''}${itemName(o, arr.indexOf(o), list)}`;
       const xs = x || [], ys = y || [], xa = new Map(xs.map((o) => [o.id, o])), ya = new Map(ys.map((o) => [o.id, o]));
       for (const [id, o] of xa) {
-        if (!ya.has(id)) add({ ...where, item: name(o, xs) }, '(item)', 'present', 'removed'); else walk(o, ya.get(id), path + '[]', { ...where, item: name(ya.get(id), ys) }, key);
+        if (!ya.has(id)) add({ ...where, item: name(o, xs) }, '(item)', keep ? o : 'present', keep ? null : 'removed', `${loc}.${id}`);
+        else walk(o, ya.get(id), path + '[]', { ...where, item: name(ya.get(id), ys) }, key, `${loc}.${id}`);
       }
-      for (const [id, o] of ya) if (!xa.has(id)) add({ ...where, item: name(o, ys) }, '(item)', '—', 'added');
+      for (const [id, o] of ya) if (!xa.has(id)) add({ ...where, item: name(o, ys) }, '(item)', keep ? null : '—', keep ? o : 'added', `${loc}.${id}`);
       return;
     }
     if (isObj(x) && isObj(y)) {
       for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) {
         if (k === 'id') continue;
-        const p = path ? `${path}.${k}` : k;
-        if (!path) walk(x[k], y[k], p, { area: AREA[k] || k, item: '' }, k);
-        else if (path === 'plates') walk(x[k], y[k], p, { ...where, item: k }, k);
-        else if (path === 'secs') walk(x[k], y[k], p, { ...where, item: SEC.get(k)?.label || k }, k);
-        else if (keyed(x[k]) || keyed(y[k])) walk(x[k], y[k], p, where, k);
-        else walk(x[k], y[k], p, (isObj(x[k]) || isObj(y[k])) && !path.endsWith('[]') ? { ...where, item: where.item ? `${where.item} › ${SUB[k] || k}` : SUB[k] || k } : where, k);
+        const p = path ? `${path}.${k}` : k, l = loc ? `${loc}.${k}` : k;
+        if (!path) walk(x[k], y[k], p, { area: AREA[k] || k, item: '' }, k, l);
+        else if (path === 'plates') walk(x[k], y[k], p, { ...where, item: k }, k, l);
+        else if (path === 'secs') walk(x[k], y[k], p, { ...where, item: SEC.get(k)?.label || k }, k, l);
+        else if (keyed(x[k]) || keyed(y[k])) walk(x[k], y[k], p, where, k, l);
+        else walk(x[k], y[k], p, (isObj(x[k]) || isObj(y[k])) && !path.endsWith('[]') ? { ...where, item: where.item ? `${where.item} › ${SUB[k] || k}` : SUB[k] || k } : where, k, l);
       }
       return;
     }
-    add(where, key, x, y);
+    add(where, key, x, y, loc);
   };
   walk(a || {}, b || {}, '', { area: '', item: '' });
   return rows;

@@ -7,6 +7,28 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Data integrity upgrade — stage 9: the change audit trail (v3.18.0)
+
+Every change to a job is recorded when it reaches the device: **who** (the inspector name from Settings and this
+device's id), **when**, **where it came from**, and each field's value **before and after**. Sources: typed in the
+app, a stage change (with the reason when a job is reopened), the Excel loader sheet (with its file name), a job file
+opened, a revision or backup restored, changes recovered after an unexpected close, and an app update. Added and
+removed items keep their content. File and save bookkeeping (revision numbers, save times) is not logged.
+
+**Audit trail** (in the menu, after Revisions) lists the changes newest first and filters them by section, source and
+words in the item or field. **Export CSV** saves what is shown. The screen says whether the trail is intact.
+
+**Tamper evidence.** Each entry carries a checksum of itself and of the entry before it. An entry changed or taken
+out of the middle shows on the Audit trail screen and in the database check (Jobs → “Check data on this device”). This is evidence
+against accidental or casual changes, not proof against a determined one.
+
+**Job files carry the audit trail.** Opening a file adds its entries that aren't already on this device (entries from
+several devices are fine), then a line for the opening itself, with what it changed here. Entries that don't match
+their checksum are a warning and are left out.
+
+Recording takes about 20 ms per save for a job with 1,000 indications. Saves happen in the background a moment after
+typing stops.
+
 ## Data integrity upgrade — stage 8c: the issued report travels in the job file (v3.17.2)
 
 Job files are now **version 2**. A Complete job's file carries its issued report, so it opens on another computer
@@ -851,11 +873,13 @@ every limit is editable.
 | `js/app/folder.js` | Linked jobs folder: link, scan, write a stage back |
 | `js/app/stage.js` | Every stage change: revisions, issuing the report at Complete, the reason to reopen |
 | `js/app/lock.js` | The Complete lock on the job's screens and in the action dispatch |
+| `js/app/auditlog.js` | Recording the audit trail: each write of the open job, other sources, merging a file's entries |
 | `js/app/revisions.js` | Keeping revisions: on file save, stage change, import, restore; the daily checkpoint; content checksum; the Complete lock test |
 | `js/app/images.js`, `js/app/menu.js` | Photo / logo helpers; side menu section button |
-| `js/views/*.js` | One module per screen area: dashboard, registry, jobs, setup, floormap, floorlists, api, shell, nozzles, roof, settle, sections, summary, report, codetables, files, history, backup, revisions |
+| `js/views/*.js` | One module per screen area: dashboard, registry, jobs, setup, floormap, floorlists, api, shell, nozzles, roof, settle, sections, summary, report, codetables, files, history, backup, revisions, audit |
 | `js/backup.js` | Backup file: written in pieces with a checksum, verified, compared with the device |
 | `js/validate.js` | Job file checks before an import: problems and things to check |
+| `js/audit.js` | Audit entries: changed fields, the checksum chain and its check, rows and filters for the screen |
 | `js/issuedfile.js` | The issued report inside a job file: photos as references, checked on opening |
 | `js/revdiff.js` | Field-by-field comparison of two versions of a job |
 | `js/duplicates.js` | Is an imported job already here, a different version, or possibly the same inspection twice |
