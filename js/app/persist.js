@@ -120,19 +120,38 @@ export function commit() { recompute(); scheduleSave(); }
 export async function loadJobs() { S.jobs = (await db.allCards()).sort((a, b) => (b.updated || 0) - (a.updated || 0)); }
 export async function loadTanks() { S.tanks = (await db.allTanks()).sort((a, b) => tankKeyOf(a).localeCompare(tankKeyOf(b), undefined, { numeric: true })); }
 
-/* Storage: ask the browser to keep the data (no prompt in Chrome / Edge for an installed app) and warn
-   before the device runs out of room, since a failed write can't save new readings or photos. */
-export const STORAGE_WARN = 0.8;
-let storageWarned = false;
+/* Storage (data integrity stage 12): ask the browser to keep the data (no prompt in Chrome / Edge for an installed
+   app) and warn before the device runs out of room, since a failed write can't save new readings or photos.
+   One warning per level per session: 70 %, 85 %, 95 %. At 95 % new photos are refused (photoRoomOk). */
+export const STORAGE_LEVELS = [0.7, 0.85, 0.95];
+export const PHOTO_STOP = STORAGE_LEVELS[2];
+const warnedLevels = new Set();
+const LEVEL_TEXT = {
+  0.7: 'Save finished jobs to files and delete them from this device when you can.',
+  0.85: 'Save jobs to files and delete finished ones now (Jobs page). At 95 % new photos can’t be added.',
+  0.95: 'New photos can’t be added until space is freed. Save jobs to files and delete finished ones (Jobs page).',
+};
+/** { usage, quota, full } or null when the browser can't say. */
+export async function storageEstimate() {
+  try { const est = await navigator.storage?.estimate?.(); return est?.quota ? { usage: est.usage, quota: est.quota, full: est.usage / est.quota } : null; } catch { return null; }
+}
 export async function checkStorage() {
   try {
     if (navigator.storage?.persisted && !(await navigator.storage.persisted())) await requestPersistence();
-    const est = await navigator.storage?.estimate?.();
-    if (est?.quota && est.usage / est.quota > STORAGE_WARN && !storageWarned) {
-      storageWarned = true;
-      toast(`Storage on this device is ${Math.round((est.usage / est.quota) * 100)} % full. Save jobs to files and delete finished ones (Jobs page).`, { label: 'Jobs', fn: () => go('jobs') });
+    const est = await storageEstimate(); if (!est) return;
+    const level = [...STORAGE_LEVELS].reverse().find((l) => est.full >= l);
+    if (level && !warnedLevels.has(level)) {
+      STORAGE_LEVELS.filter((l) => l <= level).forEach((l) => warnedLevels.add(l)); // a higher level covers the lower ones
+      toast(`Storage on this device is ${Math.round(est.full * 100)} % full. ${LEVEL_TEXT[level]}`, { label: 'Jobs', fn: () => go('jobs') });
     }
   } catch { /* storage API unavailable */ }
+}
+/** May a photo be added? Not at 95 % full: a photo could take the last room that new readings need. */
+export async function photoRoomOk() {
+  const est = await storageEstimate();
+  if (!est || est.full < PHOTO_STOP) return true;
+  toast(`The photo was not added: storage on this device is ${Math.round(est.full * 100)} % full, and the room left is kept for readings. Save jobs to files and delete finished ones (Jobs page), then try again.`, { label: 'Jobs', fn: () => go('jobs') });
+  return false;
 }
 
 /** Save now: commit the field being typed in (blur fires its change event), then write to the device.

@@ -6,6 +6,7 @@ import { db } from '../db.js';
 import { STAGE_LABEL, uid } from '../model.js';
 import { BOOKKEEPING } from '../revdiff.js';
 import { sha256 } from '../util.js';
+import { binToEmpty, planPrune } from '../prune.js';
 
 
 /** What each kind of revision is called in the Revisions panel. */
@@ -26,7 +27,9 @@ export async function whoAmI() {
  *  (the frozen report of an issued revision). */
 export async function addRevision(job, reason, note = '', extra = {}) {
   const keys = await db.jobPhotoKeys(job.id).catch(() => []);
-  return db.addRevision({ jobId: job.id, rev: job.rev || 0, at: Date.now(), by: await whoAmI(), reason, note, appVersion: APP_VERSION, schema: job.schema || 1, hash: await sha256(job), job, photoIds: keys, ...extra });
+  const r = await db.addRevision({ jobId: job.id, rev: job.rev || 0, at: Date.now(), by: await whoAmI(), reason, note, appVersion: APP_VERSION, schema: job.schema || 1, hash: await sha256(job), job, photoIds: keys, ...extra });
+  pruneJob(job.id).catch((e) => console.warn('Prune', e)); // stage 12: never holds up the revision
+  return r;
 }
 
 
@@ -60,3 +63,21 @@ export function stageRevision(job, from, to, note = '') {
 
 /** A Complete job is locked (data integrity stage 8): its inputs are read-only until it is reopened with a reason. */
 export const isLocked = (job) => job?.status?.stage === 'complete';
+
+/** Remove a job's revisions beyond what is kept (prune.js), then the photos in its bin that no remaining revision
+ *  shows. Resolves { revisions, photos } removed. */
+const pruning = new Map(); // jobId → the prune in progress, so prunes of one job never overlap
+export function pruneJob(jobId) {
+  const next = (pruning.get(jobId) || Promise.resolve()).catch(() => {}).then(() => pruneNow(jobId));
+  pruning.set(jobId, next);
+  return next;
+}
+async function pruneNow(jobId) {
+  const revs = await db.jobRevisions(jobId), job = await db.getJob(jobId);
+  const drop = planPrune(revs, { issuedN: job?.issued?.n ?? null });
+  if (drop.length) await db.deleteRevisions(drop.map((r) => r.id));
+  const gone = new Set(drop.map((r) => r.id));
+  const empty = binToEmpty(await db.binnedPhotoKeys(jobId), revs.filter((r) => !gone.has(r.id)));
+  if (empty.length) await db.deletePhotos(empty);
+  return { revisions: drop.length, photos: empty.length };
+}

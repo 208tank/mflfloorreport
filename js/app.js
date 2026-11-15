@@ -18,6 +18,7 @@ import { $, toast } from './ui.js';
 import { esc as h } from './util.js';
 import { refreshApi } from './views/api.js';
 import { autoBackupIfDue, loadBackupState } from './views/backup.js';
+import { remindBackup } from './views/storage.js';
 import { drawMap } from './views/floormap.js';
 import { baselineRevisions, recoverAfterCrash, runIntegrity } from './views/history.js';
 import { openJob } from './views/jobs.js';
@@ -119,7 +120,7 @@ function dbFailed(e) {
   await loadJobs(); await loadTanks(); await loadBackupState().catch(() => {});
   await recoverAfterCrash().catch((e) => console.warn('Recovery check', e));
   setTimeout(() => baselineRevisions().catch((e) => console.warn('Baseline revisions', e)).then(() => runIntegrity(false, true)).catch((e) => console.warn('Integrity check', e)), 1500);
-  setTimeout(() => autoBackupIfDue().catch((e) => console.warn('Automatic backup', e)), 4000);
+  setTimeout(() => autoBackupIfDue().catch((e) => console.warn('Automatic backup', e)).then(() => remindBackup()), 4000);
   const last = await db.getMeta('lastJob');
   if (last && S.jobs.some((j) => j.id === last)) await openJob(last, 'dash');
   else go('dash');

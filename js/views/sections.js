@@ -4,7 +4,7 @@ import { S, secData, secPhotos } from '../app/state.js';
 import { sxIn, sxSel } from '../app/fields.js';
 import { after, childViews, defineView, go, renderNav, renderView } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
-import { checkStorage, commit, scheduleSave } from '../app/persist.js';
+import { checkStorage, commit, photoRoomOk, scheduleSave } from '../app/persist.js';
 import { imgDims, resizeImage } from '../app/images.js';
 import { nozzleUT, nozzleWall } from '../calc.js';
 import { db } from '../db.js';
@@ -295,7 +295,7 @@ onAction({
   'ph-del': async (el, id, e, act) => {
     {
       if (!(await askConfirm('Delete this photo and its annotations?', { ok: 'Delete', danger: true }))) return;
-      await db.deletePhoto(id); S.photos = S.photos.filter((p) => p.id !== id); S.job.updated = Date.now(); scheduleSave(); renderView(); renderNav(); return;
+      await db.binPhoto(id); S.photos = S.photos.filter((p) => p.id !== id); S.job.updated = Date.now(); scheduleSave(); renderView(); renderNav(); return;
     }
   },
   'eq-add': async (el, id, e, act) => {
@@ -377,6 +377,7 @@ onChange([
   { order: 430, when: (el, act) => act === 'ph-add', run: async (el, e, act) => {
     {
     const k = el.dataset.sec; let n = Math.max(0, ...S.photos.filter((p) => p.sec === k).map((p) => p.n || 0));
+    if (!(await photoRoomOk())) { el.value = ''; return; } // stage 12
     for (const f of el.files) {
       try { const dataUrl = await resizeImage(f, 1800); const [w, hh] = await imgDims(dataUrl); const p = { id: uid(), jobId: S.job.id, sec: k, n: ++n, dataUrl, w, h: hh, caption: '', comment: '', anno: [], created: Date.now() }; await db.putPhoto(p); S.photos.push(p); }
       catch { toast('Could not read ' + f.name); }

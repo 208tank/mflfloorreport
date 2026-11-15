@@ -3,7 +3,8 @@
 import { APP_VERSION, S } from '../app/state.js';
 import { after, defineView, go, renderAll, renderView } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
-import { appReload, changesText, checkStorage, fileChanges, leaveJobOk, loadJobs, recompute, scheduleSave, STORAGE_WARN } from '../app/persist.js';
+import { appReload, changesText, checkStorage, fileChanges, leaveJobOk, loadJobs, recompute, scheduleSave } from '../app/persist.js';
+import { afterStorage, storageCardHTML } from './storage.js';
 import { renderHeader } from '../app/header.js';
 import { resizeImage } from '../app/images.js';
 import { addRevision } from '../app/revisions.js';
@@ -48,13 +49,12 @@ function viewJobs() {
       </section>
       <section class="card"><h2>This device</h2>
         <label class="fld"><span class="lbl">Inspector name on this device</span><span class="ctl"><input data-cb="inspector" value="${h(c.inspector || '')}" placeholder="Recorded with each saved revision and change"></span></label>
-        <p id="storageInfo" class="muted">Checking storage…</p>
         <p class="muted small" id="migInfo"></p>
         <div class="integrity"><div class="acts"><button class="btn sm" data-act="integrity-run">Check data on this device</button><span class="muted small" id="integrityLast"></span></div><div id="integrityRes">${integrityHTML()}</div></div>
         <p class="muted">Install the app from the browser's address bar (or the Install button above) so it opens full-window and works without a connection.</p>
-        <button class="btn sm" data-act="persist">Ask browser to keep data permanently</button>
       </section>
     </div>
+    <section class="card" id="storageCard">${storageCardHTML()}</section>
     <section class="card" id="backupCard">${backupCardHTML()}</section></div>`;
 }
 const afterJobs = async () => {
@@ -63,17 +63,7 @@ const afterJobs = async () => {
     const log = await db.migrationLog(), mi = $('#migInfo');
     if (mi) { const last = log.filter((x) => x.kind === 'db').at(-1), errs = log.filter((x) => x.kind === 'job-error'); mi.textContent = `Database version ${last?.to ?? '—'}${last ? ` (upgraded ${new Date(last.at).toLocaleDateString()})` : ''} · ${log.filter((x) => x.kind === 'job').length} job updates logged${errs.length ? ` · ${errs.length} job update${errs.length > 1 ? 's' : ''} failed` : ''}.`; }
   } catch { /* history not available */ }
-  const el = $('#storageInfo');
-  try {
-    const est = await navigator.storage?.estimate?.();
-    const pers = await navigator.storage?.persisted?.();
-    const full = est?.quota ? est.usage / est.quota : 0;
-    if (el && est) {
-      el.textContent = `Using ${(est.usage / 1048576).toFixed(1)} MB of ${(est.quota / 1048576 / 1024).toFixed(1)} GB available (${Math.round(full * 100)} %). Storage is ${pers ? 'persistent' : 'best-effort (browser may clear it if disk is low)'}.`
-        + (full > STORAGE_WARN ? ' Nearly full: save jobs to files and delete finished ones from this device.' : '');
-      el.classList.toggle('warn-txt', full > STORAGE_WARN);
-    }
-  } catch { if (el) el.textContent = ''; }
+  await afterStorage(); // stage 12: the storage panel
 };
 
 export async function openJob(id, view = 'map') {

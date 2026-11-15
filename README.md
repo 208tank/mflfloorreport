@@ -7,6 +7,30 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Data integrity upgrade — stage 12: storage, backup reminder and history pruning (v3.20.0)
+
+**Storage on this device** (Jobs page) shows:
+- how full the device is, with marks at 70, 85 and 95 %;
+- roughly what uses the space: jobs, photos, revision history and the audit trail, and removed photos that revisions
+  still show;
+- whether the browser keeps the data. *Persistent* means it won't clear it to free space. *Best-effort* means it may,
+  if the device runs low; installing the app usually makes storage persistent;
+- when this device was last backed up.
+
+**Warnings** appear once each at 70 %, 85 % and 95 % full. At 95 % **new photos are refused**, with the reason, so the
+room left goes to readings.
+
+**Backup reminder:** the panel, and a reminder once a day at start-up, when the last backup is older than the
+automatic backup interval (14 days if none is set). A device that has never been backed up counts from its oldest job.
+
+**Revision history kept on the device:** each job keeps its newest 15 daily checkpoints and its newest 5 other
+revisions. Revisions saved to a job file and issued reports are always kept. Older revisions are removed after each new
+one, or with **Tidy revision history now**. They remain in the job files and backups made from them.
+
+**Removed photos:** deleting a photo puts it in the job's bin instead. A revision that shows it can still display it,
+and restoring that revision brings it back. Once no kept revision shows the photo, it is deleted for good. Photos in
+the bin are not part of the job, its files or its backups.
+
 ## Data integrity upgrade — stage 10: overwrite protection and the loader sheet preview (v3.19.0)
 
 **A returned UT loader sheet is previewed before anything changes.** Every reading in the sheet is listed against the
@@ -906,6 +930,7 @@ every limit is editable.
 | `js/views/*.js` | One module per screen area: dashboard, registry, jobs, setup, floormap, floorlists, api, shell, nozzles, roof, settle, sections, summary, report, codetables, files, history, backup, revisions, audit, loaderpreview |
 | `js/backup.js` | Backup file: written in pieces with a checksum, verified, compared with the device |
 | `js/validate.js` | Job file checks before an import: problems and things to check |
+| `js/prune.js` | Which revisions are kept (15 checkpoints, 5 others, never file-save or issued) and which binned photos go |
 | `js/audit.js` | Audit entries: changed fields, the checksum chain and its check, rows and filters for the screen |
 | `js/issuedfile.js` | The issued report inside a job file: photos as references, checked on opening |
 | `js/revdiff.js` | Field-by-field comparison of two versions of a job |

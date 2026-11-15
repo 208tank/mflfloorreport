@@ -838,3 +838,10 @@ dialog.wide-dlg { max-width: 96vw; }
 .lp-acts #lpWhy { margin-right: auto; }
 #dlgBody .lp, #dlgBody .lp-acts, #dlgBody .ed-head:has(+ .lp) { padding-left: 16px; padding-right: 16px; }
 #dlgBody .lp-acts { padding-bottom: 12px; }
+
+/* Data integrity stage 12: the storage panel */
+.meter { position: relative; height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; margin: 6px 0 8px; }
+.meter > span { position: absolute; inset: 0 auto 0 0; background: var(--accent, #0f766e); }
+.meter.lvl-70 > span { background: #d97706; }
+.meter.lvl-85 > span, .meter.lvl-95 > span { background: #b91c1c; }
+.meter > i { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(0, 0, 0, .35); }

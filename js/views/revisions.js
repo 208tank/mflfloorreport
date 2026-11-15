@@ -73,6 +73,9 @@ async function restoreRevision(r) {
   if (isLocked(S.job)) { toast('This job is Complete and locked. Reopen it to restore an earlier revision.'); return; }
   if (!(await askConfirm(`Restore revision ${r.n} (${REASON_LABEL[r.reason] || r.reason}, ${fmtAt(r.at)})?\n\nThe job’s inspection data goes back to what it was then. The job as it is now is kept as a revision first, so this can be undone.`, { ok: 'Restore' }))) return;
   if (!(await flushSave())) { toast('Nothing was restored: the latest changes could not be saved to this device first.'); return; }
+  // stage 12: photos the revision shows that were removed since come back from the job's bin (first, so the revision
+  // added next can't prune them away)
+  const back = await db.unbinPhotos(S.job.id, r.photoIds || []).catch(() => 0);
   await addRevision(S.job, 'before-replace', `Before restoring revision ${r.n}`);
   const cur = S.job, job = migrate(structuredClone(r.job));
   for (const k of BOOKKEEPING) { if (cur[k] === undefined) delete job[k]; else job[k] = cur[k]; }
@@ -81,7 +84,7 @@ async function restoreRevision(r) {
   await addRevision(S.job, 'restore', `Restored revision ${r.n} (${REASON_LABEL[r.reason] || r.reason}, ${fmtAt(r.at)})`);
   const gone = (r.photoIds || []).filter((k) => !S.photos.some((p) => p.id === k)).length;
   renderAll();
-  toast(`Revision ${r.n} restored.${gone ? ` ${gone} photo${gone === 1 ? '' : 's'} from then ${gone === 1 ? 'has' : 'have'} been deleted from this device and could not be brought back.` : ''}`);
+  toast(`Revision ${r.n} restored.${back ? ` ${back} removed photo${back === 1 ? '' : 's'} brought back.` : ''}${gone ? ` ${gone} photo${gone === 1 ? '' : 's'} from then ${gone === 1 ? 'has' : 'have'} been deleted from this device and could not be brought back.` : ''}`);
 }
 
 defineView('revs', viewRevs, afterRevs);

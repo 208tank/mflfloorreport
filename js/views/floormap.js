@@ -5,7 +5,7 @@ import { field, readInput } from '../app/fields.js';
 import { lockedNow } from '../app/lock.js';
 import { defineView, go, redraw, renderNav } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
-import { checkStorage, commit } from '../app/persist.js';
+import { checkStorage, commit, photoRoomOk } from '../app/persist.js';
 import { resizeImage } from '../app/images.js';
 import { nozzleWall, NZ_CONN, plateNominal, RESULT_SHORT, statusText, UT_CLOCK } from '../calc.js';
 import { db } from '../db.js';
@@ -520,7 +520,7 @@ onAction({
     {
       const ind = curInd(); if (!ind || !(await askConfirm(`Delete indication ${ind.no}?`, { ok: 'Delete', danger: true }))) return;
       S.job.indications = S.job.indications.filter((i) => i.id !== ind.id);
-      for (const p of S.photos.filter((p) => p.indId === ind.id)) await db.deletePhoto(p.id);
+      for (const p of S.photos.filter((p) => p.indId === ind.id)) await db.binPhoto(p.id);
       S.photos = S.photos.filter((p) => p.indId !== ind.id);
       S.sel = null; commit(); renderNav();
       if (el.closest('dialog')) { $('#dlg').close(); refreshIndTable(); } else { drawMap(); renderSide(); }
@@ -542,7 +542,7 @@ onAction({
   'photo-del': async (el, id, e, act) => {
     {
       if (!(await askConfirm('Delete this photo?', { ok: 'Delete', danger: true }))) return;
-      await db.deletePhoto(id); S.photos = S.photos.filter((p) => p.id !== id); rerenderEditor(el); return;
+      await db.binPhoto(id); S.photos = S.photos.filter((p) => p.id !== id); rerenderEditor(el); return;
     }
   },
   'photo-view': async (el, id, e, act) => {
@@ -591,6 +591,7 @@ onChange([
   { order: 440, when: (el, act) => act === 'photo-add', run: async (el, e, act) => {
     {
     const ind = S.job.indications.find((i) => i.id === el.closest('[data-ed]').dataset.id); if (!ind) return;
+    if (!(await photoRoomOk())) { el.value = ''; return; } // stage 12
     for (const f of el.files) {
       try { const dataUrl = await resizeImage(f, 1600); const p = { id: uid(), jobId: S.job.id, indId: ind.id, dataUrl, caption: '', created: Date.now() }; await db.putPhoto(p); S.photos.push(p); }
       catch (err) { toast('Could not read ' + f.name); }

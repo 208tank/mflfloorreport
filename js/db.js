@@ -4,6 +4,9 @@ import { DB_VERSION, upgradeDb } from './migrations.js';
 const DB_NAME = 'tank-floor-inspector';
 const DB_VER = DB_VERSION;
 /** App version recorded in the migration log (set by the app at start-up). */
+/** Photos removed from a job wait in its bin under this prefix (stage 12). */
+export const TRASH = '~bin:';
+
 export const dbConfig = { appVersion: '', failStep: null };
 
 /** The job without its bulky readings: what the Jobs list, Dashboard and registry need. */
@@ -74,8 +77,9 @@ export const db = {
   /** Delete a job and its photos together: either both go or neither does. */
   async deleteJob(id) {
     return txMany(['jobs', 'photos', 'cards'], (J, P, C) => {
-      const r = P.index('jobId').getAllKeys(id);
+      const r = P.index('jobId').getAllKeys(id), b = P.index('jobId').getAllKeys(TRASH + id);
       r.onsuccess = () => r.result.forEach((k) => P.delete(k));
+      b.onsuccess = () => b.result.forEach((k) => P.delete(k));
       J.delete(id); C.delete(id);
     });
   },
@@ -99,6 +103,23 @@ export const db = {
   async getPhoto(id) { return tx('photos', 'readonly', (s) => reqP(s.get(id))); },
   async putPhoto(p) { return tx('photos', 'readwrite', (s) => reqP(s.put(p))); },
   async deletePhoto(id) { return tx('photos', 'readwrite', (s) => reqP(s.delete(id))); },
+  /* Stage 12: a photo removed from a job goes to the job's bin (jobId TRASH + jobId), so a revision that still shows it
+     can bring it back. Photos in the bin are left out of the job, its files and backups; pruning empties the bin of
+     photos no revision refers to. */
+  async binPhoto(id) {
+    return tx('photos', 'readwrite', async (s) => { const p = await reqP(s.get(id)); if (!p || p.jobId.startsWith(TRASH)) return; await reqP(s.put({ ...p, jobId: TRASH + p.jobId, deletedAt: Date.now() })); });
+  },
+  /** Bring photos back from a job's bin. Resolves how many came back. */
+  async unbinPhotos(jobId, ids) {
+    return tx('photos', 'readwrite', async (s) => {
+      let n = 0;
+      for (const id of ids) { const p = await reqP(s.get(id)); if (p?.jobId === TRASH + jobId) { const { deletedAt, ...q } = p; await reqP(s.put({ ...q, jobId })); n++; } } // eslint-disable-line no-unused-vars
+      return n;
+    });
+  },
+  async binnedPhotoKeys(jobId) { return tx('photos', 'readonly', (s) => reqP(s.index('jobId').getAllKeys(TRASH + jobId))); },
+  async deletePhotos(ids) { return tx('photos', 'readwrite', (s) => Promise.all(ids.map((id) => reqP(s.delete(id))))); },
+  async deleteRevisions(ids) { return tx('revisions', 'readwrite', (s) => Promise.all(ids.map((id) => reqP(s.delete(id))))); },
   async allTanks() { return tx('tanks', 'readonly', (s) => reqP(s.getAll())); },
   async getTank(id) { return tx('tanks', 'readonly', (s) => reqP(s.get(id))); },
   async putTank(t) { return tx('tanks', 'readwrite', (s) => reqP(s.put(t))); },
@@ -187,6 +208,21 @@ export const db = {
   },
   async allRevisions() { return tx('revisions', 'readonly', (s) => reqP(s.getAll())); },
   async revisionHeads() { return (await this.allRevisions()).map(({ job, ...r }) => r); },
+  /** Roughly how much each kind of data takes (stage 12, the storage panel): characters of stored text, photos by
+   *  their image data. { jobs, photos, binned, history } in bytes, approximate. */
+  async sizes() {
+    const db_ = await open();
+    return new Promise((resolve, reject) => {
+      const out = { jobs: 0, photos: 0, binned: 0, history: 0 };
+      const t = db_.transaction(['jobs', 'photos', 'revisions', 'audit']);
+      const walk = (store, fn) => { t.objectStore(store).openCursor().onsuccess = (e) => { const c = e.target.result; if (c) { fn(c.value); c.continue(); } }; };
+      walk('jobs', (v) => { out.jobs += JSON.stringify(v).length; });
+      walk('photos', (v) => { const n = (v.dataUrl?.length || 0) * 0.75; if (String(v.jobId).startsWith(TRASH)) out.binned += n; else out.photos += n; });
+      walk('revisions', (v) => { out.history += JSON.stringify(v).length; });
+      walk('audit', (v) => { out.history += JSON.stringify(v).length; });
+      t.oncomplete = () => resolve(out); t.onerror = () => reject(t.error);
+    });
+  },
   async metaKeys() { return tx('meta', 'readonly', (s) => reqP(s.getAllKeys())); },
   async putCard(job) { return tx('cards', 'readwrite', (s) => reqP(s.put(lite(job)))); },
   async deleteCard(id) { return tx('cards', 'readwrite', (s) => reqP(s.delete(id))); },

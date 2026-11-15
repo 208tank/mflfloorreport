@@ -1650,6 +1650,101 @@ export default {
     await page.context().close();
   },
 
+  async 'storage: each warning level shows once, new photos are refused at 95 %, and the panel says why'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => { window.__full = 0.5; navigator.storage.estimate = async () => ({ usage: window.__full * 1e10, quota: 1e10 }); });
+    const check = async (full) => page.evaluate(async (f) => { window.__full = f; document.querySelector('#toast').textContent = ''; const { checkStorage } = await import('./js/app/persist.js'); await checkStorage(); return document.querySelector('#toast').textContent; }, full);
+    assert.equal(await check(0.5), '');
+    assert.match(await check(0.72), /72 % full\. Save finished jobs/);
+    assert.equal(await check(0.75), '', 'the 70 % warning shows once');
+    assert.match(await check(0.86), /86 % full\. Save jobs to files and delete finished ones now/);
+    assert.equal(await check(0.9), '');
+    assert.match(await check(0.96), /96 % full\. New photos can’t be added/);
+    assert.equal(await check(0.97), '');
+    // a photo at 96 %: refused with the reason, nothing stored
+    await page.evaluate(() => window.tfi.go('photos:floor'));
+    const n0 = await page.evaluate(async () => (await (await import('./js/db.js')).db.jobPhotos(window.tfi.job().id)).length);
+    await page.setInputFiles('input[data-act="ph-add"]', { name: 'p.png', mimeType: 'image/png', buffer: Buffer.from(PNG, 'base64') });
+    await page.waitForFunction(() => /photo was not added: storage on this device is 97 % full/.test(document.querySelector('#toast').textContent));
+    assert.equal(await page.evaluate(async () => (await (await import('./js/db.js')).db.jobPhotos(window.tfi.job().id)).length), n0);
+    // the panel
+    await page.evaluate(() => window.tfi.go('jobs'));
+    await page.waitForSelector('#storageSplit');
+    assert.match(await page.textContent('#storageInfo'), /\(97 %\).*Full: new photos can’t be added/);
+    assert.match(await page.textContent('#storageSplit'), /About \d+ kB in jobs · .+ in photos · .+ in revision history and the audit trail/);
+    assert.match(await page.textContent('#storagePersist'), /Persistent|Best-effort/);
+    assert.match(await page.textContent('#storageBackup'), /not been backed up yet/);
+    // below 95 % again: photos are accepted
+    await page.evaluate(() => { window.__full = 0.5; window.tfi.go('photos:floor'); });
+    await page.setInputFiles('input[data-act="ph-add"]', { name: 'p.png', mimeType: 'image/png', buffer: Buffer.from(PNG, 'base64') });
+    await page.waitForFunction((n) => window.__app.photos.length > n, n0);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'storage: pruning keeps 15 checkpoints, 5 others and every protected revision; a removed photo waits in the bin until no revision shows it'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    // a photo, then a revision that shows it, then the photo removed
+    await page.evaluate(() => window.tfi.go('photos:floor'));
+    await page.setInputFiles('input[data-act="ph-add"]', { name: 'p.png', mimeType: 'image/png', buffer: Buffer.from(PNG, 'base64') });
+    await page.waitForFunction(() => window.__app.photos.length === 1);
+    const r = await page.evaluate(async () => {
+      const { db, TRASH } = await import('./js/db.js'), { addRevision, pruneJob } = await import('./js/app/revisions.js');
+      const job = window.tfi.job(), pid = window.__app.photos[0].id;
+      const withPhoto = await addRevision(job, 'stage', 'shows the photo');
+      await db.binPhoto(pid);
+      const binned = (await db.getPhoto(pid)).jobId === TRASH + job.id && !(await db.jobPhotos(job.id)).some((p) => p.id === pid);
+      // lots of history
+      for (let i = 0; i < 3; i++) await addRevision(job, 'file-save', 'saved ' + i);
+      await addRevision(job, 'issued', 'issued');
+      for (let i = 0; i < 20; i++) await addRevision(job, 'checkpoint', 'cp ' + i);
+      for (let i = 0; i < 4; i++) await addRevision(job, 'import', 'imp ' + i); // with 'stage' above: exactly 5 others
+      await pruneJob(job.id);
+      const revs = await db.jobRevisions(job.id), count = (f) => revs.filter(f).length;
+      const out = {
+        binned, cps: count((x) => x.reason === 'checkpoint'), others: count((x) => !['checkpoint', 'file-save', 'issued'].includes(x.reason)),
+        saves: count((x) => x.reason === 'file-save'), issued: count((x) => x.reason === 'issued'),
+        stillThere: revs.some((x) => x.n === withPhoto.n), photoKept: !!(await db.getPhoto(pid)),
+      };
+      // two more: the revision that shows the photo is pruned, and the photo goes with it
+      for (let i = 0; i < 2; i++) await addRevision(job, 'import', 'more ' + i);
+      await pruneJob(job.id);
+      out.after = { stillThere: (await db.jobRevisions(job.id)).some((x) => x.n === withPhoto.n), photo: !!(await db.getPhoto(pid)) };
+      return out;
+    });
+    assert.ok(r.binned, 'the removed photo is in the job’s bin, not in the job');
+    assert.deepEqual([r.cps, r.others, r.saves, r.issued], [15, 5, 3, 1]);
+    assert.ok(r.stillThere && r.photoKept, 'the revision that shows it is one of the 5 kept, so the photo is kept');
+    assert.deepEqual(r.after, { stillThere: false, photo: false }, 'once no revision shows it, the photo is removed');
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'storage: restoring a revision brings back the photos it shows from the bin'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => window.tfi.go('photos:floor'));
+    await page.setInputFiles('input[data-act="ph-add"]', { name: 'p.png', mimeType: 'image/png', buffer: Buffer.from(PNG, 'base64') });
+    await page.waitForFunction(() => window.__app.photos.length === 1);
+    await page.evaluate(async () => { const { flushSave } = await import('./js/app/persist.js'); await flushSave(); });
+    await page.evaluate(() => window.tfi.go('setup'));
+    await page.selectOption('select[data-bind="status.stage"]', 'inspection'); // a revision with the photo
+    await page.waitForTimeout(500);
+    // remove it through the app
+    await page.evaluate(() => window.tfi.go('photos:floor'));
+    page.once('dialog', (d) => d.accept());
+    await page.evaluate(() => document.querySelector('[data-act="ph-del"]').click());
+    await page.waitForSelector('#confirmDlg[open]').then(() => page.click('#confirmDlg [data-cf="yes"]')).catch(() => {});
+    await page.waitForFunction(() => window.__app.photos.length === 0);
+    await page.evaluate(() => window.tfi.go('revs'));
+    await page.waitForSelector('#revList table');
+    await page.click('#revList tbody tr:has-text("Stage changed") [data-act="rev-restore"]');
+    await page.click('#confirmDlg [data-cf="yes"]');
+    await page.waitForFunction(() => /1 removed photo brought back/.test(document.querySelector('#toast').textContent));
+    assert.equal(await page.evaluate(() => window.__app.photos.length), 1);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
 };
 
 /** In the page: create the v3.6.0 database (version 3) with two jobs, a photo, a tank and their cards. Returns the stores. */
