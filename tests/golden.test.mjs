@@ -85,7 +85,10 @@ export function reportHTML(raw) {
   const layout = buildLayout(job);
   const calc = api653(job, layout);
   const opts = { exec: true, defs: true, sections: true, indSize: true, photos: true, plates: true, provenOnly: false, plateLabels: true, datums: true };
-  return buildReport(job, layout, calc, { name: 'Test Co' }, [], opts) + '\n<!--def-->\n' + buildDefReport(job, { name: 'Test Co' }, []);
+  const html = buildReport(job, layout, calc, { name: 'Test Co' }, [], opts) + '\n<!--def-->\n' + buildDefReport(job, { name: 'Test Co' }, []);
+  // The deficiency report shows today's date when it hasn't been issued, and its footer always does.
+  const now = new Date();
+  return html.split(now.toISOString().slice(0, 10)).join('(today)').split(now.toLocaleDateString()).join('(today)');
 }
 
 const fixtures = readdirSync(FIX).filter((f) => f.endsWith('.json')).sort();

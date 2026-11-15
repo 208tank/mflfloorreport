@@ -1,7 +1,7 @@
 // Runs the same sequence of edits on two copies of the app and compares, after every step, the open job's
 // data and the screen HTML. Used to confirm a refactoring step leaves a screen's behaviour unchanged.
 //   node tests/tools/actions-diff.mjs <old app folder> <new app folder> <script name in tests/tools/scripts/>
-// A script is a list of steps: { go }, { fill, value, key? } (typed, then Tab unless key says otherwise), { click }, { select, value }, { check },
+// A script is a list of steps: { go }, { fill, value, key? } (typed, then Tab unless key says otherwise), { click }, { select, value } (value may be { index }), { check }, { at, x, y } (click a point on a drawing),
 // { confirm: 'yes' | 'no' }. Ids and times are made repeatable (fixed clock, seeded random numbers).
 import { serve, launch } from '../browser/lib.mjs';
 import { resolve, sep } from 'node:path';
@@ -22,13 +22,16 @@ async function run(dir) {
   await page.waitForFunction(() => window.tfi.job()?.info?.tankId === 'TK-101');
   await page.waitForTimeout(1500);
   const out = [];
-  for (const s of steps) {
+  for (const [n, s] of steps.entries()) {
+    try {
     if (s.go) await page.evaluate((v) => window.tfi.go(v), s.go);
     else if (s.fill) { await page.fill(s.fill, s.value); await page.press(s.fill, s.key || 'Tab'); }
     else if (s.click) await page.click(s.click);
     else if (s.select) await page.selectOption(s.select, s.value);
     else if (s.check) await page.click(s.check);
+    else if (s.at) await page.click(s.at, { position: { x: s.x, y: s.y } });
     else if (s.confirm) await page.click(`[data-cf="${s.confirm}"]`);
+    } catch (err) { await browser.close(); srv.close(); throw new Error(`${dir}: step ${n + 1} ${JSON.stringify(s)} failed: ${err.message.split('\n')[0]}`); }
     await page.waitForTimeout(300);
     out.push(await page.evaluate(() => {
       const j = structuredClone(window.tfi.job()); delete j.updated; delete j.edits; delete j.editAreas;
@@ -50,4 +53,5 @@ steps.forEach((s, i) => {
 if (a.errors.length || b.errors.length) { diffs++; console.log('page errors', { old: a.errors, new: b.errors }); }
 const changed = a.out.filter((o, i) => i && o.job !== a.out[i - 1].job).length;
 console.log(diffs ? `${diffs} difference(s)` : `all ${steps.length} steps identical (${changed} changed the job)`);
+if (process.env.VERBOSE) steps.forEach((s, i) => { if (i && a.out[i].job === a.out[i - 1].job) console.log(`  step ${i + 1} left the job unchanged: ${JSON.stringify(s)}`); });
 process.exit(diffs ? 1 : 0);

@@ -25,6 +25,7 @@ registers its screen with `defineView` and its buttons with `onAction` / `onChan
 | --- | --- | --- |
 | 2 | v3.12.1 | Report (`views/report.js`), code tables (`views/codetables.js`) |
 | 3 | v3.12.2 | Settlement (`views/settle.js`) |
+| 4 | v3.12.3 | Fixed roof, floating roof and rim seal (`views/roof.js`) |
 
 Screen modules can't import `app.js`, so the few app-level steps they need that haven't moved yet (for now
 only `commit`) are handed over at start-up through `js/app/host.js`.
