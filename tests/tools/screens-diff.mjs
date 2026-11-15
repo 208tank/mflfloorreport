@@ -10,7 +10,7 @@ async function capture(dir) {
   const { srv, url } = await serve(new Map(), {}, resolve(dir) + sep);
   const ctx = await browser.newContext({ serviceWorkers: 'block' });
   const page = await ctx.newPage();
-  await page.addInitScript(() => { let t = 1794700000000; Date.now = () => t; Math.random = (() => { let x = 0.5; return () => (x = (x * 9301 + 49297) % 233280 / 233280); })(); });
+  await page.addInitScript(() => { let t = 1794700000000; Date.now = () => t; Math.random = (() => { let x = 1; return () => (x = (x * 9301 + 49297) % 233280) / 233280; })(); });
   await page.goto(url);
   await page.waitForFunction(() => window.tfi && document.querySelector('#main').children.length);
   await page.evaluate(() => window.tfi.go('jobs'));

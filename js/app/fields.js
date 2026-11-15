@@ -46,3 +46,10 @@ export function focusSel(el) {
   const parts = attrs.filter((k) => el.hasAttribute(k)).map((k) => `[${k}="${CSS.escape(el.getAttribute(k))}"]`);
   return parts.length ? el.tagName.toLowerCase() + parts.join('') : null;
 }
+
+/** Re-render a block, keeping keyboard focus on the same input. */
+export function rerenderKeep(c, html) {
+  const a = document.activeElement, key = a && c.contains(a) ? focusSel(a) : null;
+  c.innerHTML = html;
+  if (key) { const n = c.querySelector(key); if (n) { n.focus(); try { n.select(); } catch { /* */ } } }
+}
