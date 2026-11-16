@@ -5,6 +5,7 @@
 import { S, APP_VERSION, VIEWS, VIEWS_END, CHILD_ICON, REG_VIEWS } from './state.js';
 import { SECTIONS, SEC, CHILDREN, viewPlace, childView, findings, allDefs, STATUS_TEXT } from '../sections.js';
 import { inScope } from '../registry.js';
+import { isSmall } from '../small.js';
 import { esc as h } from '../util.js';
 import { $ } from '../ui.js';
 
@@ -57,7 +58,7 @@ export function renderNav() {
     }).join('');
     return `<div class="nav-sec${open ? ' open' : ''}"><button class="nav-btn sec${place?.sec === sec.key ? ' cur' : ''}" data-act="nav-sec" data-sec="${sec.key}" ${!job ? 'disabled' : ''}>${icon(sec.icon)}<span>${sec.label}</span><i class="sdot s-${st}" title="${STATUS_TEXT[st]}"></i><b class="chev">${open ? '▾' : '▸'}</b></button>${kids}</div>`;
   }).join('');
-  $('#nav').innerHTML = VIEWS.map((v) => btn(v)).join('') + `<div class="nav-group">Tank</div>` + secs + `<div class="nav-group"></div>` + VIEWS_END.map((v) => btn(v, v[0] === 'defs' ? openDefs : 0)).join('') +
+  $('#nav').innerHTML = VIEWS.filter((v) => v[0] !== 'small' || isSmall(job)).map((v) => btn(v)).join('') + `<div class="nav-group">Tank</div>` + secs + `<div class="nav-group"></div>` + VIEWS_END.map((v) => btn(v, v[0] === 'defs' ? openDefs : 0)).join('') +
     `<div class="nav-foot">v${APP_VERSION}<br><span id="netState">${navigator.onLine ? 'Online' : 'Offline'}</span></div>`;
 }
 

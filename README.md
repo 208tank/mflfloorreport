@@ -7,6 +7,37 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Small tank report — S1: template choice and the checklist (v3.30.0, schema 6)
+
+First of four stages adding a short report for small-diameter tanks (plan: S1 data and screen, S2 calculations,
+S3 the report, S4 appendices). Nothing in the printed report changes yet.
+
+- **Report template per job** (Tank setup → Report): *Full API 653 report* or *Small tank report*, and for the small
+  report the title, *Out of Service* or *In Service Tank Inspection Report (Small Diameter)*. A new job with a
+  diameter under 40 ft shows a suggestion to use the small report; the limit is a device setting (Jobs → This
+  device; type feet, or add m / mm). Jobs made before v3.30 keep the full report (job step 6).
+- **Small tank checklist** (in the menu when the small template is chosen): one screen in the report's order —
+  job information, tank static data (job and P.O. numbers, manufacturer, serial number, capacity, materials), the
+  inspection summary, recommendations with a **Code required** tick, the NDE scope, inspection intervals (API 653 or
+  API 12R1 rules entered by the user, with overrides), nominal thicknesses, the 16 external / internal / insulation
+  items, then follow-up and fitness for service.
+- Each item has a Good / Fair / Poor / N/A rating and comments; four have tables: floor projections (N / E / S / W
+  thickness and projection), over-pressure devices, tilt stations (shell-base elevations and out of plumb over the
+  level) and edge settlement stations (maximum settlement and breakover). What the job already holds for the item
+  (shell courses, roof UT points, nozzles, floor indications, the settlement survey, recommendations) is shown with
+  a link.
+- **Settlement basis** per job: the small-tank planar method (default), API 653 Annex B, or API 12R1 with limits
+  entered by the user. Entered limits carry their source as clause or table numbers only: no standards text is
+  stored. The twist trigger has no default.
+- The **Code required** tick is also on each section's Recommendations page when the small template is chosen.
+
+Data: `job.template` (`''` not chosen, `full`, `small`), `job.small` (title, items, proj, opp, tilt, level, edge,
+basis, lim, r12int, intOv, followup, fit, fitNote), new tank fields `maker`, `serialNo`, `capacity`, `matFloor`,
+`matShell`, `matRoof` (kept in the registry) and info fields `jobNo`, `poNo`; recommendations gain `code`. The
+validator checks the checklist lists' ids and numbers; the revision compare names checklist changes.
+`js/small.js` holds the data and `js/views/small.js` the screen; `tests/small.test.mjs` and the browser check
+"small tank S1" cover them. Calculation results are unchanged (golden files differ only in the schema number).
+
 ## Report improvements — R7: print quality (v3.29.0)
 
 Page breaks were tuned with a new audit tool, `tests/tools/print-audit.mjs` (Playwright and poppler's `pdftotext`):
@@ -1195,6 +1226,8 @@ every limit is editable.
 | `js/personnel.js` | Inspection personnel (schema 5) and the name helpers |
 | `js/sources.js` | Sources of design data (schema 5) |
 | `js/views/r2fields.js` | Entry cards for the schema 5 fields and their list handlers |
+| `js/small.js` | Small tank report template: checklist items, defaults, suggestion (schema 6) |
+| `js/views/small.js` | Small tank checklist screen and the Report card on Tank setup |
 | `js/report/frame.js` | Report frame: chapter order and switches, numbering, cover, document control, contents, value key, page set-up, running header and footer |
 | `js/export.js` | CSV, SVG/PNG export |
 | `js/db.js` | IndexedDB storage (jobs, photos and the photo bin, light job cards, registry, settings, revisions, audit, imports); job + photo writes are one transaction |

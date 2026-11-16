@@ -7,6 +7,7 @@ import { defaultShell, migrateShell } from './shell.js';
 import { defaultRoof, migrateRoof } from './roof.js';
 import { defaultSettle, migrateSettle } from './settle.js';
 import { defaultSecs, migrateSecs, defaultSummary } from './sections.js';
+import { defaultSmall, migrateSmall } from './small.js';
 
 export const STAGES = [['upcoming', 'Upcoming'], ['inspection', 'Inspection ongoing'], ['reporting', 'Reporting'], ['review', 'Peer review'], ['complete', 'Complete']];
 export const STAGE_LABEL = Object.fromEntries(STAGES);
@@ -28,9 +29,10 @@ export function newJob(units = 'imperial') {
   const today = new Date().toISOString().slice(0, 10);
   return {
     id: uid(), app: 'tank-floor-inspector', schema: SCHEMA, created: Date.now(), updated: Date.now(), units,
-    info: { client: '', owner: '', site: '', location: '', tankId: '', product: '', service: '', reportNo: '', workOrder: '', inspDate: today, zeroRef: 'N', notes: '' },
-    tank: { diameter: null, height: null, tBottom: units === 'metric' ? 6 : 6.35, tAnnular: null, bottomType: 'Lap welded', coating: 'None', cp: false, rpb: false, yearBuilt: '', lastInternal: '', prevReport: '', code: 'API 650', edition: '', supp: '', sg: null, fillH: null, opTemp: null, src: {} },
+    info: { client: '', owner: '', site: '', location: '', tankId: '', product: '', service: '', reportNo: '', workOrder: '', jobNo: '', poNo: '', inspDate: today, zeroRef: 'N', notes: '' },
+    tank: { diameter: null, height: null, tBottom: units === 'metric' ? 6 : 6.35, tAnnular: null, bottomType: 'Lap welded', coating: 'None', cp: false, rpb: false, yearBuilt: '', lastInternal: '', prevReport: '', code: 'API 650', edition: '', supp: '', sg: null, fillH: null, opTemp: null, src: {}, maker: '', serialNo: '', capacity: '', matFloor: '', matShell: '', matRoof: '' },
     personnel: [], repairs: {}, docctl: defaultDocCtl(),
+    template: '', small: defaultSmall(), // schema 6: report template ('' = not chosen) and the small-tank checklist
     layout: units === 'metric' ? { ...defaultLayout(), plateW: 2400, plateL: 9000, annW: 600 } : defaultLayout(),
     equip: {}, equipment: [],
     calc: units === 'metric' ? { ...defaultCalc(), czDist: 75, mrtBottom: 2.5, patchMargin: 50 } : defaultCalc(),
@@ -57,6 +59,7 @@ function normalise(job) {
     tank: { ...base.tank, ...(job.tank || {}), src: { ...((job.tank || {}).src || {}) } },
     personnel: Array.isArray(job.personnel) ? job.personnel : [], repairs: job.repairs && typeof job.repairs === 'object' && !Array.isArray(job.repairs) ? job.repairs : {},
     docctl: { ...defaultDocCtl(), ...(job.docctl || {}), dist: Array.isArray(job.docctl?.dist) ? job.docctl.dist : [] },
+    template: ['full', 'small'].includes(job.template) ? job.template : '', small: migrateSmall(job.small),
     layout: { ...base.layout, ...(job.layout || {}) },
     equip: { ...(job.equip || {}) },
     calc: { ...base.calc, ...(job.calc || {}) },

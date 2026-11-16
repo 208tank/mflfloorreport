@@ -1,6 +1,6 @@
 {
  "migrated": {
-  "schema": 5,
+  "schema": 6,
   "calc": {
    "years": 10,
    "stprYears": null,

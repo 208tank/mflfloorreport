@@ -105,7 +105,11 @@ export const JOB_STEPS = [
       // the three name fields become personnel entries; everything else new is optional and starts blank
       if (!Array.isArray(src.personnel) || !src.personnel.length) out.personnel = personnelFromLegacy(src.info);
       for (const [f] of LEGACY) delete out.info[f];
-    } }
+    } },
+  { to: 6, name: 'Small tank report template: report template choice, small-tank checklist, code-required recommendations',
+    notes: () => [],
+    // jobs made before the small template keep the full report; the checklist starts blank
+    run(out, src) { if (!src.template) out.template = 'full'; } }
 ];
 export const JOB_SCHEMA = JOB_STEPS.at(-1).to;
 

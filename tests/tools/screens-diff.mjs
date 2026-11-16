@@ -27,7 +27,7 @@ async function capture(dir) {
   await browser.close(); srv.close();
   return out;
 }
-const norm = (s) => s.replace(/\b(f_|id=")[a-z0-9]{6,}\b/g, '$1X').replace(/v3\.\d+\.\d+/g, 'vX').replace(/\b[a-z0-9]{14}\b/g, 'ID');
+const norm = (s) => s.replace(/\b(f_|id=")[a-z0-9]+\b/g, "$1X").replace(/v3\.\d+\.\d+/g, "vX").replace(/\b(?=[a-z0-9]*\d)(?=[a-z0-9]*[a-z])[a-z0-9]{10,14}\b/g, "ID"); // random field and item ids may be shorter than usual
 const a = await capture(oldDir), b = await capture(newDir);
 let diffs = 0;
 for (const v of VIEWS) for (const part of ['main', 'nav', 'head']) {

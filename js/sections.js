@@ -84,7 +84,7 @@ const TYPICAL_OBS = {
 export function typicalObs(sec) { return (TYPICAL_OBS[sec] || []).map((item) => ({ id: uidS(), item, loc: '', cond: '', text: '' })); }
 export const newObs = () => ({ id: uidS(), item: '', loc: '', cond: '', text: '' });
 export const newNDE = () => ({ id: uidS(), method: 'Visual (VT)', extent: '', proc: '', tech: '', date: '', result: '', notes: '' });
-export const newRec = (o = {}) => ({ id: uidS(), finding: '', loc: '', action: '', priority: 'P3', due: '', def: true, status: 'Open', client: '', ref: '', photo: '', history: [], created: Date.now(), ...o });
+export const newRec = (o = {}) => ({ id: uidS(), finding: '', loc: '', action: '', priority: 'P3', due: '', def: true, code: false, status: 'Open', client: '', ref: '', photo: '', history: [], created: Date.now(), ...o });
 
 /** Give deficiency numbers (D-001…) to recommendations flagged as deficiencies. */
 export function numberDefs(job) {

@@ -19,6 +19,7 @@ import { $, askConfirm, toast } from '../ui.js';
 import { esc as h } from '../util.js';
 import { backupCardHTML } from './backup.js';
 import { integrityHTML, renderIntegrity } from './history.js';
+import { smallMaxText } from './small.js';
 
 function viewJobs() {
   // the open job's card may lag behind its latest change: show the open job's own values
@@ -51,6 +52,7 @@ function viewJobs() {
       </section>
       <section class="card"><h2>This device</h2>
         <label class="fld"><span class="lbl">Inspector name on this device</span><span class="ctl"><input data-cb="inspector" value="${h(c.inspector || '')}" placeholder="Recorded with each saved revision and change"></span></label>
+        <label class="fld"><span class="lbl">Suggest the small tank report below diameter</span><span class="ctl"><input data-smallmax value="${h(smallMaxText())}" placeholder="40 ft"></span><small>For new jobs; type feet, or add m / mm.</small></label>
         <p class="muted small" id="migInfo"></p>
         <div class="integrity"><div class="acts"><button class="btn sm" data-act="integrity-run">Check data on this device</button><span class="muted small" id="integrityLast"></span></div><div id="integrityRes">${integrityHTML()}</div></div>
         <p class="muted">Install the app from the browser's address bar (or the Install button above) so it opens full-window and works without a connection.</p>

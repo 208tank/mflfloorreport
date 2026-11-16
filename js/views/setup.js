@@ -19,6 +19,7 @@ import { fmt, inVal, u, UNITS } from '../units.js';
 import { esc as h } from '../util.js';
 import { nozzleTableHTML } from './nozzles.js';
 import { shellBuildHTML } from './shell.js';
+import { templateCardHTML } from './small.js';
 
 function viewSetup() {
   const j = S.job, L = j.layout, hasInd = j.indications.length > 0, reg = !!j.regEdit;
@@ -52,6 +53,7 @@ function viewSetup() {
         ${field('Job stage', 'status.stage', 'sel', { options: STAGES })}${field('Peer reviewer', 'status.reviewer')}
         ${field('Planned inspection date', 'status.planned', 'date')}${field('Report due', 'status.due', 'date')}
       </div></section>
+      <section class="card" id="tplCard">${templateCardHTML()}</section>
       <section class="card" id="personnelCard">${personnelCardHTML()}</section>`}
 
       <section class="card"><h2>Tank</h2><div class="fgrid">

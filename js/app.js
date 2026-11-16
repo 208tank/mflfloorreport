@@ -28,6 +28,7 @@ import { crumbHTML } from './views/sections.js';
 import { refreshSettle } from './views/settle.js';
 import { refreshBuilder, refreshSetupPreview, relocateOrphans } from './views/setup.js';
 import { refreshShell, shellBuildHTML } from './views/shell.js';
+import { refreshTemplateCard } from './views/small.js';
 import './app/menu.js';
 import './app/lock.js';
 import './views/codetables.js';
@@ -68,7 +69,9 @@ onChange([
     setPath(S.job, path, v);
     if (path === 'layout.mode' && v === 'custom' && !(S.job.layout.rows || []).length) { recompute(); S.job.layout.rows = rowsFromGrid(S.job); }
     commit();
+    if (path === 'template' || path === 'small.title') { renderAll(); return; } // schema 6: the menu and setup card change with the template
     if (path.startsWith('layout.') || path === 'tank.diameter') relocateOrphans(before);
+    if (path === 'tank.diameter') refreshTemplateCard();
     if (path === 'tank.code' && !editionsFor(v || 'Unknown').includes(S.job.tank.edition)) { S.job.tank.edition = ''; S.job.tank.supp = ''; }
     if (path === 'tank.edition' && !supplementsFor(v).includes(S.job.tank.supp)) S.job.tank.supp = '';
     const structural = path === 'tank.code' || path === 'tank.edition' || path === 'units' || path === 'layout.annular' || path === 'layout.scheme' || path === 'layout.orient' || path === 'layout.refCorner' || path === 'layout.mode';
@@ -79,6 +82,7 @@ onChange([
     else if (['roofF', 'roofL', 'seal'].includes(S.view)) refreshRoof();
     else if (S.view === 'settle') { if (path === 'settle.eu') renderView(); else refreshSettle(); }
     else if (S.view === 'report' && (path.startsWith('docctl.') || path === 'status.reviewer')) renderView();
+    else if (S.view === 'small' && el.tagName === 'SELECT') renderView();
     if (path === 'units') renderAll();
     return;
   }

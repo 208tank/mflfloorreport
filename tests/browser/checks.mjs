@@ -1,7 +1,7 @@
 // Browser checks run by tests/browser/run.mjs. Each takes { browser, url, serve, appPage }.
 import assert from 'node:assert/strict';
 
-const VIEWS = ['dash', 'reg', 'jobs', 'equip', 'setup', 'summary', 'defs', 'map', 'inds', 'plates', 'api', 'shell', 'roofF', 'roofL', 'seal', 'nozzles', 'settle', 'ref', 'report'];
+const VIEWS = ['dash', 'reg', 'jobs', 'equip', 'setup', 'summary', 'small', 'defs', 'map', 'inds', 'plates', 'api', 'shell', 'roofF', 'roofL', 'seal', 'nozzles', 'settle', 'ref', 'report'];
 const SECS = ['floor', 'shell', 'froof', 'flroof', 'nozzles', 'found', 'settle'];
 const CHILD = ['nde', 'obs', 'photos', 'recs'];
 
@@ -105,6 +105,16 @@ export default {
   async 'security: user text from a job file never runs as script on any page'({ browser, url, appPage }) {
     const page = await appPage(browser, url);
     await page.evaluate(poison, XSS);
+    // the small tank checklist (schema 6): shown only for the small template
+    await page.evaluate((X) => {
+      const j = window.tfi.job(); j.template = 'small';
+      Object.assign(j.tank, { maker: 'M' + X, serialNo: 'S' + X, capacity: 'C' + X, matShell: 'A' + X });
+      Object.assign(j.info, { jobNo: 'J' + X, poNo: 'P' + X });
+      j.small.items['x-lot'] = { rating: 'good', text: 'T' + X };
+      j.small.opp.push({ id: 'd1', dev: 'D' + X, serial: 'S' + X, press: 'P' + X, vac: 'V' + X, svc: 'X' + X });
+      Object.assign(j.small, { followup: 'F' + X, fitNote: 'N' + X }); j.small.lim.refs = 'R' + X;
+      window.tfi.commit();
+    }, XSS);
     const views = [...VIEWS, ...SECS.flatMap((s) => [...CHILD, 'an'].map((c) => (c === 'an' ? null : `${c}:${s}`))).filter(Boolean), 'an:shell', 'an:settle', 'an:froof', 'an:flroof', 'an:nozzles', 'an:found', 'defrep'];
     const hits = [];
     for (const v of views) {
@@ -896,17 +906,17 @@ export default {
     await page.evaluate(async () => { const { db } = await import('./js/db.js'); for (let i = 0; i < 150 && !(await db.getMeta('baseline:v4')); i++) await new Promise((r) => setTimeout(r, 100)); });
     await page.evaluate(() => window.tfi.go('jobs'));
     await page.click('[data-act="job-open"][data-id="demo-a"]');
-    await page.waitForFunction(() => window.tfi.job()?.id === 'demo-a' && window.tfi.job().schema === 5);
+    await page.waitForFunction(() => window.tfi.job()?.id === 'demo-a' && window.tfi.job().schema === 6);
     await page.waitForTimeout(800); // let the migrated job save
     const r = await page.evaluate(async () => {
       const { db } = await import('./js/db.js');
       const revs = await db.jobRevisions('demo-a'), log = await db.migrationLog(), stored = await db.getJob('demo-a');
       return { revs: revs.map((x) => [x.n, x.reason, x.note, x.schema, x.job]), jobLog: log.filter((m) => m.kind === 'job' && m.jobId === 'demo-a').map((m) => [m.from, m.to]), storedSchema: stored.schema };
     });
-    assert.deepEqual(r.revs.map((x) => x.slice(0, 4)), [[1, 'migration', 'Baseline at upgrade to the data integrity version', 1], [2, 'migration', 'Before migration from schema 1 to 5', 1]]);
+    assert.deepEqual(r.revs.map((x) => x.slice(0, 4)), [[1, 'migration', 'Baseline at upgrade to the data integrity version', 1], [2, 'migration', 'Before migration from schema 1 to 6', 1]]);
     assert.deepEqual(r.revs[1][4], before.jobs.find((j) => j.id === 'demo-a'), 'the revision holds the job exactly as stored before the migration');
-    assert.deepEqual(r.jobLog, [[1, 2], [2, 3], [3, 4], [4, 5]]);
-    assert.equal(r.storedSchema, 5);
+    assert.deepEqual(r.jobLog, [[1, 2], [2, 3], [3, 4], [4, 5], [5, 6]]);
+    assert.equal(r.storedSchema, 6);
     // opening it again adds no revision and no log entry
     const openVia = (id) => page.evaluate((i) => { window.tfi.go('jobs'); document.querySelector(`[data-act="job-open"][data-id="${i}"]`).click(); }, id);
     await openVia('demo-b');
@@ -1777,6 +1787,76 @@ export default {
     await page.context().close();
   },
 
+  async 'small tank S1: the template is suggested under 40 ft, chosen per job, and the checklist saves every item'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const go = async (v) => { await page.evaluate((x) => window.tfi.go(x), v); await page.waitForTimeout(150); };
+    const job = () => page.evaluate(() => window.tfi.job());
+    const type = async (sel, v) => { await page.fill(sel, v); await page.press(sel, 'Tab'); await page.waitForTimeout(60); };
+    // the demo tank (120 ft) has no suggestion and no checklist in the menu
+    await go('setup');
+    assert.equal(await page.$('.sm-suggest'), null);
+    assert.equal(await page.$('#nav [data-go="small"]'), null);
+    // a 30 ft tank: the suggestion appears on Tank setup
+    await type('[data-bind="tank.diameter"]', '30');
+    await page.waitForSelector('.sm-suggest');
+    await page.click('[data-act="tpl-set"][data-v="small"]');
+    await page.waitForSelector('#nav [data-go="small"]');
+    assert.equal((await job()).template, 'small');
+    assert.equal(await page.$('.sm-suggest'), null, 'chosen: suggestion gone');
+    // the checklist, in the report order
+    await go('small');
+    const heads = await page.$$eval('.sm-page h2', (x) => x.map((e) => e.textContent.trim()));
+    assert.deepEqual(heads.map((t) => t.split(' ')[0]), ['1', '2', '3', '4–5', '6', '7', '8', '9', '10', '11', '12']);
+    assert.equal(await page.$$eval('.sm-item', (x) => x.length), 16);
+    await page.selectOption('[data-bind="small.title"]', 'ins');
+    await type('[data-bind="info.jobNo"]', 'J-2041'); await type('[data-bind="info.poNo"]', 'PO-77');
+    await type('[data-bind="tank.maker"]', 'Acme Tank'); await type('[data-bind="tank.capacity"]', '400 bbl');
+    await page.click('[data-act="sm-rate"][data-k="x-shell"][data-v="fair"]');
+    await page.waitForSelector('#sm-x-shell.r-fair');
+    await type('[data-bind="small.items.x-shell.text"]', 'Paint failing at the chime');
+    await type('[data-bind="small.proj.0.t"]', '0.24');
+    await page.click('[data-act="sm-add"][data-list="opp"]');
+    await page.waitForSelector('[data-bind="small.opp.0.dev"]');
+    await type('[data-bind="small.opp.0.dev"]', 'PVRV'); await type('[data-bind="small.opp.0.serial"]', 'SN-9');
+    await type('[data-bind="small.tilt.1.elev"]', '0.75');
+    await page.selectOption('[data-bind="small.basis.settle"]', '12r1');
+    await page.waitForSelector('[data-bind="small.lim.plumb"][placeholder="from API 12R1"]');
+    await type('[data-bind="small.lim.refs"]', 'API 12R1 cl. x.y');
+    await page.click('[data-act="sm-add"][data-list="edge"]');
+    await page.waitForSelector('[data-bind="small.edge.4.st"]');
+    await page.selectOption('[data-bind="small.fit"]', 'fit');
+    // code-required tick on a recommendation
+    const rec = await page.$('.sm-page input[data-f="code"]');
+    if (rec) { await rec.check(); await page.waitForTimeout(150); }
+    const j = await job();
+    assert.equal(j.small.title, 'ins');
+    assert.deepEqual([j.info.jobNo, j.info.poNo, j.tank.maker, j.tank.capacity], ['J-2041', 'PO-77', 'Acme Tank', '400 bbl']);
+    assert.deepEqual(j.small.items['x-shell'], { rating: 'fair', text: 'Paint failing at the chime' });
+    assert.ok(Math.abs(j.small.proj[0].t - 0.24 * 25.4) < 1e-6, 'thickness stored in mm');
+    assert.equal(j.small.opp[0].dev, 'PVRV'); assert.equal(j.small.opp[0].serial, 'SN-9');
+    assert.ok(Math.abs(j.small.tilt[1].elev - 0.75 * 25.4) < 1e-6);
+    assert.equal(j.small.basis.settle, '12r1'); assert.equal(j.small.lim.refs, 'API 12R1 cl. x.y');
+    assert.equal(j.small.edge.length, 5); assert.equal(j.small.fit, 'fit');
+    if (rec) assert.ok(Object.values(j.secs).some((x) => x.recs.some((r) => r.code)));
+    // clicking the same rating again clears it
+    await page.click('[data-act="sm-rate"][data-k="x-shell"][data-v="fair"]');
+    await page.waitForSelector('#sm-x-shell:not(.rated)');
+    // the code-required tick is also on the section's recommendations page
+    await go('recs:shell');
+    assert.ok(await page.$('input[data-f="code"]') || !(await job()).secs.shell.recs.length);
+    // switching back to the full report hides the checklist; the data is kept
+    await go('setup');
+    await page.selectOption('[data-bind="template"]', 'full');
+    await page.waitForFunction(() => !document.querySelector('#nav [data-go="small"]'));
+    assert.equal((await job()).small.opp[0].dev, 'PVRV');
+    // the device setting for the suggestion
+    await go('jobs');
+    await page.fill('[data-smallmax]', '12 m'); await page.dispatchEvent('[data-smallmax]', 'change');
+    await page.waitForFunction(() => window.__app.company.smallMaxD === 12000);
+    assert.equal(await page.inputValue('[data-smallmax]'), '39.37 ft');
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
   async 'report R2: personnel, calibration, design sources, scope, assessments and document control are entered and printed'({ browser, url, appPage }) {
     const page = await appPage(browser, url);
     const go = async (v) => { await page.evaluate((x) => window.tfi.go(x), v); await page.waitForTimeout(150); };
@@ -1822,7 +1902,7 @@ export default {
     assert.match(txt, /Approved by · Signature and date|P\. Approver/);
     // saved in the job
     const j = await page.evaluate(() => window.tfi.job());
-    assert.equal(j.schema, 5); assert.equal(j.docctl.approvedBy, 'P. Approver'); assert.equal(j.tank.src.opTemp, 'assumed');
+    assert.equal(j.schema, 6); assert.equal(j.docctl.approvedBy, 'P. Approver'); assert.equal(j.tank.src.opTemp, 'assumed');
     assert.equal(j.secs.shell.assess.by, 'E. Engineer'); assert.ok(!('inspector' in j.info));
     assert.deepEqual(page.errors, []);
     await page.context().close();

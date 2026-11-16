@@ -30,6 +30,8 @@ const NUM = {
   feature: { x: POS('X'), y: POS('Y'), sizeA: T('Size'), sizeB: T('Size') },
   nozzle: { angle: ANG('Angle'), size: T('Size'), tNom: T('Nominal wall'), tMin: T('t-min'), ut12: T('UT 12 o’clock'), ut3: T('UT 3 o’clock'), ut6: T('UT 6 o’clock'), ut9: T('UT 9 o’clock') },
   plate: { tNom: T('Nominal thickness'), utMin: T('UT minimum'), len: T('Length'), wid: T('Width') },
+  proj: { t: T('Thickness'), len: POS('Projection') },
+  edgeSt: { max: POS('Maximum settlement'), bo: POS('Breakover') },
   course: { h: T('Height'), tNom: T('Nominal thickness'), tMin: T('t-min'), pn: ['Number of plates', 1, Infinity], seam0: ANG('First seam angle'), plen: T('Plate length') },
 };
 
@@ -50,7 +52,7 @@ export async function validateJobFile(data, { schema = Infinity, fileVersion = I
   if (data.hash !== undefined && (typeof data.hash !== 'string' || data.hash !== (await sha256(data.job)))) err('The job’s checksum does not match: the file has been changed or damaged since it was saved.');
   for (const k of ['info', 'tank', 'layout', 'plates']) if (data.job[k] !== undefined && !isObj(data.job[k])) err(`The job’s ${k} part has the wrong type.`);
   for (const k of ['indications', 'features', 'nozzles', 'equipment', 'personnel']) if (data.job[k] !== undefined && !Array.isArray(data.job[k])) err(`The job’s ${k} part is not a list.`);
-  for (const k of ['repairs', 'docctl']) if (data.job[k] !== undefined && !isObj(data.job[k])) err(`The job’s ${k} part has the wrong type.`);
+  for (const k of ['repairs', 'docctl', 'small']) if (data.job[k] !== undefined && !isObj(data.job[k])) err(`The job’s ${k} part has the wrong type.`);
   if (errors.length) return { errors, warnings, job: null };
   // ---- update a copy to this version
   let job;
@@ -67,6 +69,7 @@ export async function validateJobFile(data, { schema = Infinity, fileVersion = I
     ['Settlement edge area', job.settle?.edge, null], ['Bottom depression', job.settle?.dep, null], ['Fixed roof UT point', job.roof?.fixed?.pts, (x) => x.label],
     ['Person', job.personnel, (x) => x.name], ['Distribution entry', job.docctl?.dist, (x) => x.name],
     ...(job.equipment || []).filter(isObj).map((e) => ['On-site check', e.checks, (x) => x.check, null, [e.make, e.model, e.serial].filter(Boolean).join(' ')]),
+    ['Floor projection', job.small?.proj, (x) => x.loc], ['Over-pressure device', job.small?.opp, (x) => x.dev], ['Tilt station', job.small?.tilt, (x) => x.loc], ['Edge settlement station', job.small?.edge, (x) => x.st],
     ['Primary seal gap', job.roof?.seal?.primary?.gaps, null], ['Secondary seal gap', job.roof?.seal?.secondary?.gaps, null],
     ...Object.entries(job.secs || {}).flatMap(([k, s]) => [['NDE method', s?.nde, (x) => x.method, k], ['Observation', s?.obs, (x) => x.item, k], ['Recommendation', s?.recs, (x) => x.no || x.finding, k]]),
   ];
@@ -107,6 +110,8 @@ export async function validateJobFile(data, { schema = Infinity, fileVersion = I
   for (const x of job.nozzles || []) checkNums(x, NUM.nozzle, `Nozzle ${x.mark || x.id}`);
   for (const [k, p] of Object.entries(job.plates)) checkNums(p, NUM.plate, `Plate ${p?.label || k}`);
   (job.shell?.courses || []).forEach((c, i) => checkNums(c, NUM.course, `Shell course ${i + 1}`));
+  for (const x of job.small?.proj || []) checkNums(x, NUM.proj, `Floor projection ${x.loc || x.id}`);
+  for (const x of job.small?.edge || []) checkNums(x, NUM.edgeSt, `Edge settlement station ${x.st || x.id}`);
   const nos = new Map();
   for (const x of job.indications) { if (!blank(x.no)) { if (nos.has(String(x.no))) warn(`Two indications are numbered ${x.no}.`); nos.set(String(x.no), x); } }
 
