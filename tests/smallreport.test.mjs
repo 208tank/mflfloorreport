@@ -26,46 +26,53 @@ const chapters = (html) => [...html.matchAll(/<h2 class="rp-ch"><span class="rp-
 
 test('S3: the small report follows the template order, with the title chosen for the job', () => {
   const j = small(), html = build(j);
-  assert.deepEqual(chapters(html), ['1 Job information', '2 Tank static data', '3 Inspection summary', '4 Code required recommendations', '5 Non-code recommendations', '6 NDE scope and summary of results', '7 Inspection intervals', '8 Thickness and corrosion rates', '9 External inspection', '10 Internal inspection', '11 Insulation', '12 Follow-up and sign-off']);
+  assert.deepEqual(chapters(html), ['1 Inspection summary', '2 External inspection', '3 Internal inspection', '4 Insulation', '5 Follow-up and sign-off']);
+  // page 1 holds the template's sections 1–8: the job / static data grid and the summary table in its order
+  const T = text(html), p1 = T.slice(T.lastIndexOf('1 Inspection summary'), T.lastIndexOf('2 External inspection'));
+  const order = ['Job information', 'Tank static data', 'Inspection summary', 'Code required recommendations', 'Non-code recommendations', 'NDE scope and results', 'Inspection intervals', 'Thickness and corrosion rates'];
+  const at = order.map((x) => p1.indexOf(x, 20)); assert.ok(at.every((x, i) => x > 0 && (i === 0 || x > at[i - 1])), JSON.stringify(at));
+  assert.doesNotMatch(html, /Value types and abbreviations/, 'no value key');
+  assert.doesNotMatch(html.slice(0, html.indexOf('class="rp-app"')), /<sup class="vm"/, 'no value marks in the body');
   assert.match(html, /<h1>Out of Service Tank Inspection Report \(Small Diameter\)<\/h1>/);
   assert.match(html, /class="report rp2 rp-small"/);
   assert.doesNotMatch(html, /<h3 class="rp-h3">Tables<\/h3>/, 'contents without the table list');
   j.small.title = 'ins';
   assert.match(build(j), /<h1>In Service Tank Inspection Report \(Small Diameter\)<\/h1>/);
-  // the external and internal items are numbered sections in order
-  const subs = [...html.matchAll(/class="rp-sub"[^>]*>(?:<[^>]+>)*([0-9]+\.[0-9]+)/g)].map((m) => m[1]);
-  for (const k of ['9.1', '9.8', '10.1', '10.7', '12.3']) assert.ok(subs.includes(k) || html.includes(`>${k}<`), k);
+  // the checklists are Item | Condition | Comments tables, in the item order
+  const ext = [...html.matchAll(/<td class="i">([^<]+)<\/td>/g)].map((m) => m[1].replace('&amp;', '&'));
+  assert.deepEqual(ext.slice(0, 8), ['Tank lot and containment', 'Floor projections and shell-to-floor weld', 'Tank shell', 'Fixed roof', 'Nozzles and piping', 'Instrumentation', 'Over-pressure protection', 'Settlement']);
+  assert.equal(ext.length, 16);
 });
 
-test('S3: code required and non-code recommendations print in their own chapters', () => {
+test('S3: code required and non-code recommendations print in their own rows of the summary', () => {
   const T = text(build(small()));
-  const code = T.slice(T.lastIndexOf('4 Code required recommendations'), T.lastIndexOf('5 Non-code recommendations'));
-  const non = T.slice(T.lastIndexOf('5 Non-code recommendations'), T.lastIndexOf('6 NDE scope'));
-  assert.match(code, /Pitting below 0\.10 in at 003/); assert.match(code, /D-001/); assert.doesNotMatch(code, /Vegetation/);
+  const code = T.slice(T.lastIndexOf('Code required recommendations'), T.lastIndexOf('Non-code recommendations'));
+  const non = T.slice(T.lastIndexOf('Non-code recommendations'), T.lastIndexOf('NDE scope and results'));
+  assert.match(code, /Pitting below 0\.10 in at 003 — Patch plate/); assert.match(code, /D-001/); assert.doesNotMatch(code, /Vegetation/);
   assert.match(non, /Vegetation in containment/); assert.doesNotMatch(non, /Pitting/);
   const j = small(); j.secs.floor.recs = []; j.secs.found.recs = [];
   const T2 = text(build(j));
-  assert.match(T2, /No code required recommendations\./); assert.match(T2, /No non-code recommendations\./);
+  assert.match(T2, /Code required recommendations None\. Non-code recommendations None\./);
 });
 
 test('S3: thickness, intervals, tilt and edge results are the calculation’s values', () => {
   const j = small(), L = buildLayout(j), R = smallCalc(j, L, api653(j, L)), T = text(build(j)), t = (v) => fmt(v, 't', j, false);
   const F = R.thick.floor, Sh = R.thick.shell, Rf = R.thick.roof;
   assert.ok(T.includes(`Floor (as found) ${t(F.tNom)} ${t(F.tAct)} 30`), 'floor row');
-  assert.ok(T.includes(`Shell — course ${Sh.course} ${t(Sh.tNom)} ${t(Sh.tAct)} 30`), 'shell row');
+  assert.ok(T.includes(`Shell (course ${Sh.course}) ${t(Sh.tNom)} ${t(Sh.tAct)} 30`), 'shell row');
   assert.ok(T.includes(`${t(Rf.tMin)} ${rlText(Rf.rl, Rf.cr)}`), 'roof RL');
-  assert.ok(T.includes(`after the recommended floor repairs RL = ${rlText(F.rlAfter, F.cr)} years`));
+  assert.ok(T.includes(`Floor after the recommended repairs: RL ${rlText(F.rlAfter, F.cr)} years`));
   for (const k of ['ut', 'ext', 'int']) assert.ok(T.includes(R.intervals[k].done.date), k);
   assert.match(T, /UT thickness 2041-11-16 \(15 yr\)/);
   assert.match(T, /Out of service \(internal\) 2038-08-13 \(11\.7 yr\) 2026-11-16 \(0 yr\)/);
   assert.match(T, /Out of plumb 0\.62 in limit 2\.88 in \(API 653 §10\.5\.2\.1\)/);
-  assert.match(T, /Result Acceptable/);
+  assert.match(T, /Result: Acceptable/);
   assert.match(T, /2 1\.75 20\.00 1\.50 Exceeds/);
   assert.match(T, /3 1\.20 30\.00 1\.50 Beyond the limit’s distance/);
   assert.match(T, /S 0\.090 0\.50 Below minimum thickness/);
   // an override prints as entered
   j.small.intOv.extDone = '2028-06-01';
-  assert.match(text(build(j)), /In service \(external\) 2028-06-01 entered/);
+  assert.match(text(build(j)), /In service \(external\) 2028-06-01 \(entered\)/);
 });
 
 test('S3: ratings, comments, item tables and sign-off', () => {
@@ -137,7 +144,7 @@ test('S4: calculation appendix shows the working with the calculation’s values
 test('S4: a metric job prints in mm', () => {
   const j = small(); j.units = 'metric';
   const T = text(build(j));
-  assert.match(T, /T-nom \(mm\)/); assert.match(T, /CR \(mm\/yr\)/); assert.doesNotMatch(T, /in\/yr/);
+  assert.match(T, /Thickness in mm/); assert.match(T, /CR \(mm\/yr\)/); assert.doesNotMatch(T, /in\/yr/);
 });
 
 test('S3: full-report jobs are not affected', () => {

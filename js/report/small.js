@@ -1,18 +1,18 @@
-// Small tank report (stage S3): the short report for small-diameter tanks, in the order of the small tank template —
-// job information, tank static data, inspection summary, code and non-code recommendations, NDE scope and results,
-// inspection intervals, thickness and corrosion rates, the external / internal / insulation items, then follow-up
-// and sign-off. Built inside the same report frame as the full report (cover, document control, contents, page
-// set-up, header and footer). Values come from js/smallcalc.js; nothing is calculated here.
+// Small tank report (S3, laid out again in v3.34): the short report for small-diameter tanks, laid out like the small
+// tank Word template. Page 1 is the inspection summary — a job / tank static data grid, then one summary table: summary,
+// code required and non-code recommendations, NDE scope and results, inspection intervals, thickness and corrosion
+// rates. Then the external, internal and insulation checklists as Item | Condition | Comments tables with their
+// supporting tables, and follow-up and sign-off; appendices as needed (S4). Built in the full report's frame (cover,
+// document control with the contents on one page, header and footer). Values come from js/smallcalc.js.
 // Clause numbers only: no standards text is reproduced.
 import { assembleReport, layoutOf, numbering, sheetHTML, legendList, swatch } from './frame.js';
 import { block, step, calcFloor } from './calcapp.js';
-import { vm } from './front.js';
 import { smallCalc, rlText } from '../smallcalc.js';
 import { courseSummary, coursesWithElev, utLocations, getReading, readingElevations } from '../shell.js';
 import { fixedSVG, hasFixed, pointStatus } from '../roof.js';
 import { nozzleUT, nozzleWall, UT_CLOCK } from '../calc.js';
 import { personName } from '../personnel.js';
-import { GROUPS, ITEMS, RATING_LABEL, SETTLE_BASIS, FIT, titleOf } from '../small.js';
+import { ITEMS, RATING_LABEL, SETTLE_BASIS, FIT, titleOf } from '../small.js';
 import { SECTIONS, PRIORITY_LABEL } from '../sections.js';
 import { ROLE_LABEL, certState } from '../personnel.js';
 import { fmt, fmtRate, unitLabel } from '../units.js';
@@ -48,25 +48,36 @@ export function shellPlanSVG(job, { stations = [], mins = new Map(), fmtT = (v) 
 }
 
 export const SMALL_CHAPTERS = [
-  ['job', 'Job information'], ['static', 'Tank static data'], ['summary', 'Inspection summary'],
-  ['code', 'Code required recommendations'], ['noncode', 'Non-code recommendations'], ['nde', 'NDE scope and summary of results'],
-  ['intervals', 'Inspection intervals'], ['thick', 'Thickness and corrosion rates'],
-  ['ext', 'External inspection'], ['int', 'Internal inspection'], ['insul', 'Insulation'], ['follow', 'Follow-up and sign-off']
+  ['summary', 'Inspection summary'], ['ext', 'External inspection'], ['int', 'Internal inspection'], ['insul', 'Insulation'], ['follow', 'Follow-up and sign-off']
 ];
 
-const kv = (rows) => `<table class="kv">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v === '' || v == null ? '—' : v}</td></tr>`).join('')}</table>`;
 const rating = (r) => (r ? `<span class="sm-rate r-${r}">${h(RATING_LABEL[r]).toUpperCase()}</span>` : '<span class="sm-rate">NOT RATED</span>');
 const yrs = (v) => (v == null ? '—' : String(Math.round(v * 10) / 10));
 
 export const SMALL_CSS = `
-.rp2 .sm-rate{display:inline-block;min-width:4.5em;text-align:center;font-weight:700;font-size:9px;letter-spacing:.04em;padding:1px 6px;border:1px solid #8a939e;border-radius:3px;color:#3a434e}
+.rp2 .sm-rate{display:inline-block;min-width:4.2em;text-align:center;font-weight:700;font-size:8.5px;letter-spacing:.04em;padding:0 5px;border:1px solid #8a939e;border-radius:3px;color:#3a434e}
 .rp2 .sm-rate.r-good{border-color:#15803d;color:#15803d}.rp2 .sm-rate.r-fair{border-color:#a16207;color:#a16207}.rp2 .sm-rate.r-poor{border-color:#b91c1c;color:#fff;background:#b91c1c}.rp2 .sm-rate.r-na{color:#66707c}
-.rp2 .sm-item{break-inside:avoid;margin:0 0 10px}.rp2 .sm-item .sm-ih{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
-.rp2 .sm-item p.sm-c{margin:3px 0 6px}.rp2 .sm-sig td{height:28px}
-.rp2.rp-small .rp-chap{break-before:auto;margin-top:18px}.rp2.rp-small h2.rp-ch{break-after:avoid}
-@media print{.report.rp-small .rp-chap{break-before:auto}.report.rp-small .rp-front + .rp-chap{break-before:page}.report.rp-small table.sm-cond{break-inside:avoid}}
-.rp2 .dwg-kv.sm-ind td,.rp2 .dwg-kv.sm-ind th,.rp2 .dwg-kv.sm-nzk td,.rp2 .dwg-kv.sm-nzk th{padding:0 3px;font-size:7px;white-space:nowrap}.rp2 svg.sm-plan{width:100%;height:100%}
 .rp2 .sm-ok{color:#15803d}.rp2 .sm-bad{color:#b91c1c;font-weight:700}.rp2 .sm-warn{color:#a16207}
+.rp2.rp-small h2.rp-ch{font-size:14px;border-bottom:1.5px solid #1d232b;margin:20px 0 8px}
+.rp2.rp-small h3.rp-s{font-size:11px;border-bottom:0;margin:12px 0 4px;color:#1d232b}
+.rp2.rp-small .rp-chap{break-before:auto}
+.rp2 table.sm-head{width:100%;border-collapse:collapse;font-size:10px;margin:0 0 10px}
+.rp2 table.sm-head td,.rp2 table.sm-head th{border:1px solid #b9c0c8;padding:3px 6px;text-align:left;vertical-align:top}
+.rp2 table.sm-head th{background:#eef1f4;font-weight:600;color:#3a434e;width:14%;white-space:nowrap}
+.rp2 table.sm-head tr.cap th{background:#1d232b;color:#fff;text-transform:uppercase;letter-spacing:.06em;font-size:9px}
+.rp2 table.sm-sum{width:100%;border-collapse:collapse;font-size:10px}
+.rp2 table.sm-sum>tbody>tr>th{width:22%;background:#eef1f4;text-align:left;vertical-align:top;padding:5px 6px;border:1px solid #b9c0c8;font-weight:600}
+.rp2 table.sm-sum>tbody>tr>td{border:1px solid #b9c0c8;padding:5px 6px;vertical-align:top}
+.rp2 table.sm-sum p{margin:0 0 4px}.rp2 table.sm-sum ol,.rp2 table.sm-sum ul{margin:0;padding-left:16px}.rp2 table.sm-sum li{margin:0 0 2px}
+.rp2 table.sm-in{width:100%;border-collapse:collapse;font-size:9.5px}.rp2 table.sm-in th,.rp2 table.sm-in td{border-bottom:1px solid #dfe3e8;padding:2px 4px;text-align:left}.rp2 table.sm-in th{color:#3a434e;font-weight:600}.rp2 table.sm-in .n{text-align:right}
+.rp2 table.sm-chk{width:100%;border-collapse:collapse;font-size:10px}.rp2 table.sm-chk th,.rp2 table.sm-chk td{border:1px solid #b9c0c8;padding:4px 6px;text-align:left;vertical-align:top}
+.rp2 table.sm-chk thead th{background:#eef1f4;font-size:9px;text-transform:uppercase;letter-spacing:.04em}.rp2 table.sm-chk td.c{width:5.5em;text-align:center}.rp2 table.sm-chk td.i{width:30%;font-weight:600}
+.rp2 table.sm-chk td.x{color:#8a939e}
+.rp2 .sm-sig td{height:26px}
+.rp2.rp-small .rp-toc td:first-child{white-space:nowrap;padding-right:10px}
+.rp2 p.sm-n{font-size:8.5px;color:#5b6470;margin:3px 0 8px}
+.rp2 .dwg-kv.sm-ind td,.rp2 .dwg-kv.sm-ind th,.rp2 .dwg-kv.sm-nzk td,.rp2 .dwg-kv.sm-nzk th{padding:0 3px;font-size:7px;white-space:nowrap}.rp2 svg.sm-plan{width:100%;height:100%}
+@media print{.report.rp-small .rp-chap{break-before:auto}.report.rp-small .rp-front + .rp-chap,.report.rp-small #ch-ext{break-before:page}.report.rp-small .rp-chap table{break-inside:avoid}.report.rp-small .rp-front + .rp-front{break-before:auto;margin-top:26px}.report.rp-small table.sm-sum>tbody>tr,.report.rp-small table.sm-chk tr,.report.rp-small table.sm-head{break-inside:avoid}}
 `;
 const stCls = (t) => (/Exceeds|Below|Fails|Unfit/.test(t || '') ? 'sm-bad' : /NDE|Beyond|No limit|Reported|not recorded|Incomplete|No Annex/i.test(t || '') ? 'sm-warn' : /Acceptable|OK|Meets/.test(t || '') ? 'sm-ok' : '');
 const st = (t) => `<span class="${stCls(t)}">${h(t || '—')}</span>`;
@@ -82,113 +93,93 @@ export function buildSmallReport(job, layout, calc, company, photos, opts = {}, 
   const courses = job.shell?.courses || [], shellNom = courses.map((c) => +c.tNom).filter((x) => x > 0);
   const recs = SECTIONS.flatMap((x) => (job.secs?.[x.key]?.recs || []).map((r) => ({ r, sec: x })));
 
-  const recTable = (list, title, empty) => (list.length
-    ? `${N.table(title)}<table class="grid small wrap"><thead><tr><th>No.</th><th>Component</th><th>Finding${vm('O')}</th><th>Recommended action</th><th>Priority</th><th>Due</th><th>Reference</th></tr></thead><tbody>${list.map(({ r, sec }, i) => `<tr><td><b>${i + 1}</b>${r.def && r.no ? `<br><small>${h(r.no)}</small>` : ''}</td><td>${h(sec.label)}${r.loc ? `<br><small>${h(r.loc)}</small>` : ''}</td><td>${h(r.finding)}</td><td>${h(r.action)}</td><td>${h(PRIORITY_LABEL[r.priority] || r.priority || '')}</td><td>${h(r.due || '')}</td><td>${h(r.ref || '')}</td></tr>`).join('')}</tbody></table>`
-    : `<p>${empty}</p>`);
+  const recList = (list) => (list.length ? `<ol>${list.map(({ r, sec }) => `<li>${h(r.finding)}${r.action ? ` — <i>${h(r.action)}</i>` : ''} <small>(${h(sec.label)}${r.priority ? ', ' + h(PRIORITY_LABEL[r.priority] || r.priority) : ''}${r.due ? ', due ' + h(r.due) : ''}${r.def && r.no ? ', ' + h(r.no) : ''})</small></li>`).join('')}</ol>` : 'None.');
+  const para = (txt, empty) => { const x = String(txt || '').trim(); return x ? x.split(/\n{2,}/).map((p) => `<p>${h(p).replace(/\n/g, '<br>')}</p>`).join('') : `<p>${empty}</p>`; };
+  const fit = (FIT.find(([k]) => k === S.fit) || [])[1];
 
-  /* ---- chapters ---- */
-  const jobCh = () => `<section>${kv([['Client', h(I.client)], ['Facility / LSD', h(I.site)], ['Area', h(I.location)], ['Tank number', h(I.tankId)], ['Product / service', h([I.product, I.service].filter(Boolean).join(' · '))],
-    ['Job number', h(I.jobNo)], ['P.O. number', h(I.poNo)], ['Work order', h(I.workOrder)], ['Report number', h(I.reportNo)], ['Inspection date', h(I.inspDate)]])}</section>`;
-
-  const staticCh = () => `<section>${N.table('Nameplate and design data')}${kv([['Manufacturer', h(T.maker)], ['Code of construction', h([T.code, T.edition, T.supp].filter(Boolean).join(', '))], ['Year built', h(T.yearBuilt)], ['Serial number', h(T.serialNo)],
-    ['Diameter', big(T.diameter)], ['Height', big(T.height)], ['Capacity', h(T.capacity)], ['Bottom construction', h(T.bottomType)]])}
-    ${N.table('Materials and nominal thickness')}<table class="grid small"><thead><tr><th>Component</th><th>Material</th><th class="n">Nominal thickness (${U.t})</th></tr></thead><tbody>
-    <tr><td>Floor</td><td>${h(T.matFloor || '—')}</td><td class="n">${t(T.tBottom)}</td></tr>
-    <tr><td>Shell</td><td>${h(T.matShell || '—')}</td><td class="n">${shellNom.length ? shellNom.map((x) => t(x)).join(' / ') + (shellNom.length > 1 ? ' (course 1 up)' : '') : '—'}</td></tr>
-    <tr><td>Roof</td><td>${h(T.matRoof || '—')}</td><td class="n">${t(job.roof?.fixed?.tNom)}</td></tr></tbody></table></section>`;
-
+  /* ---- 1 Inspection summary: header grid and the one-page summary table (as page 1 of the template) ---- */
   const summaryCh = () => {
-    const narrative = String(job.summary?.narrative || '').trim();
-    const fit = (FIT.find(([k]) => k === S.fit) || [])[1];
-    const byGrp = GROUPS.map(([g, l]) => `<tr class="grp"><th colspan="2">${l}</th></tr>${ITEMS.filter((x) => x.grp === g).map((x) => `<tr><td>${h(x.label)}</td><td>${rating(S.items[x.k]?.rating)}</td></tr>`).join('')}`).join('');
-    return `<section>${narrative ? narrative.split(/\n{2,}/).map((p) => `<p>${h(p).replace(/\n/g, '<br>')}</p>`).join('') : '<p>No summary entered.</p>'}
-      ${fit ? `<p><b>${h(fit)}${S.fitNote ? ' — ' + h(S.fitNote) : ''}.</b></p>` : ''}
-      ${N.table('Condition by item')}<table class="grid small sm-cond"><thead><tr><th>Item</th><th>Condition${vm('O')}</th></tr></thead><tbody>${byGrp}</tbody></table></section>`;
-  };
-
-  const codeCh = () => `<section>${recTable(recs.filter((x) => x.r.code), 'Code required recommendations', 'No code required recommendations.')}</section>`;
-  const nonCodeCh = () => `<section>${recTable(recs.filter((x) => !x.r.code), 'Non-code recommendations', 'No non-code recommendations.')}</section>`;
-
-  const ndeCh = () => {
-    const rows = SECTIONS.flatMap((x) => (job.secs?.[x.key]?.nde || []).map((m) => `<tr><td>${h(x.label)}</td><td>${h(m.method)}</td><td>${h(m.extent || '')}</td><td>${h(m.result || '—')}</td><td>${h(m.notes || '')}</td></tr>`)).join('');
+    const c4 = (pairs) => `<tr>${pairs.map(([k, v]) => `<th>${k}</th><td>${v === '' || v == null ? '—' : v}</td>`).join('')}</tr>`;
+    const head = `<table class="sm-head"><tbody>
+      <tr class="cap"><th colspan="4">Job information</th></tr>
+      ${c4([['Client', h(I.client)], ['Inspection date', h(I.inspDate)]])}${c4([['Facility / LSD', h(I.site)], ['Report number', h(I.reportNo)]])}
+      ${c4([['Area', h(I.location)], ['Job number', h(I.jobNo)]])}${c4([['Product / service', h([I.product, I.service].filter(Boolean).join(' · '))], ['P.O. / W.O.', h([I.poNo, I.workOrder].filter(Boolean).join(' / '))]])}
+      <tr class="cap"><th colspan="4">Tank static data</th></tr>
+      ${c4([['Tank number', h(I.tankId)], ['Serial number', h(T.serialNo)]])}${c4([['Manufacturer', h(T.maker)], ['Year built', h(T.yearBuilt)]])}
+      ${c4([['Code of construction', h([T.code, T.edition].filter(Boolean).join(', '))], ['Capacity', h(T.capacity)]])}${c4([['Diameter', big(T.diameter)], ['Height', big(T.height)]])}
+      ${c4([['Floor', `${h(T.matFloor || '—')}, ${t(T.tBottom)} ${U.t}`], ['Shell', `${h(T.matShell || '—')}, ${shellNom.length ? shellNom.map((x) => t(x)).join(' / ') : '—'} ${U.t}`]])}
+      ${c4([['Roof', `${h(T.matRoof || '—')}, ${t(job.roof?.fixed?.tNom)} ${U.t}`], ['Bottom', h(T.bottomType)]])}</tbody></table>`;
+    // NDE completed
+    const nde = SECTIONS.flatMap((x) => (job.secs?.[x.key]?.nde || []).map((m) => `<li><b>${h(x.label)}:</b> ${h(m.method)}${m.extent ? ', ' + h(m.extent) : ''}${m.result ? ' — ' + h(m.result) : ''}</li>`));
     const inds = job.indications || [], proven = inds.filter((i) => ['ps', 'ss', 'both'].includes(i.result)).length;
     const res = [];
-    if (inds.length) res.push(`MFL floor scan: ${inds.length} indication${inds.length > 1 ? 's' : ''}, ${proven} proven up as corrosion (product side, soil side or both).`);
-    const F = R.thick.floor; if (F.tAct != null) res.push(`Floor minimum remaining thickness ${t(F.tAct)} ${U.t}${vm('C')}.`);
-    if (R.thick.courses.length) res.push(`Shell UT: minimum ${t(Math.min(...R.thick.courses.map((c) => c.tAct)))} ${U.t}${vm('M')} (${R.thick.courses.length} course${R.thick.courses.length > 1 ? 's' : ''}).`);
-    if (R.thick.roof) res.push(`Fixed roof UT: minimum ${t(R.thick.roof.tAct)} ${U.t}${vm('M')}${R.thick.roof.holes ? `, ${R.thick.roof.holes} hole(s)` : ''}.`);
-    return `<section>${N.table('NDE performed')}${rows ? `<table class="grid small wrap"><thead><tr><th>Component</th><th>Method</th><th>Extent</th><th>Result</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table>` : '<p>No NDE methods recorded.</p>'}
-      ${res.length ? `${N.sub('Summary of results')}<ul>${res.map((x) => `<li>${x}</li>`).join('')}</ul>` : ''}</section>`;
-  };
-
-  const ivCh = () => {
-    const Iv = R.intervals, cell = (x) => (x.override ? `<b>${h(x.override)}</b><br><small>entered</small>` : x.years == null ? `<small>${h(x.src)}</small>` : `<b>${h(x.date || '—')}</b> (${yrs(x.years)} yr)${vm('C')}`);
-    const rows = [['ut', 'UT thickness'], ['ext', 'In service (external)'], ['int', 'Out of service (internal)']].map(([k, l]) => `<tr><td>${l}</td><td>${cell(Iv[k].done)}</td><td>${cell(Iv[k].not)}</td></tr>`).join('');
-    const src = [...new Set(['ut', 'ext', 'int'].flatMap((k) => [Iv[k].done, Iv[k].not]).filter((x) => !x.override).map((x) => x.src))];
-    return `<section>${N.table(`Next inspections — ${Iv.basis === '12r1' ? 'API 12R1 (maximum intervals entered)' : 'API 653'}`)}<table class="grid small"><thead><tr><th>Inspection</th><th>Recommendations completed</th><th>Recommendations not completed</th></tr></thead><tbody>${rows}</tbody></table>
-      <p class="note">Dates count from the inspection date, ${h(I.inspDate || '—')}. ${src.map(h).join('; ')}.${['ut', 'ext', 'int'].some((k) => Iv[k].done.override || Iv[k].not.override) ? ' Entered: a date or interval entered by the inspector in place of the calculated one.' : ''}</p></section>`;
-  };
-
-  const thickCh = () => {
+    if (inds.length) res.push(`MFL: ${inds.length} indication${inds.length > 1 ? 's' : ''}, ${proven} proven up as corrosion; floor minimum remaining ${t(R.thick.floor.tAct)} ${U.t}.`);
+    if (R.thick.courses.length) res.push(`Shell UT minimum ${t(Math.min(...R.thick.courses.map((c) => c.tAct)))} ${U.t}.`);
+    if (R.thick.roof) res.push(`Roof UT minimum ${t(R.thick.roof.tAct)} ${U.t}${R.thick.roof.holes ? `, ${R.thick.roof.holes} hole(s)` : ''}.`);
+    // intervals
+    const Iv = R.intervals, cell = (x) => (x.override ? `<b>${h(x.override)}</b> <small>(entered)</small>` : x.years == null ? `<small>${h(x.src)}</small>` : `<b>${h(x.date || '—')}</b> (${yrs(x.years)} yr)`);
+    const ivT = `<table class="sm-in"><thead><tr><th></th><th>Recommendations completed</th><th>Not completed</th></tr></thead><tbody>${[['ut', 'UT thickness'], ['ext', 'In service (external)'], ['int', 'Out of service (internal)']].map(([k, l]) => `<tr><td>${l}</td><td>${cell(Iv[k].done)}</td><td>${cell(Iv[k].not)}</td></tr>`).join('')}</tbody></table><p class="sm-n">${Iv.basis === '12r1' ? 'API 12R1 maximum intervals as entered, not past the remaining life' : 'API 653 §6.3.3.2 (UT), §6.3.2.1 (external), §6.4.2 (internal)'}; from the inspection date. Working in the calculations appendix.</p>`;
+    // thickness
     const X = R.thick, F = X.floor;
-    const row = (x, label) => (x ? `<tr><td>${label}</td><td class="n">${t(x.tNom)}</td><td class="n">${t(x.tAct)}${x.key === 'floor' ? vm('C') : vm('M')}</td><td class="n">${x.years ?? '—'}</td><td class="n">${fmtRate(x.cr, job, false)}${vm('C')}</td><td class="n">${t(x.tMin)}</td><td class="n"><b>${rlText(x.rl, x.cr)}</b>${vm('C')}</td></tr>`
-      : `<tr><td>${label}</td><td colspan="6">No readings</td></tr>`);
-    return `<section>${N.table('Thickness, corrosion rate and remaining life')}<table class="grid small"><thead><tr><th>Component</th><th class="n">T-nom (${U.t})</th><th class="n">T-act (${U.t})</th><th class="n">Years</th><th class="n">CR (${U.rate})</th><th class="n">T-min (${U.t})</th><th class="n">RL (years)</th></tr></thead><tbody>
-      ${row(F.tAct == null ? null : F, 'Floor (as found)')}${row(X.shell, X.shell ? `Shell — course ${X.shell.course}` : 'Shell')}${row(X.roof, 'Fixed roof')}</tbody></table>
-      ${X.courses.length > 1 ? `${N.table('Shell courses')}<table class="grid small"><thead><tr><th>Course</th><th class="n">T-nom</th><th class="n">T-act${vm('M')}</th><th class="n">CR${vm('C')}</th><th class="n">T-min</th><th class="n">RL (years)${vm('C')}</th></tr></thead><tbody>${X.courses.map((c) => `<tr><td>${c.course}</td><td class="n">${t(c.tNom)}</td><td class="n">${t(c.tAct)}</td><td class="n">${fmtRate(c.cr, job, false)}</td><td class="n">${t(c.tMin)}</td><td class="n">${rlText(c.rl, c.cr)}</td></tr>`).join('')}</tbody></table>` : ''}
-      <p class="note">CR = (T-nom − T-act) / years; RL = (T-act − T-min) / CR; 30 + = no measurable loss or a life over 30 years. Shell T-min per API 653 §4.3.3.1 unless entered; roof T-min as entered (API 653 §4.2.1.2). Floor per API 653 §4.4.5: T-act = the minimum remaining thickness RT, CR = StPᵣ + UPᵣ, T-min = the governing area's limit, RL = the largest Oᵣ it allows${F.rlAfter != null ? `; after the recommended floor repairs RL = ${rlText(F.rlAfter, F.cr)} years` : ''}.${F.notEvaluated ? ' The floor was not evaluated: no corrosion rate basis (tank age) was entered.' : ''}</p></section>`;
+    const tr = (x, l) => (x ? `<tr><td>${l}</td><td class="n">${t(x.tNom)}</td><td class="n">${t(x.tAct)}</td><td class="n">${x.years ?? '—'}</td><td class="n">${fmtRate(x.cr, job, false)}</td><td class="n">${t(x.tMin)}</td><td class="n"><b>${rlText(x.rl, x.cr)}</b></td></tr>` : `<tr><td>${l}</td><td colspan="6">No readings</td></tr>`);
+    const thT = `<table class="sm-in"><thead><tr><th></th><th class="n">T-nom</th><th class="n">T-act</th><th class="n">Years</th><th class="n">CR (${U.rate})</th><th class="n">T-min</th><th class="n">RL (yr)</th></tr></thead><tbody>${tr(F.tAct == null ? null : F, 'Floor (as found)')}${tr(X.shell, X.shell ? `Shell (course ${X.shell.course})` : 'Shell')}${tr(X.roof, 'Roof')}</tbody></table><p class="sm-n">Thickness in ${U.t}. 30 + = no measurable loss or over 30 years.${F.rlAfter != null && F.rlAfter !== F.rl ? ` Floor after the recommended repairs: RL ${rlText(F.rlAfter, F.cr)} years.` : ''} Working in the calculations appendix.</p>`;
+    const code = recs.filter((x) => x.r.code), non = recs.filter((x) => !x.r.code);
+    return `<section>${head}<table class="sm-sum"><tbody>
+      <tr><th>Inspection summary</th><td>${para(job.summary?.narrative, 'No summary entered.')}${fit ? `<p><b>${h(fit)}${S.fitNote ? ' — ' + h(S.fitNote) : ''}.</b></p>` : ''}</td></tr>
+      <tr><th>Code required recommendations</th><td>${recList(code)}</td></tr>
+      <tr><th>Non-code recommendations</th><td>${recList(non)}</td></tr>
+      <tr><th>NDE scope and results</th><td>${nde.length ? `<ul>${nde.join('')}</ul>` : 'No NDE methods recorded.'}${res.length ? `<p style="margin-top:4px">${res.join(' ')}</p>` : ''}</td></tr>
+      <tr><th>Inspection intervals</th><td>${ivT}</td></tr>
+      <tr><th>Thickness and corrosion rates</th><td>${thT}</td></tr></tbody></table></section>`;
   };
 
-  /* ---- item tables ---- */
+  /* ---- supporting tables ---- */
   const projT = () => {
-    const P = R.proj, m = P[0];
-    return `${N.table('Floor projections beyond the shell')}<table class="grid small"><thead><tr><th>Location</th><th class="n">Thickness (${U.t})${vm('M')}</th><th class="n">Projection (${U.t})${vm('M')}</th><th>API 653 §4.4.5.7${vm('C')}</th></tr></thead><tbody>${P.map((p) => `<tr><td>${h(p.loc)}</td><td class="n">${t(p.t)}</td><td class="n">${sm(p.w)}</td><td>${p.ok == null ? '—' : st(p.ok ? 'Meets' : p.tOk === false ? 'Below minimum thickness' : 'Below minimum width')}</td></tr>`).join('')}</tbody></table>
-      ${m ? `<p class="note">Minimum ${t(m.tMin)} ${U.t} thick at the outside weld toe and ${sm(m.wMin)} ${U.t} wide.</p>` : ''}`;
+    const P = R.proj; if (!P.some((p) => p.t != null || p.w != null)) return '';
+    const m = P[0];
+    return `${N.sub('Floor projections and shell-to-floor weld')}<table class="grid small"><thead><tr><th>Location</th><th class="n">Thickness (${U.t})</th><th class="n">Projection (${U.t})</th><th>API 653 §4.4.5.7</th></tr></thead><tbody>${P.map((p) => `<tr><td>${h(p.loc)}</td><td class="n">${t(p.t)}</td><td class="n">${sm(p.w)}</td><td>${p.ok == null ? '—' : st(p.ok ? 'Meets' : p.tOk === false ? 'Below minimum thickness' : 'Below minimum width')}</td></tr>`).join('')}</tbody></table>
+      ${m ? `<p class="sm-n">Minimum ${t(m.tMin)} ${U.t} thick and ${sm(m.wMin)} ${U.t} wide.</p>` : ''}`;
   };
-  const oppT = () => (S.opp.length ? `${N.table('Over-pressure and vacuum protection')}<table class="grid small"><thead><tr><th>Device</th><th>Serial no.</th><th>Pressure</th><th>Vacuum</th><th>Last serviced</th></tr></thead><tbody>${S.opp.map((d) => `<tr><td>${h(d.dev)}</td><td>${h(d.serial)}</td><td>${h(d.press)}</td><td>${h(d.vac)}</td><td>${h(d.svc)}</td></tr>`).join('')}</tbody></table>` : '');
+  const oppT = () => (S.opp.length ? `${N.sub('Over-pressure and vacuum protection')}<table class="grid small"><thead><tr><th>Device</th><th>Serial no.</th><th>Pressure</th><th>Vacuum</th><th>Last serviced</th></tr></thead><tbody>${S.opp.map((d) => `<tr><td>${h(d.dev)}</td><td>${h(d.serial)}</td><td>${h(d.press)}</td><td>${h(d.vac)}</td><td>${h(d.svc)}</td></tr>`).join('')}</tbody></table>` : '');
   const tiltT = () => {
     const X = R.tilt, P = X.planar, b = (SETTLE_BASIS.find(([k]) => k === X.basis) || [])[1];
-    const stn = S.tilt.some((x) => x.elev != null || x.lean != null) ? `${N.table('Settlement and tilt readings')}<table class="grid small"><thead><tr><th>Station</th><th class="n">Shell-base elevation (${U.t})${vm('M')}</th><th class="n">Out of plumb over ${big(S.level)} (${U.t})${vm('M')}</th></tr></thead><tbody>${S.tilt.map((x) => `<tr><td>${h(x.loc)}</td><td class="n">${sm(x.elev)}</td><td class="n">${sm(x.lean)}</td></tr>`).join('')}</tbody></table>` : '';
-    const rows = [];
-    if (X.basis === '653') {
-      const f = X.annexB?.fit;
-      rows.push(['Basis', 'API 653 Annex B — full settlement survey', '']);
-      if (f) rows.push(['Out of plumb at the top of the shell', `${sm(f.plumb)} ${U.t}`, `limit ${sm(f.plumbLim)} ${U.t} (API 653 §10.5.2.1)`]);
-    } else rows.push(['Basis', h(b), X.refs ? h(X.refs) : '']);
+    const haveSt = S.tilt.some((x) => x.elev != null || x.lean != null);
+    if (!haveSt && X.basis !== '653') return '';
+    const res = [];
+    if (X.basis === '653') { const f = X.annexB?.fit; if (f) res.push(['Out of plumb at the top of the shell', `${sm(f.plumb)} ${U.t}`, `limit ${sm(f.plumbLim)} ${U.t} (API 653 §10.5.2.1)`]); }
     if (P.slope !== undefined) {
-      rows.push(['Planar tilt', `${sm(P.diff)} ${U.t} across the diameter`, P.lowDeg == null ? 'level' : `low side at ${Math.round(P.lowDeg)}° from the 0° reference (${h(I.zeroRef || 'N')})`]);
-      rows.push(['Twist (out of plane)', `±${sm(Math.abs(P.twist))} ${U.t}`, X.twistTrig != null && X.basis !== '653' ? `trigger ${sm(X.twistTrig)} ${U.t}${X.twistOk === false ? ' — <b>a full API 653 Annex B survey is recommended</b>' : ''}` : 'reported only']);
-      rows.push(['Loss of freeboard on the low side', `${sm(P.freeboard)} ${U.t}`, 'for the overfill set-point']);
-      if (P.drain) rows.push(['Drain', `${h(P.drain.mark)} at ${P.drain.angle}°`, `the low side is ${P.drain.rel} the drain`]);
+      res.push(['Planar tilt', `${sm(P.diff)} ${U.t} across the diameter`, P.lowDeg == null ? 'level' : `low side at ${Math.round(P.lowDeg)}° from 0° (${h(I.zeroRef || 'N')})`]);
+      res.push(['Twist (out of plane)', `±${sm(Math.abs(P.twist))} ${U.t}`, X.twistTrig != null && X.basis !== '653' ? `trigger ${sm(X.twistTrig)} ${U.t}${X.twistOk === false ? ' — <b>full API 653 Annex B survey recommended</b>' : ''}` : 'reported only']);
+      res.push(['Loss of freeboard, low side', `${sm(P.freeboard)} ${U.t}`, P.drain ? `the low side is ${P.drain.rel} drain ${h(P.drain.mark)}` : '']);
     }
-    if (X.basis !== '653') {
-      if (P.plumbElev != null) rows.push(['Out of plumb from the elevations', `${sm(P.plumbElev)} ${U.t}`, 'tilt × shell height']);
-      if (P.leanMax != null) rows.push(['Out of plumb from the level readings', `${sm(P.leanMax)} ${U.t}`, 'largest reading scaled to the shell height']);
-      rows.push(['Out of plumb', X.plumb == null ? '—' : `<b>${sm(X.plumb)} ${U.t}</b>`, X.plumbLim == null ? 'no limit entered' : `limit ${sm(X.plumbLim)} ${U.t} (${h(X.limSrc)})`]);
-    }
-    rows.push(['Result', st(X.status), '']);
-    return `${stn}${N.table('Settlement and tilt — results')}<table class="grid small"><tbody>${rows.map(([a, v, c]) => `<tr><th>${a}</th><td>${v}${a === 'Result' || a === 'Basis' ? '' : vm('C')}</td><td>${c}</td></tr>`).join('')}</tbody></table>
-      ${X.basis === 'small' ? '<p class="note">Small-tank planar method: the tank treated as a rigid body. Plane fitted through the four shell-base elevations; twist = the departure of the four points from that plane; out of plumb = tilt × shell height, and the level readings scaled to the shell height, whichever is larger. It is not API 653 Annex B, which needs more stations; a twist over the trigger calls for an Annex B survey.</p>' : ''}`;
+    if (X.basis !== '653') res.push(['Out of plumb', X.plumb == null ? '—' : `<b>${sm(X.plumb)} ${U.t}</b>`, X.plumbLim == null ? 'no limit entered' : `limit ${sm(X.plumbLim)} ${U.t} (${h(X.limSrc)})`]);
+    const stn = haveSt ? `<table class="grid small"><thead><tr><th>Station</th><th class="n">Shell-base elevation (${U.t})</th><th class="n">Out of plumb over ${big(S.level)} (${U.t})</th></tr></thead><tbody>${S.tilt.map((x) => `<tr><td>${h(x.loc)}</td><td class="n">${sm(x.elev)}</td><td class="n">${sm(x.lean)}</td></tr>`).join('')}</tbody></table>` : '';
+    return `${N.sub('Settlement and tilt')}<p>Basis: ${h(b)}${X.refs ? ` (${h(X.refs)})` : ''}. Result: <b>${st(X.status)}</b>.</p>${stn}
+      <table class="grid small"><tbody>${res.map(([a, v, c]) => `<tr><th>${a}</th><td>${v}</td><td>${c}</td></tr>`).join('')}</tbody></table>
+      ${X.basis === 'small' ? '<p class="sm-n">Small-tank planar method (tank treated as rigid; not API 653 Annex B). Method in the calculations appendix.</p>' : ''}`;
   };
   const edgeT = () => {
     const E = R.edge;
     if (!S.edge.some((x) => x.max != null)) return '';
-    return `${N.table('Edge settlement')}<table class="grid small"><thead><tr><th>Station</th><th class="n">Maximum settlement (${U.t})${vm('M')}</th><th class="n">Breakover from shell (${U.t})${vm('M')}</th><th class="n">Limit (${U.t})</th><th>Status${vm('C')}</th></tr></thead><tbody>${E.rows.map((r) => `<tr><td>${h(r.st)}</td><td class="n">${sm(r.B)}</td><td class="n">${sm(r.R)}</td><td class="n">${sm(r.allow)}</td><td>${st(r.status)}</td></tr>`).join('')}</tbody></table>
-      <p class="note">${E.src ? `Limit: ${h(E.src)}${E.dist != null && E.basis !== '653' ? `, applied where the breakover is within ${sm(E.dist)} ${U.t} of the shell` : ''}.` : 'No limit entered: readings reported only.'}${E.basis === '653' ? ' Bottom lap welds taken as parallel to the shell (the lower curve).' : ''}</p>`;
+    return `${N.sub('Edge settlement')}<table class="grid small"><thead><tr><th>Station</th><th class="n">Max. settlement (${U.t})</th><th class="n">Breakover from shell (${U.t})</th><th class="n">Limit (${U.t})</th><th>Status</th></tr></thead><tbody>${E.rows.map((r) => `<tr><td>${h(r.st)}</td><td class="n">${sm(r.B)}</td><td class="n">${sm(r.R)}</td><td class="n">${sm(r.allow)}</td><td>${st(r.status)}</td></tr>`).join('')}</tbody></table>
+      <p class="sm-n">${E.src ? `Limit: ${h(E.src)}${E.dist != null && E.basis !== '653' ? `, where the breakover is within ${sm(E.dist)} ${U.t} of the shell` : ''}.` : 'No limit entered: readings reported only.'}${E.basis === '653' ? ' Lap welds taken as parallel to the shell.' : ''}</p>`;
   };
-  const TABLES = { proj: projT, opp: oppT, tilt: tiltT, edge: edgeT };
 
-  const itemsCh = (grp) => () => `<section>${ITEMS.filter((x) => x.grp === grp).map((it) => {
+  /* ---- 2–4 checklist tables (as the template), then the supporting tables ---- */
+  const chk = (grp) => `<table class="sm-chk"><thead><tr><th>Item</th><th>Condition</th><th>Comments</th></tr></thead><tbody>${ITEMS.filter((x) => x.grp === grp).map((it) => {
     const v = S.items[it.k] || {}, txt = String(v.text || '').trim();
-    return `${grp === 'insul' ? '' : N.sub(it.label)}<div class="sm-item"><div class="sm-ih">${grp === 'insul' ? `<b>${h(it.label)}</b>` : '<span></span>'}<span>Condition${vm('O')} ${rating(v.rating)}</span></div>
-      <p class="sm-c">${txt ? h(txt).replace(/\n/g, '<br>') : '<i>No comments.</i>'}</p>${it.table ? TABLES[it.table]() : ''}</div>`;
-  }).join('')}</section>`;
+    return `<tr><td class="i">${h(it.label)}</td><td class="c">${rating(v.rating)}</td><td${txt ? '' : ' class="x"'}>${txt ? h(txt).replace(/\n/g, '<br>') : '—'}</td></tr>`;
+  }).join('')}</tbody></table>`;
+  const extCh = () => `<section>${chk('ext')}${projT()}${oppT()}${tiltT()}</section>`;
+  const intCh = () => `<section>${chk('int')}${edgeT()}</section>`;
+  const insulCh = () => `<section>${chk('insul')}</section>`;
 
+  /* ---- 5 Follow-up and sign-off ---- */
   const followCh = () => {
     const people = (job.personnel || []).filter((p) => p.name);
-    const fit = (FIT.find(([k]) => k === S.fit) || [])[1];
-    return `<section>${N.sub('Follow-up inspections — preparatory work')}<p>${String(S.followup || '').trim() ? h(S.followup).replace(/\n/g, '<br>') : 'None noted.'}</p>
-      ${N.sub('Equipment suitable for continued service?')}<p><b>${fit ? h(fit) : 'Not stated.'}</b>${S.fitNote ? ' ' + h(S.fitNote) : ''}</p>
+    return `<section><table class="sm-sum"><tbody>
+      <tr><th>Preparatory work for the next inspection</th><td>${para(S.followup, 'None noted.')}</td></tr>
+      <tr><th>Equipment suitable for continued service?</th><td><b>${fit ? h(fit) : 'Not stated.'}</b>${S.fitNote ? ' ' + h(S.fitNote) : ''}</td></tr></tbody></table>
       ${N.sub('Inspectors and technicians')}${people.length ? `<table class="grid small sm-sig"><thead><tr><th>Name</th><th>Role</th><th>Certification</th><th>Expiry</th><th>Signature</th></tr></thead><tbody>${people.map((p) => { const c = certState(p, I.inspDate); return `<tr><td>${h(p.name)}${p.company ? `<br><small>${h(p.company)}</small>` : ''}</td><td>${h(ROLE_LABEL[p.role] || p.role)}${p.method ? ` (${h(p.method)})` : ''}</td><td>${h([p.cert, p.certNo, p.level ? 'Level ' + p.level : ''].filter(Boolean).join(' · '))}</td><td>${h(p.expiry || '')}${c === 'expired' ? ' <b class="sm-bad">expired</b>' : ''}</td><td></td></tr>`; }).join('')}</tbody></table>` : '<p>No personnel listed (Tank setup → Personnel).</p>'}</section>`;
   };
 
@@ -221,8 +212,8 @@ export function buildSmallReport(job, layout, calc, company, photos, opts = {}, 
         blocks: nz.length && nz.length <= 14 ? [['Nozzles', `<table class="dwg-kv sm-nzk"><tr><th>No.</th><th>Description</th><th>Size</th><th>Min</th></tr>${nz.map((n) => `<tr><td>${h(n.mark)}</td><td>${h(n.type || '')}</td><td>${fmt(n.size, 'small', job, false)}</td><td>${t(nozzleUT(n, job).min)}</td></tr>`).join('')}</table>`]] : [],
         legend: legendList([[swatch.dot('#0f766e'), 'Shell UT station, minimum reading below the label'], [swatch.dot('#fff', '#1d232b'), 'Nozzle (mark in the hexagon)']]),
         notes: [`Angles clockwise from 0° (${h(I.zeroRef || 'N')}) at the top.`, `Thickness in ${U.t}.`, 'Readings by course and station, and nozzle neck readings, are tabulated in this appendix.'] }));
-      if (hasShell) out.push(`<section>${N.table('Shell UT readings — minimum by course and station')}<table class="grid small"><thead><tr><th>Course</th><th class="n">T-nom</th>${locs.map((l) => `<th class="n">${h(l.label)}<br><small>${Math.round(l.angle)}°</small></th>`).join('')}<th class="n">Min${vm('M')}</th></tr></thead><tbody>${cw.slice().reverse().map((c) => { const s2 = cs.find((x) => x.id === c.id); return `<tr><td>${c.no}</td><td class="n">${t(c.tNom)}</td>${locs.map((l) => `<td class="n">${t(minAt(c, l))}</td>`).join('')}<td class="n"><b>${t(s2?.min)}</b></td></tr>`; }).join('')}</tbody></table><p class="note">The thinnest reading in each course at each station, in ${U.t}; top course first. Every reading taken is kept in the job.</p></section>`);
-      if (nz.length) out.push(`<section>${N.table('Nozzle schedule and neck UT')}<table class="grid small"><thead><tr><th>No.</th><th>Description</th><th class="n">Size</th><th>Sch.</th><th class="n">Nominal</th>${UT_CLOCK.map(([, l]) => `<th class="n">${l} o’clock${vm('M')}</th>`).join('')}<th class="n">Min</th></tr></thead><tbody>${nzRows}</tbody></table><p class="note">Thickness in ${U.t}; clock positions looking at the nozzle from outside the tank.</p></section>`);
+      if (hasShell) out.push(`<section>${N.table('Shell UT readings — minimum by course and station')}<table class="grid small"><thead><tr><th>Course</th><th class="n">T-nom</th>${locs.map((l) => `<th class="n">${h(l.label)}<br><small>${Math.round(l.angle)}°</small></th>`).join('')}<th class="n">Min</th></tr></thead><tbody>${cw.slice().reverse().map((c) => { const s2 = cs.find((x) => x.id === c.id); return `<tr><td>${c.no}</td><td class="n">${t(c.tNom)}</td>${locs.map((l) => `<td class="n">${t(minAt(c, l))}</td>`).join('')}<td class="n"><b>${t(s2?.min)}</b></td></tr>`; }).join('')}</tbody></table><p class="note">The thinnest reading in each course at each station, in ${U.t}; top course first. Every reading taken is kept in the job.</p></section>`);
+      if (nz.length) out.push(`<section>${N.table('Nozzle schedule and neck UT')}<table class="grid small"><thead><tr><th>No.</th><th>Description</th><th class="n">Size</th><th>Sch.</th><th class="n">Nominal</th>${UT_CLOCK.map(([, l]) => `<th class="n">${l} o’clock</th>`).join('')}<th class="n">Min</th></tr></thead><tbody>${nzRows}</tbody></table><p class="note">Thickness in ${U.t}; clock positions looking at the nozzle from outside the tank.</p></section>`);
     }
     if (hasFixed(job) && (job.roof.fixed.pts || []).length) {
       const Fx = job.roof.fixed, pts = Fx.pts;
@@ -231,7 +222,7 @@ export function buildSmallReport(job, layout, calc, company, photos, opts = {}, 
         data: [['Roof', h(Fx.kind)], ['Support', h(Fx.support)], ['Nominal plate t', t(Fx.tNom)], ['t-min', t(Fx.tMin)], ['UT points', String(pts.length)]],
         legend: legendList([[swatch.dot('#0f766e'), 'UT point at or above t-min'], [swatch.dot('#b91c1c'), 'UT point below t-min'], [swatch.dot('#fff', '#5b6470'), 'Not read'], [swatch.line('#0f766e', '4 2'), 'Shell UT station line']]),
         notes: [`Thickness in ${U.t}; each point shows its label and reading.`, `Points located by angle (clockwise from 0° ${h(I.zeroRef || '')}) and distance from the centre.`] }));
-      out.push(`<section>${N.table('Fixed roof UT readings')}<table class="grid small"><thead><tr><th>Point</th><th class="n">Angle</th><th class="n">From centre</th><th class="n">Reading${vm('M')}</th><th>Status${vm('C')}</th></tr></thead><tbody>${pts.map((p) => { const ps = pointStatus(job, p); return `<tr><td><b>${h(p.label)}</b></td><td class="n">${p.angle != null ? (+p.angle).toFixed(0) + '°' : '—'}</td><td class="n">${big(p.r)}</td><td class="n">${t(p.t)}</td><td>${st(ps.status)}</td></tr>`; }).join('')}</tbody></table></section>`);
+      out.push(`<section>${N.table('Fixed roof UT readings')}<table class="grid small"><thead><tr><th>Point</th><th class="n">Angle</th><th class="n">From centre</th><th class="n">Reading</th><th>Status</th></tr></thead><tbody>${pts.map((p) => { const ps = pointStatus(job, p); return `<tr><td><b>${h(p.label)}</b></td><td class="n">${p.angle != null ? (+p.angle).toFixed(0) + '°' : '—'}</td><td class="n">${big(p.r)}</td><td class="n">${t(p.t)}</td><td>${st(ps.status)}</td></tr>`; }).join('')}</tbody></table></section>`);
     }
     // tables first, then the drawing sheets (a sheet starts its own page, so it closes the appendix)
     return out.join('') + sheets.map((f) => f()).join('');
@@ -243,7 +234,7 @@ export function buildSmallReport(job, layout, calc, company, photos, opts = {}, 
     const list = inds.map((i) => { const a = per.get(i.id) || {}; return `<tr><td>${h(i.no)}</td><td>${fmt(i.x, 'small', job, false)}</td><td>${fmt(i.y, 'small', job, false)}</td><td>${side(i)}</td><td>${t(a.rem)}</td></tr>`; }).join('');
     const listTbl = `<table class="dwg-kv sm-ind"><tr><th>No.</th><th>X</th><th>Y</th><th>TS/BS</th><th>T-act</th></tr>${list}</table>`;
     const onSheet = inds.length <= 22, patches = patchList(job, layout, calc);
-    const full = `<section>${N.table('MFL indications and UT prove-up')}<table class="grid small"><thead><tr><th>No.</th><th>Plate</th><th class="n">X</th><th class="n">Y</th><th class="n">MFL %${vm('E')}</th><th>TS / BS${vm('M')}</th><th class="n">UT min${vm('M')}</th><th class="n">VT pit${vm('M')}</th><th class="n">T-act</th><th>Repair</th></tr></thead><tbody>${inds.map((i) => { const a = per.get(i.id) || {}; return `<tr class="${a.repair ? 'is-rep' : ''}"><td>${h(i.no)}</td><td>${h(a.plate?.label ?? '?')}</td><td class="n">${fmt(i.x, 'small', job, false)}</td><td class="n">${fmt(i.y, 'small', job, false)}</td><td class="n">${i.mflPct ?? '—'}</td><td>${side(i)}</td><td class="n">${t(i.utMin)}</td><td class="n">${t(i.vtDepth)}</td><td class="n">${t(a.rem)}</td><td>${a.repair ? 'Yes' : a.status === 'below MRT' ? '<b>Below limit</b>' : ''}</td></tr>`; }).join('')}</tbody></table><p class="note">Dimensions in ${U.t}. TS = top side (product side); BS = bottom side (soil side).</p></section>`;
+    const full = `<section>${N.table('MFL indications and UT prove-up')}<table class="grid small"><thead><tr><th>No.</th><th>Plate</th><th class="n">X</th><th class="n">Y</th><th class="n">MFL %</th><th>TS / BS</th><th class="n">UT min</th><th class="n">VT pit</th><th class="n">T-act</th><th>Repair</th></tr></thead><tbody>${inds.map((i) => { const a = per.get(i.id) || {}; return `<tr class="${a.repair ? 'is-rep' : ''}"><td>${h(i.no)}</td><td>${h(a.plate?.label ?? '?')}</td><td class="n">${fmt(i.x, 'small', job, false)}</td><td class="n">${fmt(i.y, 'small', job, false)}</td><td class="n">${i.mflPct ?? '—'}</td><td>${side(i)}</td><td class="n">${t(i.utMin)}</td><td class="n">${t(i.vtDepth)}</td><td class="n">${t(a.rem)}</td><td>${a.repair ? 'Yes' : a.status === 'below MRT' ? '<b>Below limit</b>' : ''}</td></tr>`; }).join('')}</tbody></table><p class="note">Dimensions in ${U.t}. TS = top side (product side); BS = bottom side (soil side).</p></section>`;
     const sheet = sheetHTML(N, SI, { cls: drawCls, figure: 'Floor internal — MFL indications and UT prove-up', view: 'Floor plan — viewed from above', scale: 'As shown by the scale bar',
       drawing: X.floorMap(), wrap: 'map-wrap',
       data: [['Diameter', big(T.diameter)], ['Bottom nominal t', `${t(T.tBottom)} ${U.t}`], ['Plates', String(layout.plates.length)], ['MFL indications', String(inds.length)], ['Patch plates', String(patches.length)]],
@@ -272,9 +263,10 @@ export function buildSmallReport(job, layout, calc, company, photos, opts = {}, 
 
   const floorCalcApp = () => (inds.length ? `<section>${calcFloor({ job, layout, calc, N })}</section>` : '');
 
-  const chapterBody = { job: jobCh, static: staticCh, summary: summaryCh, code: codeCh, noncode: nonCodeCh, nde: ndeCh, intervals: ivCh, thick: thickCh, ext: itemsCh('ext'), int: itemsCh('int'), insul: itemsCh('insul'), follow: followCh };
+  const chapterBody = { summary: summaryCh, ext: extCh, int: intCh, insul: insulCh, follow: followCh };
   const base = layoutOf(opts);
-  const LY = { ...base, chapters: SMALL_CHAPTERS.map(([id, title]) => ({ id, title, on: true })), appendices: SMALL_APPENDICES.map(([id, title]) => ({ id, title, on: !(opts.layout?.off || []).includes('small-' + id) })) };
+  // front matter: cover, then document control and contents together on one page; no value key (no marks in the body)
+  const LY = { ...base, front: base.front.filter((f) => f.id !== 'key'), chapters: SMALL_CHAPTERS.map(([id, title]) => ({ id, title, on: true })), appendices: SMALL_APPENDICES.map(([id, title]) => ({ id, title, on: !(opts.layout?.off || []).includes('small-' + id) })) };
   const appendixBody = { photos: photosApp, ut: utApp, mfl: mflApp, calc: calcApp, calcfloor: floorCalcApp };
   return assembleReport({ job, company, opts, layout: LY, N, chapterBody, appendixBody, extraCSS: SMALL_CSS, cls: 'rp-small', tocLists: false,
     cover: { title: titleOf(job), sub: R.intervals.basis === '12r1' ? 'API 12R1 / API 653' : 'API 653' },

@@ -7,6 +7,26 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Small tank report — layout reworked for flow (v3.34.0)
+
+The small tank report read as a long run of headings. It is now laid out like the small tank Word template:
+
+- **Page 1 — Inspection summary**: a job information / tank static data grid (client, facility / LSD, area, dates,
+  report, job, P.O. and W.O. numbers; tank, serial, manufacturer, year, code, capacity, size, materials and nominal
+  thickness), then one summary table whose rows are the template's sections in order — inspection summary (with
+  fit / unfit), code required recommendations, non-code recommendations, NDE scope and results, inspection intervals
+  (completed / not completed), thickness and corrosion rates. Someone who reads only page 1 has the answer.
+- **2 External inspection** (own page) and **3 Internal inspection**: each group's items as one **Item | Condition |
+  Comments** table, then only the supporting tables that have readings (floor projections, over-pressure devices,
+  settlement and tilt; edge settlement). **4 Insulation** and **5 Follow-up and sign-off** follow on.
+- Front matter: the cover, then document control and the contents together on one page; no value key, and no value
+  marks in the body (the calculation appendices still give each input's type in words).
+- Lighter headings, captions only in the appendices, one-line notes (the method notes are in the calculations
+  appendix).
+
+The test tank's body is 3 pages (was 10) and the whole report 14 Letter pages (was 19); the print audit is clean on
+Letter, A4, 11 × 17 and portrait. Calculations, the checklist screen and the appendices are unchanged.
+
 ## Small tank report — S4: appendices and print (v3.33.0)
 
 The small tank report now ends with its appendices, each printed only when the job has something for it (and each

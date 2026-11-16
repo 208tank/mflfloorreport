@@ -1901,7 +1901,7 @@ export default {
     await page.evaluate(async (j) => { const { db } = await import('./js/db.js'); await db.putJob(j); const { openJob } = await import('./js/views/jobs.js'); await openJob(j.id, 'report'); }, job);
     await page.waitForSelector('#reportRoot .rp-small h2.rp-ch');
     const heads = await page.$$eval('#reportRoot .rp-chap h2.rp-ch', (x) => x.map((e) => e.textContent.trim()));
-    assert.equal(heads[0], '1Job information'); assert.equal(heads.at(-1), '12Follow-up and sign-off'); assert.equal(heads.length, 12);
+    assert.equal(heads[0], '1Inspection summary'); assert.equal(heads.at(-1), '5Follow-up and sign-off'); assert.equal(heads.length, 5);
     assert.match(await page.$eval('#reportRoot .rp-cover h1', (e) => e.textContent), /Out of Service Tank Inspection Report \(Small Diameter\)/);
     await page.click('.rsec summary');
     assert.match(await page.$eval('.rsec', (e) => e.innerText), /small tank report/i);
