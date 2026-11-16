@@ -21,6 +21,10 @@ export const CHAPTERS = [
 /** Appendices in their default order. */
 export const APPENDICES = [
   ['floorinds', 'Floor indication register'],
+  ['shellrd', 'Shell UT readings'],
+  ['shelleval', 'Shell evaluation — working (API 653 §4.3.3)'],
+  ['roofrd', 'Roof UT readings and rim seal gaps'],
+  ['settlework', 'Settlement — working and readings'],
   ['plates', 'Plate register'],
   ['floorphotos', 'Floor indication photographs'],
 ];

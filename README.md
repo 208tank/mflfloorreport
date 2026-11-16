@@ -7,6 +7,23 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Report improvements — R4: shell, roof, nozzles and settlement (v3.26.0)
+
+Each chapter keeps its summary, drawings and results; the long reading tables and the detailed working move to four
+new appendices (on by default, reorderable, built by the same code so nothing changes in them):
+
+| Chapter keeps | Moves to the appendix |
+|---|---|
+| **Shell** — course summary (M / C marks), **§4.3.3 evaluation summary** (nominal, t-min used, minimum reading, maximum product fill and hydrotest height per course, status), roll-out drawing sheet | *Shell UT readings* (the elevation × station grid); *Shell evaluation — working* (material, joint, E, Y, Sd, St, liquid head, t-min calculated, formula notes) |
+| **Roof** — fixed and floating roof details, plan drawing sheets, the **points / deck plates below t-min** (or "all at or above t-min, minimum …"), pontoon conditions (O), rim seal results per standard with the source of its limits, visual checklist (O) | *Roof UT readings and rim seal gaps* (every fixed-roof point, every deck plate's 5 readings, the measured seal gaps) |
+| **Nozzles** — split into a **schedule** and a **neck UT and evaluation** table (readings M, loss and status C; other readings in their own column; table-default thicknesses still marked T) | — |
+| **Settlement** — survey details, plan and cosine-fit figure, shell settlement results (C), an **edge settlement survey summary** (stations surveyed, with edge settlement, acceptable / NDE required / exceeds, highest B / allowable), other edge areas, depressions | *Settlement — working and readings* (cosine fit, U and S by station; B.3.2.2 arc method; edge results by station, profiles and radial readings) |
+
+Chapter notes say which appendix holds the rest. `tests/r4report.test.mjs` checks, for all seven fixture jobs, that
+the shell summary (t-min used, minimum reading, fill and hydrotest heights), the nozzle minimum, loss and status, the
+roof points and plates below t-min and the edge-survey counts equal what the calculation modules return, and that
+each moved table is printed in an appendix.
+
 ## Report improvements — R3: the floor chapter (v3.25.0)
 
 The floor chapter (`js/report/floor.js` with `js/report.js`) now has, in order:
