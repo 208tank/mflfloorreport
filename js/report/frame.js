@@ -461,6 +461,14 @@ export const SHEET_CSS = `
 .report .rp-anchor { display: block; height: 0; }
 .report .grid.wrap td, .report .grid.wrap td:nth-last-child(2) { white-space: normal; overflow-wrap: break-word; }
 .report .grid:has(th:nth-child(12)) sup.vm { font-size: 6px; padding: 0 1px; margin-left: 1px; border-width: 0.4px; }
+@media print {
+  .report h2.rp-ch, .report h3.rp-s, .report h3.rp-h3, .report .rp-tcap, .report .calc-h, .report .rbox .vk { break-after: avoid; }
+  .report tr, .report table.kv, .report .kpis, .report figure, .report .verdict { break-inside: avoid; }
+  .report thead { display: table-header-group; }
+  .report table.sig { break-inside: avoid; break-before: avoid; }
+  .report table + p.note, .report table + .note { break-before: avoid; }
+  .report .abox { break-before: avoid; }
+}
 .report .rbox, .report .abox { border: 1.5px solid #1d232b; padding: 6px 10px; margin: 10px 0; font-size: 11px; break-inside: avoid; }
 .report .rbox .vk, .report .abox .vk { display: block; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 3px; }
 .report .rbox small, .report .abox small { display: block; color: #3a434e; font-size: 9.5px; margin-top: 3px; }

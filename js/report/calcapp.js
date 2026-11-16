@@ -27,11 +27,11 @@ function block(N, { name = '', inputs = [], assumptions = [], refs = [], working
     <h3 class="rp-h3">2 Assumptions</h3>${assumptions.length ? `<ul class="calc-list">${assumptions.map((a) => `<li>${a}</li>`).join('')}</ul>` : '<p class="note">None beyond the inputs listed.</p>'}
     <h3 class="rp-h3">3 References</h3><p class="calc-refs">${refs.map(h).join('; ')}.</p>
     <h3 class="rp-h3">4 Working</h3>${typeof working === 'function' ? working() : working}
-    <h3 class="rp-h3">5 Result</h3>
+    <div class="calc-res"><h3 class="rp-h3">5 Result</h3>
     ${results.length ? `${N.table(name ? name + ' — calculated result' : 'Calculated result')}<table class="grid small wrap calc-out"><thead><tr><th>Item</th><th>Calculated${vm('C')}</th><th>Limit</th><th>Result${vm('C')}</th></tr></thead><tbody>
       ${results.map(([i, v, l, r, k]) => `<tr${k ? ` data-k="${h(k)}"` : ''}><td>${i}</td><td data-c="v">${v}</td><td>${l}</td><td>${r}</td></tr>`).join('')}
     </tbody></table>` : ''}${resultNote ? `<p class="note">${resultNote}</p>` : ''}
-    ${assessHTML}
+    ${assessHTML}</div>
   </div>`;
 }
 /** A worked line: formula, the numbers in it, and the answer. */
@@ -254,4 +254,5 @@ export const CALC_CSS = `
 .report .calc .calc-reg { margin: 6px 0 8px; } .report .calc .calc-reg > b { display: block; margin-bottom: 2px; }
 .report .calc .calc-assess { border: 1px solid #8a939d; padding: 5px 8px; margin: 8px 0; font-size: 10.5px; } .report .calc .calc-assess.none { border-style: dashed; color: #3a434e; }
 .report .calc .calc-refs { font-size: 10.5px; } .report .calc .calc-list { margin: 0 0 6px 16px; padding: 0; font-size: 10.5px; }
-.report .calc h3.rp-h3 { font-size: 11px; margin: 12px 0 4px; }`;
+.report .calc h3.rp-h3 { font-size: 11px; margin: 12px 0 4px; }
+@media print { .report .calc .calc-res { break-inside: avoid; } .report .calc .calc-step { break-inside: avoid; } }`;

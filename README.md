@@ -7,6 +7,33 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Report improvements — R7: print quality (v3.29.0)
+
+Page breaks were tuned with a new audit tool, `tests/tools/print-audit.mjs` (Playwright and poppler's `pdftotext`):
+
+```
+node tests/tools/print-audit.mjs <job.json> [out.pdf] [--a4] [--tabloid] [--portrait]
+```
+
+It prints the report and lists pages that print badly: **short** pages (under 35 % full mid-chapter),
+**orphans** (a page ending on a section heading or table caption), and **split** result / assessment boxes. Chapter
+endings and the page before a drawing sheet are reported separately, as information. (It hides the DRAFT watermark
+while printing, so the watermark is not read as page content.)
+
+Run across the seven fixture jobs (one metric), a 1,000-indication tank, A4, 11 × 17 and portrait drawings. Changes:
+
+- Headings, table captions and box titles stay with what follows; table rows, key-value tables, figures, boxes and
+  each calculation appendix's result section do not split; a note stays with the table above it; table headers repeat
+  on continued pages.
+- Drawing sheets close their chapter: the floor plan after the repairs, both roof plans after the rim seal section, so
+  the text pages before them are not cut short. The settlement results and edge summary now come before the
+  settlement figure page.
+- Long sections (repairs, nozzles) may break across pages; the forced break before the rim seal section is gone.
+
+Result: no orphaned headings or captions, no lone note lines and no short mid-chapter pages in any of the test jobs;
+the demo report is 54 pages on Letter (was 57), the 1,000-indication tank 145 pages and prints in about 9 seconds.
+`tests/r7print.test.mjs` keeps the print rules and the drawing placement in place.
+
 ## Report improvements — R6: value marks, results and assessments, photos, deficiencies (v3.28.0)
 
 - **Value marks throughout** (key in the front matter): column headers carry M / C / E / O, and a column that mixes
@@ -659,6 +686,7 @@ Nothing in `tests/` or `package.json` is used by the app, which still has no dep
 - `node tests/tools/report-content-diff.mjs` — checks that every table cell, paragraph, heading, drawing and photo in
   the recorded report of each test job is still in the report the code builds now. Run it before re-recording the
   report golden files.
+- `node tests/tools/print-audit.mjs <job.json>` — prints a job's report and lists pages that print badly (R7).
 - `node tests/tools/screens-diff.mjs <old copy> <new copy>` — renders every screen with the demo tank in
   two copies of the app and reports any difference in the HTML. Used to confirm a refactoring step
   changes nothing on screen.
