@@ -445,6 +445,7 @@ export const SHEET_CSS = `
 .report .dwg.port .dwg-side { border-left: 0; border-top: 1px solid #1d232b; display: grid; grid-template-columns: 1fr 1fr; }
 .report .dwg.port .dwg-side .dwg-tb { grid-column: 1 / -1; }
 .report .rp-anchor { display: block; height: 0; }
+.report .grid.wrap td, .report .grid.wrap td:nth-last-child(2) { white-space: normal; overflow-wrap: break-word; }
 .report sup.vm { font-size: 7px; font-weight: 700; color: #3a434e; border: 0.5px solid #8a939d; border-radius: 2px; padding: 0 1.5px; margin-left: 2px; vertical-align: super; line-height: 1; }
 .report .exec-scope { font-size: 11px; margin: 0 0 8px; }
 .report .verdict .vk { display: block; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; opacity: .8; margin-bottom: 2px; }
