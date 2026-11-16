@@ -1,10 +1,10 @@
 // Service worker: cache-first app shell so the app runs fully offline.
 // Bump CACHE when you publish changes so installed copies update.
-const CACHE = 'tank-floor-v3.30.0';
+const CACHE = 'tank-floor-v3.31.0';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest', './css/app.css',
   './js/app.js', './js/db.js', './js/units.js', './js/geometry.js', './js/calc.js', './js/map.js',
-  './js/export.js', './js/report.js', './js/report/frame.js', './js/report/front.js', './js/report/floor.js', './js/report/calcapp.js', './js/model.js', './js/demo.js', './js/builder.js', './js/shell.js', './js/roof.js', './js/xlsx.js', './js/loader.js', './js/seal.js', './js/settle.js', './js/tables.js', './js/design.js', './js/sections.js', './js/patches.js', './js/registry.js', './js/equipment.js', './js/personnel.js', './js/sources.js', './js/small.js', './js/util.js', './js/ui.js', './js/cards.js', './js/migrations.js', './js/saver.js', './js/journal.js', './js/integrity.js', './js/backup.js', './js/validate.js', './js/issuedfile.js', './js/audit.js', './js/prune.js', './js/duplicates.js', './js/revdiff.js', './js/app/state.js', './js/app/fields.js', './js/app/nav.js', './js/app/actions.js',
+  './js/export.js', './js/report.js', './js/report/frame.js', './js/report/front.js', './js/report/floor.js', './js/report/calcapp.js', './js/model.js', './js/demo.js', './js/builder.js', './js/shell.js', './js/roof.js', './js/xlsx.js', './js/loader.js', './js/seal.js', './js/settle.js', './js/tables.js', './js/design.js', './js/sections.js', './js/patches.js', './js/registry.js', './js/equipment.js', './js/personnel.js', './js/sources.js', './js/small.js', './js/smallcalc.js', './js/util.js', './js/ui.js', './js/cards.js', './js/migrations.js', './js/saver.js', './js/journal.js', './js/integrity.js', './js/backup.js', './js/validate.js', './js/issuedfile.js', './js/audit.js', './js/prune.js', './js/duplicates.js', './js/revdiff.js', './js/app/state.js', './js/app/fields.js', './js/app/nav.js', './js/app/actions.js',
   './js/views/codetables.js',
   './js/views/report.js', './js/views/r2fields.js', './js/views/small.js',
   './js/views/settle.js',

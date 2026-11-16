@@ -71,6 +71,7 @@ export function defaultSmall() {
     lim: { twist: null, plumb: null, edge: null, edgeDist: null, refs: '', edgeRefs: '' }, // entered limits (12R1 or company); blank = none
     r12int: { ut: null, ext: null, int: null, refs: '' },                      // 12R1 interval rules, years, entered
     intOv: { utDone: '', utNot: '', extDone: '', extNot: '', intDone: '', intNot: '' },
+    yrs: { shell: null, roof: null },                                          // years in service for CR; blank = the tank age (API 653 page)
     followup: '', fit: '', fitNote: ''
   };
 }
@@ -85,7 +86,7 @@ export function migrateSmall(s) {
   return {
     ...b, ...x, items,
     proj: arr(x.proj, b.proj), opp: arr(x.opp, b.opp), tilt: arr(x.tilt, b.tilt), edge: arr(x.edge, b.edge),
-    basis: { ...b.basis, ...obj(x.basis) }, lim: { ...b.lim, ...obj(x.lim) }, r12int: { ...b.r12int, ...obj(x.r12int) }, intOv: { ...b.intOv, ...obj(x.intOv) }
+    basis: { ...b.basis, ...obj(x.basis) }, lim: { ...b.lim, ...obj(x.lim) }, r12int: { ...b.r12int, ...obj(x.r12int) }, intOv: { ...b.intOv, ...obj(x.intOv) }, yrs: { ...b.yrs, ...obj(x.yrs) }
   };
 }
 

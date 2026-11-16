@@ -1857,6 +1857,43 @@ export default {
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },
+  async 'small tank S2: the checklist shows thickness, rates, intervals, tilt and edge results as readings are typed'({ browser, url, appPage }) {
+    const page = await appPage(browser, url, { demo: false });
+    const { readFileSync } = await import('node:fs');
+    const job = JSON.parse(readFileSync(new URL('../small/small-tank.json', import.meta.url), 'utf8'));
+    await page.evaluate(async (j) => { const { db } = await import('./js/db.js'); await db.putJob(j); const { openJob } = await import('./js/views/jobs.js'); await openJob(j.id, 'small'); }, job);
+    await page.waitForFunction(() => window.tfi.job()?.id === 'small-tank-fixture');
+    await page.evaluate(() => window.tfi.go('small')); await page.waitForSelector('.sm-page');
+    const sec = (n) => page.$eval(`.sm-page > section.card:nth-of-type(${n})`, (e) => e.innerText);
+    // 8: thickness table (fixture values; see tests/smallcalc.test.mjs)
+    const th = await sec(7);
+    assert.match(th, /Floor\s+0\.250\s+0\.080\s+30\s+0\.0077\s+0\.100\s+0/i);
+    assert.match(th, /After the repairs: 11\.7 yr/);
+    assert.match(th, /Shell \(course 1\)\s+0\.250\s+0\.231\s+30\s+0\.0006\s+0\.100\s+30 \+/i);
+    // 7: intervals
+    const iv = await sec(6);
+    assert.match(iv, /15 yr · 2041-11-16/); assert.match(iv, /5 yr · 2031-11-16/); assert.match(iv, /11\.7 yr/); assert.match(iv, /§6\.3\.3\.2/);
+    // tilt: typing an elevation updates the result and keeps focus on the next field
+    assert.match(await page.$eval('#sm-x-settle .sm-res', (e) => e.innerText), /Acceptable/);
+    await page.fill('[data-bind="small.lim.plumb"]', '0.5'); await page.press('[data-bind="small.lim.plumb"]', 'Tab');
+    await page.waitForFunction(() => /Exceeds/.test(document.querySelector('#sm-x-settle .sm-res')?.innerText || ''));
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset?.bind), 'small.lim.refs', 'focus moved on to the next field');
+    // edge: station 2 exceeds the entered 1.5 in limit; switching to Annex B shows its allowable
+    assert.match(await page.$eval('#sm-i-edge', (e) => e.innerText), /Exceeds/);
+    await page.selectOption('[data-bind="small.basis.settle"]', '653');
+    await page.waitForFunction(() => /no limits to enter/.test(document.querySelector('#sm-i-edge')?.innerText || ''));
+    assert.match(await page.$eval('#sm-x-settle .sm-res', (e) => e.innerText), /No Annex B survey/);
+    // interval override is kept beside the calculated value
+    await page.fill('[data-bind="small.intOv.extDone"]', '2028-06-01'); await page.press('[data-bind="small.intOv.extDone"]', 'Tab');
+    await page.waitForFunction(() => window.tfi.job().small.intOv.extDone === '2028-06-01');
+    // 12R1 intervals: entered maximums
+    await page.selectOption('[data-bind="small.basis.intervals"]', '12r1');
+    await page.waitForSelector('[data-bind="small.r12int.ut"]');
+    await page.fill('[data-bind="small.r12int.ut"]', '10'); await page.press('[data-bind="small.r12int.ut"]', 'Tab');
+    await page.waitForFunction(() => /10 yr · 2036-11-16/.test(document.querySelectorAll('.sm-page > section.card')[5]?.innerText || ''));
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
   async 'report R2: personnel, calibration, design sources, scope, assessments and document control are entered and printed'({ browser, url, appPage }) {
     const page = await appPage(browser, url);
     const go = async (v) => { await page.evaluate((x) => window.tfi.go(x), v); await page.waitForTimeout(150); };

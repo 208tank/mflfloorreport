@@ -1,0 +1,696 @@
+{
+ "units": "imperial",
+ "inspDate": "2026-11-16",
+ "tank": {
+  "diameter": 6553.2,
+  "height": 7315.200000000001,
+  "tBottom": 6.35,
+  "tAnnular": null,
+  "bottomType": "Lap welded",
+  "coating": "None",
+  "cp": false,
+  "rpb": false,
+  "yearBuilt": "1996",
+  "lastInternal": "",
+  "prevReport": "",
+  "code": "API 650",
+  "edition": "",
+  "supp": "",
+  "sg": 1.02,
+  "fillH": 6705.6,
+  "opTemp": null,
+  "src": {},
+  "maker": "Acme Tank Works",
+  "serialNo": "AT-96-114",
+  "capacity": "1,550 bbl",
+  "matFloor": "A36",
+  "matShell": "A36",
+  "matRoof": "A36"
+ },
+ "calc": {
+  "years": 30,
+  "stprYears": null,
+  "Or": 10,
+  "mrtBottom": 2.54,
+  "mrtAnnular": null,
+  "annCA": null,
+  "czDist": 76.2,
+  "czLimit": null,
+  "czLimitReason": "",
+  "shellTmin": null,
+  "mflThresholdPct": 20,
+  "coated": false,
+  "coatConfirmed": false,
+  "cp": false,
+  "rbi": false,
+  "includeUnverified": false,
+  "stprOverride": null,
+  "uprOverride": null,
+  "autoPatch": true,
+  "patchL": 304.8,
+  "patchW": 304.8,
+  "patchMargin": 50.8,
+  "patchT": 6.35
+ },
+ "nozzles": [
+  {
+   "id": "n0009",
+   "mark": "N1",
+   "type": "Water draw / drain",
+   "angle": 200,
+   "size": 76.19999999999999,
+   "elev": 152.39999999999998,
+   "service": "Drain"
+  },
+  {
+   "id": "n0010",
+   "mark": "MH1",
+   "type": "Manway",
+   "angle": 90,
+   "size": 609.5999999999999,
+   "elev": 508,
+   "service": ""
+  }
+ ],
+ "indications": [
+  {
+   "id": "i0011",
+   "repair": "auto",
+   "created": 1794800000000,
+   "no": "001",
+   "plate": "r0c0",
+   "x": 300,
+   "y": 400,
+   "result": "ss",
+   "utMin": 4.3180000000000005,
+   "mflPct": 30,
+   "critical": false,
+   "region": "bottom"
+  },
+  {
+   "id": "i0012",
+   "repair": "auto",
+   "created": 1794800000000,
+   "no": "002",
+   "plate": "r-1c0",
+   "x": 800,
+   "y": 600,
+   "result": "ps",
+   "vtDepth": 1.5239999999999998,
+   "mflPct": 25,
+   "critical": false,
+   "region": "bottom"
+  },
+  {
+   "id": "i0013",
+   "repair": "auto",
+   "created": 1794800000000,
+   "no": "003",
+   "plate": "r-1c0",
+   "x": 500,
+   "y": 500,
+   "result": "ss",
+   "utMin": 2.032,
+   "mflPct": 65,
+   "critical": false,
+   "region": "bottom"
+  }
+ ],
+ "repaired": [
+  "i0011",
+  "i0013"
+ ],
+ "courses": [
+  {
+   "id": "c0001",
+   "no": 1,
+   "z0": 0,
+   "z1": 2438.4,
+   "tNom": 6.35,
+   "tMin": 2.54
+  },
+  {
+   "id": "c0002",
+   "no": 2,
+   "z0": 2438.4,
+   "z1": 4876.8,
+   "tNom": 4.762499999999999,
+   "tMin": 2.54
+  },
+  {
+   "id": "c0003",
+   "no": 3,
+   "z0": 4876.8,
+   "z1": 7315.200000000001,
+   "tNom": 4.762499999999999,
+   "tMin": 2.54
+  }
+ ],
+ "rd": {
+  "0.0": {
+   "25.4": 6.248399999999999,
+   "177.8": 6.223,
+   "330.2": 6.1975999999999996,
+   "482.6": 6.248399999999999,
+   "914.4": 6.223,
+   "2438.4": 4.724399999999999,
+   "4267.2": 4.699,
+   "4876.8": 4.699,
+   "6705.6": 4.6735999999999995
+  },
+  "90.0": {
+   "25.4": 6.223,
+   "177.8": 6.1975999999999996,
+   "330.2": 6.248399999999999,
+   "482.6": 6.223,
+   "914.4": 6.1975999999999996,
+   "2438.4": 4.699,
+   "4267.2": 4.6735999999999995,
+   "4876.8": 4.6735999999999995,
+   "6705.6": 4.648199999999999
+  },
+  "180.0": {
+   "25.4": 6.1975999999999996,
+   "177.8": 5.8674,
+   "330.2": 6.223,
+   "482.6": 6.1975999999999996,
+   "914.4": 6.248399999999999,
+   "2438.4": 4.6735999999999995,
+   "4267.2": 4.571999999999999,
+   "4876.8": 4.648199999999999,
+   "6705.6": 4.521199999999999
+  },
+  "270.0": {
+   "25.4": 6.248399999999999,
+   "177.8": 6.223,
+   "330.2": 6.1975999999999996,
+   "482.6": 6.248399999999999,
+   "914.4": 6.223,
+   "2438.4": 4.724399999999999,
+   "4267.2": 4.699,
+   "4876.8": 4.699,
+   "6705.6": 4.6735999999999995
+  }
+ },
+ "roof": {
+  "kind": "Cone roof",
+  "support": "Self supported",
+  "slope": "",
+  "tNom": 4.762499999999999,
+  "tMin": 2.2859999999999996,
+  "notes": "",
+  "pts": [
+   {
+    "id": "p0004",
+    "label": "CTR",
+    "angle": 0,
+    "r": 0,
+    "t": 4.571999999999999
+   },
+   {
+    "id": "p0005",
+    "label": "R1",
+    "angle": 0,
+    "r": 2438.4,
+    "t": 4.368799999999999
+   },
+   {
+    "id": "p0006",
+    "label": "R2",
+    "angle": 90,
+    "r": 2438.4,
+    "t": 3.8099999999999996
+   },
+   {
+    "id": "p0007",
+    "label": "R3",
+    "angle": 180,
+    "r": 2438.4,
+    "t": 4.191
+   },
+   {
+    "id": "p0008",
+    "label": "R4",
+    "angle": 270,
+    "r": 2438.4,
+    "t": 4.4704
+   }
+  ]
+ },
+ "small": {
+  "title": "oos",
+  "items": {
+   "x-lot": {
+    "rating": "good",
+    "text": ""
+   },
+   "x-proj": {
+    "rating": "fair",
+    "text": ""
+   },
+   "x-shell": {
+    "rating": "good",
+    "text": ""
+   },
+   "x-roof": {
+    "rating": "fair",
+    "text": ""
+   },
+   "x-noz": {
+    "rating": "good",
+    "text": ""
+   },
+   "x-instr": {
+    "rating": "good",
+    "text": ""
+   },
+   "x-opp": {
+    "rating": "good",
+    "text": ""
+   },
+   "x-settle": {
+    "rating": "good",
+    "text": ""
+   },
+   "i-floor": {
+    "rating": "poor",
+    "text": "Soil-side pitting at 003; MFL indications proven up by UT."
+   },
+   "i-fsw": {
+    "rating": "good",
+    "text": ""
+   },
+   "i-shell": {
+    "rating": "good",
+    "text": ""
+   },
+   "i-roof": {
+    "rating": "fair",
+    "text": ""
+   },
+   "i-noz": {
+    "rating": "good",
+    "text": ""
+   },
+   "i-acc": {
+    "rating": "na",
+    "text": ""
+   },
+   "i-edge": {
+    "rating": "good",
+    "text": ""
+   },
+   "insul": {
+    "rating": "na",
+    "text": ""
+   }
+  },
+  "proj": [
+   {
+    "id": "j0014",
+    "loc": "N",
+    "t": 6.095999999999999,
+    "len": 25.4
+   },
+   {
+    "id": "j0015",
+    "loc": "E",
+    "t": 5.588,
+    "len": 19.049999999999997
+   },
+   {
+    "id": "j0016",
+    "loc": "S",
+    "t": 2.2859999999999996,
+    "len": 12.7
+   },
+   {
+    "id": "j0017",
+    "loc": "W",
+    "t": 5.842,
+    "len": 6.35
+   }
+  ],
+  "opp": [
+   {
+    "id": "d0018",
+    "dev": "PVRV",
+    "serial": "PV-2231",
+    "press": "8 oz/in²",
+    "vac": "0.5 oz/in²",
+    "svc": "2025-06-10"
+   },
+   {
+    "id": "d0019",
+    "dev": "Gauge hatch",
+    "serial": "GH-118",
+    "press": "16 oz/in²",
+    "vac": "—",
+    "svc": "2025-06-10"
+   }
+  ],
+  "tilt": [
+   {
+    "id": "t0020",
+    "loc": "N",
+    "elev": 0,
+    "lean": 2.54
+   },
+   {
+    "id": "t0021",
+    "loc": "E",
+    "elev": -6.35,
+    "lean": null
+   },
+   {
+    "id": "t0022",
+    "loc": "S",
+    "elev": -13.97,
+    "lean": -1.5239999999999998
+   },
+   {
+    "id": "t0023",
+    "loc": "W",
+    "elev": -3.8099999999999996,
+    "lean": 0.508
+   }
+  ],
+  "level": 1219.2,
+  "edge": [
+   {
+    "id": "e0024",
+    "st": "1",
+    "max": 12.7,
+    "bo": 457.2
+   },
+   {
+    "id": "e0025",
+    "st": "2",
+    "max": 44.449999999999996,
+    "bo": 508
+   },
+   {
+    "id": "e0026",
+    "st": "3",
+    "max": 30.479999999999997,
+    "bo": 762
+   },
+   {
+    "id": "e0027",
+    "st": "4",
+    "max": 7.619999999999999,
+    "bo": 304.79999999999995
+   }
+  ],
+  "basis": {
+   "settle": "small",
+   "intervals": "653"
+  },
+  "lim": {
+   "twist": null,
+   "plumb": null,
+   "edge": 38.099999999999994,
+   "edgeDist": 609.5999999999999,
+   "refs": "",
+   "edgeRefs": "company rule (test)"
+  },
+  "r12int": {
+   "ut": null,
+   "ext": null,
+   "int": null,
+   "refs": ""
+  },
+  "intOv": {
+   "utDone": "",
+   "utNot": "",
+   "extDone": "",
+   "extNot": "",
+   "intDone": "",
+   "intNot": ""
+  },
+  "yrs": {
+   "shell": null,
+   "roof": null
+  },
+  "followup": "Clean and dry the floor before the next internal inspection.",
+  "fit": "fit",
+  "fitNote": ""
+ },
+ "app": {
+  "years": 30,
+  "thick": {
+   "floor": {
+    "key": "floor",
+    "label": "Floor",
+    "tNom": 6.35,
+    "tAct": 2.032,
+    "years": 30,
+    "cr": 0.1947333333333333,
+    "tMin": 2.54,
+    "rl": 0,
+    "rlAfter": 11.739130434782608,
+    "area": "Bottom plates",
+    "notEvaluated": false,
+    "basis": "API 653 §4.4.5: T-act = RT, CR = StPᵣ + UPᵣ, RL = the largest Oᵣ for which MRT ≥ the limit"
+   },
+   "shell": {
+    "key": "shell",
+    "course": 1,
+    "label": "Shell course 1",
+    "tNom": 6.35,
+    "tAct": 5.8674,
+    "years": 30,
+    "tMin": 2.54,
+    "tMinSrc": "API 653 §4.3.3.1",
+    "cr": 0.016086666666666655,
+    "rca": 3.3274,
+    "rl": 206.84210526315803
+   },
+   "courses": [
+    {
+     "key": "shell",
+     "course": 1,
+     "label": "Shell course 1",
+     "tNom": 6.35,
+     "tAct": 5.8674,
+     "years": 30,
+     "tMin": 2.54,
+     "tMinSrc": "API 653 §4.3.3.1",
+     "cr": 0.016086666666666655,
+     "rca": 3.3274,
+     "rl": 206.84210526315803
+    },
+    {
+     "key": "shell",
+     "course": 2,
+     "label": "Shell course 2",
+     "tNom": 4.762499999999999,
+     "tAct": 4.571999999999999,
+     "years": 30,
+     "tMin": 2.54,
+     "tMinSrc": "API 653 §4.3.3.1",
+     "cr": 0.006350000000000004,
+     "rca": 2.031999999999999,
+     "rl": 319.99999999999966
+    },
+    {
+     "key": "shell",
+     "course": 3,
+     "label": "Shell course 3",
+     "tNom": 4.762499999999999,
+     "tAct": 4.521199999999999,
+     "years": 30,
+     "tMin": 2.54,
+     "tMinSrc": "API 653 §4.3.3.1",
+     "cr": 0.008043333333333328,
+     "rca": 1.9811999999999994,
+     "rl": 246.3157894736843
+    }
+   ],
+   "roof": {
+    "key": "roof",
+    "label": "Fixed roof",
+    "tNom": 4.762499999999999,
+    "tAct": 3.8099999999999996,
+    "years": 30,
+    "tMin": 2.2859999999999996,
+    "holes": 0,
+    "cr": 0.03174999999999999,
+    "rca": 1.524,
+    "rl": 48.00000000000002
+   }
+  },
+  "intervals": {
+   "basis": "653",
+   "ut": {
+    "done": {
+     "years": 15,
+     "src": "API 653 §6.3.3.2: lesser of 15 years and RCA / 2N (course 1)",
+     "date": "2041-11-16"
+    },
+    "not": {
+     "years": 15,
+     "src": "API 653 §6.3.3.2: lesser of 15 years and RCA / 2N (course 1)",
+     "date": "2041-11-16"
+    }
+   },
+   "ext": {
+    "done": {
+     "years": 5,
+     "src": "API 653 §6.3.2.1: lesser of 5 years and RCA / 4N (course 1)",
+     "date": "2031-11-16"
+    },
+    "not": {
+     "years": 5,
+     "src": "API 653 §6.3.2.1: lesser of 5 years and RCA / 4N (course 1)",
+     "date": "2031-11-16"
+    }
+   },
+   "int": {
+    "done": {
+     "years": 11.739130434782608,
+     "src": "API 653 §6.4.2: floor Oᵣ (§4.4.5) after the repairs, not over 20 years (§6.4.2.2.1)",
+     "date": "2038-08-13"
+    },
+    "not": {
+     "years": 0,
+     "src": "API 653 §6.4.2: floor Oᵣ (§4.4.5) as found, not over 20 years (§6.4.2.2.1)",
+     "date": "2026-11-16"
+    }
+   }
+  },
+  "tilt": {
+   "basis": "small",
+   "planar": {
+    "D": 6553.2,
+    "H": 7315.200000000001,
+    "z": {
+     "N": 0,
+     "E": -6.35,
+     "S": -13.97,
+     "W": -3.8099999999999996
+    },
+    "lean": {
+     "N": 2.54,
+     "E": null,
+     "S": -1.5239999999999998,
+     "W": 0.508
+    },
+    "haveElev": true,
+    "haveLean": true,
+    "sx": -0.0003875968992248062,
+    "sy": 0.002131782945736434,
+    "slope": 0.0021667325363370054,
+    "lowDeg": 169.69515353123393,
+    "diff": 14.199031657123664,
+    "twist": -0.9525000000000001,
+    "plumbElev": 15.850081849812463,
+    "freeboard": 7.099515828561832,
+    "leanMax": 15.240000000000002,
+    "plumbLevel": null,
+    "plumb": 15.850081849812463,
+    "drain": {
+     "mark": "N1",
+     "angle": 200,
+     "off": 30.304846468766073,
+     "rel": "toward"
+    },
+    "smaxRef": 20.323430530171443
+   },
+   "twistTrig": null,
+   "refs": "",
+   "plumb": 15.850081849812463,
+   "plumbLim": 73.152,
+   "limSrc": "API 653 §10.5.2.1",
+   "ok": true,
+   "twistOk": null,
+   "status": "Acceptable"
+  },
+  "edge": {
+   "basis": "small",
+   "rows": [
+    {
+     "st": "1",
+     "B": 12.7,
+     "R": 457.2,
+     "allow": 38.099999999999994,
+     "pct": 33.333333333333336,
+     "status": "Acceptable",
+     "ref": 50.8
+    },
+    {
+     "st": "2",
+     "B": 44.449999999999996,
+     "R": 508,
+     "allow": 38.099999999999994,
+     "pct": 116.66666666666667,
+     "status": "Exceeds",
+     "ref": 50.8
+    },
+    {
+     "st": "3",
+     "B": 30.479999999999997,
+     "R": 762,
+     "allow": 38.099999999999994,
+     "status": "Beyond the limit’s distance",
+     "ref": 50.8
+    },
+    {
+     "st": "4",
+     "B": 7.619999999999999,
+     "R": 304.79999999999995,
+     "allow": 38.099999999999994,
+     "pct": 20,
+     "status": "Acceptable",
+     "ref": 50.8
+    }
+   ],
+   "limit": 38.099999999999994,
+   "dist": 609.5999999999999,
+   "src": "Entered limit (company rule (test))",
+   "status": "Exceeds"
+  },
+  "proj": [
+   {
+    "loc": "N",
+    "t": 6.095999999999999,
+    "w": 25.4,
+    "tMin": 2.54,
+    "wMin": 9.524999999999999,
+    "tOk": true,
+    "wOk": true,
+    "ok": true
+   },
+   {
+    "loc": "E",
+    "t": 5.588,
+    "w": 19.049999999999997,
+    "tMin": 2.54,
+    "wMin": 9.524999999999999,
+    "tOk": true,
+    "wOk": true,
+    "ok": true
+   },
+   {
+    "loc": "S",
+    "t": 2.2859999999999996,
+    "w": 12.7,
+    "tMin": 2.54,
+    "wMin": 9.524999999999999,
+    "tOk": false,
+    "wOk": true,
+    "ok": false
+   },
+   {
+    "loc": "W",
+    "t": 5.842,
+    "w": 6.35,
+    "tMin": 2.54,
+    "wMin": 9.524999999999999,
+    "tOk": true,
+    "wOk": false,
+    "ok": false
+   }
+  ]
+ }
+}

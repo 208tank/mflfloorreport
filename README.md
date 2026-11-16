@@ -7,6 +7,42 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Small tank report — S2: calculations (v3.31.0)
+
+The Small tank checklist now calculates (`js/smallcalc.js`, no browser APIs). Results show beside the inputs and
+update as readings are typed. No change to the full report or its calculations.
+
+- **8 Thickness and corrosion rates** — floor, shell and fixed roof: T-nom, T-act, years, CR = (T-nom − T-act) /
+  years, T-min and RL = (T-act − T-min) / CR, shown as **30 +** when there is no loss or the life is over 30 years.
+  The shell row is the course with the shortest life (all courses listed). The floor uses the API 653 §4.4.5
+  evaluation the app already makes, **as found** (every repair set to *No*): T-act = RT, CR = StPᵣ + UPᵣ, T-min = the
+  governing area's limit, RL = the largest Oᵣ it allows; the life **after the repairs** is shown beside it. Years are
+  the tank age from the API 653 page; the shell and roof can have their own.
+- **7 Inspection intervals**, each with a due date from the inspection date:
+  - API 653: UT thickness §6.3.3.2 (5 years when the corrosion rate is not known, else the lesser of 15 years and
+    RCA / 2N), external §6.3.2.1 (lesser of 5 years and RCA / 4N), both from the shell course with the shortest
+    life; internal §6.4.2 — the floor Oᵣ, not over 20 years (30 with a release prevention barrier, §6.4.2.2.1).
+    *Recommendations completed* uses the floor after its repairs, *not completed* the floor as found.
+  - API 12R1: the maximum intervals entered from the user's copy, shortened to the remaining life where that is less.
+  - An override (a date or years) is kept beside the calculated value.
+- **Settlement (9.8)** — the small-tank planar method from the four stations: height difference across the diameter
+  and the low side's bearing; the twist residual ±[(N + S) − (E + W)] / 4 (against the trigger if entered, else
+  reported with the Annex B Sₘₐₓ for four stations as reference only); out of plumb from the elevations (tilt × shell
+  height) and from the level readings (largest reading scaled to the shell height), the larger compared with API 653
+  §10.5.2.1 or an entered limit; the loss of freeboard on the low side; whether the low side is toward the drain.
+  With the Annex B basis the full settlement survey is used; with API 12R1 the entered limit (none entered: no pass
+  or fail).
+- **Edge settlement (10.7)** — each station against the entered limit, within the entered distance of the shell
+  (e.g. a company rule), or against Annex B Fig. B.11 (Bew, lap welds taken as parallel to the shell); the Annex B
+  value is always shown for reference.
+- **Floor projections (9.2)** — each location against API 653 §4.4.5.7 (thickness and width).
+
+**Checks.** `tests/small/small-tank.json` is a 21.5 ft test tank on the small template (built by
+`tests/tools/make-small-fixture.mjs`). `tests/smallcalc.test.mjs` checks the rules with worked values;
+`tests/handcheck/small_handcheck.py` recalculates the test tank independently from its raw inputs
+(`small-export.mjs` exports them): **41 of 41 values agree** (`small-handcheck.md`). The browser check "small tank S2"
+types readings and limits on the checklist and checks the results.
+
 ## Small tank report — S1: template choice and the checklist (v3.30.0, schema 6)
 
 First of four stages adding a short report for small-diameter tanks (plan: S1 data and screen, S2 calculations,
@@ -1228,6 +1264,7 @@ every limit is editable.
 | `js/views/r2fields.js` | Entry cards for the schema 5 fields and their list handlers |
 | `js/small.js` | Small tank report template: checklist items, defaults, suggestion (schema 6) |
 | `js/views/small.js` | Small tank checklist screen and the Report card on Tank setup |
+| `js/smallcalc.js` | Small tank calculations: thickness and rates, intervals, planar tilt, edge settlement (S2) |
 | `js/report/frame.js` | Report frame: chapter order and switches, numbering, cover, document control, contents, value key, page set-up, running header and footer |
 | `js/export.js` | CSV, SVG/PNG export |
 | `js/db.js` | IndexedDB storage (jobs, photos and the photo bin, light job cards, registry, settings, revisions, audit, imports); job + photo writes are one transaction |
