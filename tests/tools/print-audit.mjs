@@ -47,7 +47,7 @@ pages.forEach((p, k) => {
   const fill = (Math.max(...body.map((w) => w.y1)) - top) / (bot - top), last = lines.at(-1).t.join(' '), first = lines[0].t.join(' ');
   const next = pages[k + 1], nextFirst = (() => { if (!next) return ''; const nb = next.words.filter((w) => w.y0 > top - 2 && w.y1 < bot + 2 && !/^DRAFT$/.test(w.t)).sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0); return nb.length ? nb.filter((w) => Math.abs(w.y0 - nb[0].y0) < 2.5).map((w) => w.t).join(' ') : ''; })();
   const nextStartsChapter = /^([0-9]{1,2}|[A-Z]) [A-Z]/.test(nextFirst) && next && next.words.some((w) => w.y0 < top + 40 && w.t.length > 2);
-  const isList = lines.filter((l) => /^(Table|Figure) [0-9A-Z]+-\d+/.test(l.t.join(' '))).length > 4;
+  const isList = lines.filter((l) => /^(Table|Figure) [0-9A-Z]+-\d+/.test(l.t.join(' '))).length > 4 || (lines.length > 8 && lines.filter((l) => /^[0-9]{1,2}(\.[0-9]{1,2})? \S/.test(l.t.join(' '))).length >= 0.9 * lines.length); // the contents page
   if (!landscape && fill < 0.35 && next) issues.push({ page: k + 1, kind: nextStartsChapter ? 'short-chapter-end' : next.w > next.h ? 'short-before-sheet' : 'short', fill: Math.round(fill * 100) + '%', last });
   if (isList) return;
   if (/^Table [0-9A-Z]+-\d+/.test(last) || /^[0-9]{1,2}\.[0-9]+ [A-Z]/.test(last) || /^[1-5] (Inputs|Assumptions|References|Working|Result)$/.test(last)) issues.push({ page: k + 1, kind: 'orphan', last });

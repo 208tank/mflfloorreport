@@ -19,6 +19,8 @@ import { assembleReport, layoutOf, legendList, numbering, sheetHTML, swatch } fr
 import { assessBox, execCh, personnelCh, remMark, resultBox, scopeCh, tankCh, vm } from './report/front.js';
 import { floorParts } from './report/floor.js';
 import { calcAnnular, calcCritical, calcFloor, calcNozzles, calcPatches, calcRoof, calcSeal, calcSettle, calcShell } from './report/calcapp.js';
+import { buildSmallReport } from './report/small.js';
+import { isSmall } from './small.js';
 
 const yn = (b) => (b ? 'Yes' : 'No');
 const or = (v, d = '—') => (v === null || v === undefined || v === '' ? d : v);
@@ -39,6 +41,7 @@ export function legendHTML() {
 }
 
 export function buildReport(job, layout, calc, company, photos, opts) {
+  if (isSmall(job)) return buildSmallReport(job, layout, calc, company, photos, opts || {}); // S3: the small tank template
   const U = u(job), I = job.info || {}, T = job.tank || {}, C = calc.C;
   const t = (mm) => fmt(mm, 't', job);
   const inds = (job.indications || []).slice().sort((a, b) => String(a.no).localeCompare(String(b.no), undefined, { numeric: true }));

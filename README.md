@@ -7,6 +7,29 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Small tank report — S3: the report (v3.32.0)
+
+A job on the small tank template now prints the **small tank report** (`js/report/small.js`), in the template's order:
+
+1 Job information · 2 Tank static data (nameplate, materials and nominal thickness) · 3 Inspection summary (the
+summary text, fitness for service and the condition of every item) · 4 Code required recommendations · 5 Non-code
+recommendations (by the **Code required** tick) · 6 NDE scope and summary of results · 7 Inspection intervals
+(recommendations completed / not completed, with dates, or the entered override) · 8 Thickness and corrosion rates ·
+9 External inspection (9.1–9.8, each with its condition, comments and tables: floor projections, over-pressure
+devices, settlement readings and results) · 10 Internal inspection (10.1–10.7, edge settlement) · 11 Insulation ·
+12 Follow-up and sign-off (preparatory work, fit / unfit, inspectors and technicians with certification and a
+signature column).
+
+It uses the same frame as the full report: cover (with the job's title, In Service or Out of Service), document
+control, contents, value key, page header and footer, DRAFT watermark, issued-report freezing. Chapters run on without
+page breaks (the test tank prints on 10 Letter pages); the contents list chapters and sections only. On the Report
+screen, *Report sections and layout* shows the small report's order instead of the chapter switches. Every value is
+taken from `js/smallcalc.js` (S2). Full-report jobs print exactly as before (golden files unchanged).
+
+`tests/smallreport.test.mjs` checks the order, the code / non-code split, that the thickness, interval, tilt and edge
+values equal the calculation, ratings, item tables, sign-off and escaping; the browser check "small tank S3" opens the
+report and prints it. The print audit no longer reports the contents page as an orphan.
+
 ## Small tank report — S2: calculations (v3.31.0)
 
 The Small tank checklist now calculates (`js/smallcalc.js`, no browser APIs). Results show beside the inputs and
@@ -1264,6 +1287,7 @@ every limit is editable.
 | `js/views/r2fields.js` | Entry cards for the schema 5 fields and their list handlers |
 | `js/small.js` | Small tank report template: checklist items, defaults, suggestion (schema 6) |
 | `js/views/small.js` | Small tank checklist screen and the Report card on Tank setup |
+| `js/report/small.js` | The small tank report: chapters in the template order (S3) |
 | `js/smallcalc.js` | Small tank calculations: thickness and rates, intervals, planar tilt, edge settlement (S2) |
 | `js/report/frame.js` | Report frame: chapter order and switches, numbering, cover, document control, contents, value key, page set-up, running header and footer |
 | `js/export.js` | CSV, SVG/PNG export |

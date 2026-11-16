@@ -285,14 +285,14 @@ export function keyHTML() {
 }
 
 /** Contents: chapters with their numbered sections, appendices, then lists of tables and figures. */
-export function contentsHTML(items, num) {
+export function contentsHTML(items, num, { lists = true } = {}) {
   const rows = [];
   for (const it of items) {
     rows.push(`<tr class="l1"><td class="no">${h(it.label)}</td><td class="t"><a href="#${it.id}">${h(it.title)}</a></td></tr>`);
     for (const s of it.subs || []) rows.push(`<tr class="l2"><td class="no">${h(s.no)}</td><td class="t"><a href="#${s.id}">${h(s.title)}</a></td></tr>`);
   }
   const list = (title, arr, word) => (arr.length ? `<h3 class="rp-h3">${title}</h3><table class="rp-toc rp-lot">${arr.map((x) => `<tr><td class="no">${word} ${h(x.no)}</td><td class="t"><a href="#${x.id}">${h(x.title)}</a></td></tr>`).join('')}</table>` : '');
-  return `<table class="rp-toc">${rows.join('')}</table>${list('Tables', num.tables, 'Table')}${list('Figures', num.figures, 'Figure')}`;
+  return `<table class="rp-toc">${rows.join('')}</table>${lists ? list('Tables', num.tables, 'Table') + list('Figures', num.figures, 'Figure') : ''}`;
 }
 
 const STAGE_TXT = { upcoming: 'Upcoming', inspection: 'Inspection ongoing', reporting: 'Reporting', review: 'Peer review', complete: 'Complete' };
@@ -312,12 +312,12 @@ function controlHTML(job, history) {
     ${(D.dist || []).some((x) => x.name || x.org) ? `<h3 class="rp-h3">Distribution</h3><table class="grid small"><thead><tr><th>Name</th><th>Organisation</th><th>Copy / format</th></tr></thead><tbody>${D.dist.filter((x) => x.name || x.org).map((x) => `<tr><td>${h(x.name)}</td><td>${h(x.org)}</td><td>${h(x.copy)}</td></tr>`).join('')}</tbody></table>` : ''}`;
 }
 
-function coverHTML(job, company, scopeText, issued) {
+function coverHTML(job, company, scopeText, issued, cover = null) {
   const I = job.info || {};
   const kv = (rows) => `<table class="kv">${rows.filter(([, v]) => v).map(([k, v]) => `<tr><th>${k}</th><td>${h(v)}</td></tr>`).join('')}</table>`;
   return `<section class="rp-cover">
     <div>${company.logo ? `<img class="logo" src="${company.logo}" alt="">` : ''}<div class="co"><b>${h(company.name || '')}</b><br>${h(company.details || '').replace(/\n/g, '<br>')}</div></div>
-    <div><h1>Storage Tank Inspection Report</h1><div class="sub">API 653 — ${h(scopeText)}</div>
+    <div><h1>${h(cover?.title || 'Storage Tank Inspection Report')}</h1><div class="sub">${cover ? h(cover.sub || '') : `API 653 — ${h(scopeText)}`}</div>
       <div class="tank">${h(I.tankId || 'Tank')}</div>
       ${kv([['Client', I.client], ['Facility / site', I.site], ['Product', I.product], ['Inspection date', I.inspDate], ['Report number', I.reportNo], ['Work order', I.workOrder], ['Revision', job.rev ? `Rev ${job.rev} (${dateOf(job.savedAt)})` : 'Not yet saved to a job file']])}
       <div class="status">${issued ? 'ISSUED' : 'DRAFT'}</div></div>
@@ -326,7 +326,7 @@ function coverHTML(job, company, scopeText, issued) {
 
 /** Put the report together: front matter, then the chapters and appendices that have content, numbered in the
  *  order chosen. */
-export function assembleReport({ job, company, opts, layout, N, chapterBody, appendixBody, footer }) {
+export function assembleReport({ job, company, opts, layout, N, chapterBody, appendixBody, footer, cover = null, extraCSS = '', cls = '', tocLists = true }) {
   const I = job.info || {}, issued = job.status?.stage === 'complete';
   const items = [], chapters = [], apps = [];
   let no = 0;
@@ -355,15 +355,15 @@ export function assembleReport({ job, company, opts, layout, N, chapterBody, app
   const on = (k) => layout.front.find((f) => f.id === k)?.on;
   const scopeText = chapters.length ? layout.chapters.filter((c) => c.on && ['floor', 'shell', 'roof', 'nozzles', 'settle'].includes(c.id) && items.some((x) => x.id === 'ch-' + c.id)).map((c) => ({ floor: 'floor', shell: 'shell', roof: 'roof', nozzles: 'nozzles', settle: 'foundation and settlement' })[c.id]).join(', ') : '';
   const front = [];
-  if (on('cover')) front.push(coverHTML(job, company, scopeText || 'inspection', issued));
-  else front.push(`<header class="rp-head">${company.logo ? `<img class="logo" src="${company.logo}" alt="">` : ''}<div class="co"><b>${h(company.name || '')}</b><br>${h(company.details || '').replace(/\n/g, '<br>')}</div><div class="rp-title"><h1>Storage Tank Inspection Report</h1><div>API 653 — ${h(scopeText || 'inspection')}</div><div class="meta">${I.reportNo ? 'Report ' + h(I.reportNo) + ' · ' : ''}${h(I.inspDate || '')}</div></div></header>`);
+  if (on('cover')) front.push(coverHTML(job, company, scopeText || 'inspection', issued, cover));
+  else front.push(`<header class="rp-head">${company.logo ? `<img class="logo" src="${company.logo}" alt="">` : ''}<div class="co"><b>${h(company.name || '')}</b><br>${h(company.details || '').replace(/\n/g, '<br>')}</div><div class="rp-title"><h1>${h(cover?.title || 'Storage Tank Inspection Report')}</h1><div>${cover ? h(cover.sub || '') : `API 653 — ${h(scopeText || 'inspection')}`}</div><div class="meta">${I.reportNo ? 'Report ' + h(I.reportNo) + ' · ' : ''}${h(I.inspDate || '')}</div></div></header>`);
   if (on('control')) front.push(`<section class="rp-front"><h2>Document control</h2>${controlHTML(job, opts.history)}</section>`);
-  if (on('contents')) front.push(`<section class="rp-front"><h2>Contents</h2>${contentsHTML(items, N)}</section>`);
+  if (on('contents')) front.push(`<section class="rp-front"><h2>Contents</h2>${contentsHTML(items, N, { lists: tocLists })}</section>`);
   if (on('key')) front.push(`<section class="rp-front"><h2>Value types and abbreviations</h2>${keyHTML()}</section>`);
   const revText = job.rev ? `Rev ${job.rev} · ${dateOf(job.savedAt)}` : 'Not saved to a job file';
-  const style = FRAME_CSS + SHEET_CSS + CALC_CSS + pageCSS({ size: company.pageSize, company: company.name, tankId: I.tankId, reportNo: I.reportNo, revText, status: issued ? 'ISSUED' : 'DRAFT', drawOrient: layout.drawOrient, drawPaper: layout.drawPaper,
+  const style = FRAME_CSS + SHEET_CSS + CALC_CSS + extraCSS + pageCSS({ size: company.pageSize, company: company.name, tankId: I.tankId, reportNo: I.reportNo, revText, status: issued ? 'ISSUED' : 'DRAFT', drawOrient: layout.drawOrient, drawPaper: layout.drawPaper,
     hf: { ...hfOf(company), logoSrc: company.logo }, vals: hfVals(job, company) });
-  return `<article class="report rp2"><style>${style}</style>${issued ? '' : '<div class="rp-draft" aria-hidden="true">DRAFT</div>'}
+  return `<article class="report rp2${cls ? ' ' + cls : ''}"><style>${style}</style>${issued ? '' : '<div class="rp-draft" aria-hidden="true">DRAFT</div>'}
   ${front.join('\n')}
   ${chapters.join('\n')}
   ${apps.join('\n')}

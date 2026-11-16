@@ -1894,6 +1894,25 @@ export default {
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },
+  async 'small tank S3: the Report screen shows the small report in the template order and prints it'({ browser, url, appPage }) {
+    const page = await appPage(browser, url, { demo: false });
+    const { readFileSync } = await import('node:fs');
+    const job = JSON.parse(readFileSync(new URL('../small/small-tank.json', import.meta.url), 'utf8'));
+    await page.evaluate(async (j) => { const { db } = await import('./js/db.js'); await db.putJob(j); const { openJob } = await import('./js/views/jobs.js'); await openJob(j.id, 'report'); }, job);
+    await page.waitForSelector('#reportRoot .rp-small h2.rp-ch');
+    const heads = await page.$$eval('#reportRoot h2.rp-ch', (x) => x.map((e) => e.textContent.trim()));
+    assert.equal(heads[0], '1Job information'); assert.equal(heads.at(-1), '12Follow-up and sign-off'); assert.equal(heads.length, 12);
+    assert.match(await page.$eval('#reportRoot .rp-cover h1', (e) => e.textContent), /Out of Service Tank Inspection Report \(Small Diameter\)/);
+    await page.click('.rsec summary');
+    assert.match(await page.$eval('.rsec', (e) => e.innerText), /small tank report/i);
+    // changing the title on the checklist changes the report
+    await page.evaluate(() => { window.tfi.job().small.title = 'ins'; window.tfi.commit(); window.tfi.go('report'); });
+    await page.waitForFunction(() => /In Service/.test(document.querySelector('#reportRoot .rp-cover h1')?.textContent || ''));
+    const pdf = await page.pdf({ format: 'Letter' });
+    assert.ok(pdf.length > 10000);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
   async 'report R2: personnel, calibration, design sources, scope, assessments and document control are entered and printed'({ browser, url, appPage }) {
     const page = await appPage(browser, url);
     const go = async (v) => { await page.evaluate((x) => window.tfi.go(x), v); await page.waitForTimeout(150); };
