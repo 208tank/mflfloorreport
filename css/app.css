@@ -651,7 +651,12 @@ dialog.wide-dlg { max-width: 96vw; }
 .report .phfig { position: relative; display: block; line-height: 0; }
 .report .phfig img { width: 100%; height: auto; display: block; }
 .report .phfig .anno { position: absolute; inset: 0; width: 100%; height: 100%; }
-.report .sec-ph { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.report .sec-ph, .report .photos2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.report figure.ph2 { margin: 0; break-inside: avoid; }
+.report .phbox { display: flex; align-items: center; justify-content: center; aspect-ratio: 4 / 3; background: #f4f5f7; border: 1px solid #d5dae0; overflow: hidden; line-height: 0; }
+.report .phbox .phfig { max-width: 100%; max-height: 100%; }
+.report .phbox .phfig img { width: 100%; height: 100%; object-fit: fill; }
+.report figure.ph2 figcaption { font-size: 10.5px; margin-top: 4px; line-height: 1.35; }
 .report figure.phr { margin: 0; break-inside: avoid; } .report figure.phr figcaption { font-size: 11px; margin-top: 4px; line-height: 1.35; }
 .report .dthumb { width: 120px; margin-top: 4px; } .report .dthumb small { font-size: 10px; }
 .report .deft tr.closed td { color: #666; }

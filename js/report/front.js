@@ -10,12 +10,20 @@ import { hasFixed, hasFloating, ROOF_TYPES } from '../roof.js';
 import { coursesWithElev, shellHeight } from '../shell.js';
 import { courseDesigns } from '../design.js';
 import { fmt } from '../units.js';
-import { escText as h } from '../util.js';
+import { escText as h, escText } from '../util.js';
 
 const yn = (b) => (b ? 'Yes' : 'No');
 const blank = (v) => v === null || v === undefined || String(v).trim() === '';
 const para = (s) => h(s).replace(/\n/g, '<br>');
 /** A value-type mark (key in the front matter). */
+/** The mark for a remaining thickness by its source: from a UT reading C; nominal − VT pit depth or MFL estimate E. */
+export const remMark = (a) => (!a?.src ? '' : a.src === 'UT' ? vm('C') : vm('E'));
+/** Calculated result box (R6): what the calculation found, against its limit, and where the working is. */
+export const resultBox = (lines, appendix, cls = '') => `<div class="rbox ${cls}"><span class="vk">Calculated result${vm('C')}</span>${lines.filter(Boolean).map((l) => `<div>${l}</div>`).join('')}${appendix && [].concat(appendix).length ? `<small>Working: ${[].concat(appendix).length > 1 ? 'appendices' : 'appendix'} ${[].concat(appendix).map((x) => `“${escText(x)}”`).join(' and ')}.</small>` : ''}</div>`;
+/** Engineering assessment box (R6): the engineer's words as entered, or a plain statement that there are none. */
+export const assessBox = (a, what = '') => (a?.text
+  ? `<div class="abox"><span class="vk">Engineering assessment${vm('A')}${what ? ' — ' + escText(what) : ''}</span>${escText(a.text).replace(/\n/g, '<br>')}${a.by || a.date ? `<small>${escText([a.by, a.date].filter(Boolean).join(', '))}</small>` : ''}</div>`
+  : `<div class="abox none"><span class="vk">Engineering assessment${vm('A')}${what ? ' — ' + escText(what) : ''}</span>No engineering assessment entered.</div>`);
 export const vm = (k) => `<sup class="vm" title="${{ M: 'Measured', C: 'Calculated', E: 'Estimated', O: 'Inspector observation', A: 'Engineering assessment' }[k]}">${k}</sup>`;
 
 /* --------------------------------------------------------------------------- executive summary --- */

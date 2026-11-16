@@ -7,6 +7,28 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Report improvements — R6: value marks, results and assessments, photos, deficiencies (v3.28.0)
+
+- **Value marks throughout** (key in the front matter): column headers carry M / C / E / O, and a column that mixes
+  sources marks each cell. Remaining thickness is **C** when it comes from a UT reading and **E** when it is nominal
+  less the VT pit depth or the MFL estimate (replacing the old V / M superscripts). Specified data (design, set-up,
+  limits) carries no mark.
+- **Calculated result boxes** in the floor, shell, roof, nozzle and settlement chapters: what the calculation found
+  against its limit, and the calculation appendix that holds the working. **Engineering assessment boxes** beside them
+  (and for the foundation) print the engineer's words exactly as entered, or "No engineering assessment entered".
+- **Photos**: two per row in a fixed 4 : 3 frame (the whole photo shows, annotations stay aligned), captioned
+  *Photo FO-1 · Foundation · location · observation 2 (item) · caption*; floor indication photos are numbered by
+  indication (001a, 001b …). New appendix **Photo log**: every photo with its component, location, what it is linked
+  to (observation, indication, deficiency), caption, and whether it is printed.
+- **Deficiencies**: each line says where it came from — the observation (numbered as in the component's observation
+  table), a calculated finding of the analysis, or entered directly — and its photo number; priority definitions are
+  under the table.
+- Tables of 12 or more columns print at 8 px so the marks fit (the indication register is narrower than before).
+
+`tests/r6report.test.mjs`: no old superscripts; every remaining thickness carries the mark for its source; a result
+box naming its appendix for each component; no assessment printed unless entered (and an entered one appears only in
+its own places); photo captions, the photo log and deficiency sources.
+
 ## Report improvements — R5: calculation appendices (v3.27.0)
 
 Every calculation the app performs has an appendix (`js/report/calcapp.js`) in the same five parts — **1 Inputs**

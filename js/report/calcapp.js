@@ -9,7 +9,7 @@ import { floatingLayout, hasFixed, hasFloating, plateUT, pointStatus, roofBad } 
 import { activeStds, sealEval } from '../seal.js';
 import { fmt, fmtRate } from '../units.js';
 import { escText as h } from '../util.js';
-import { vm } from './front.js';
+import { remMark, vm } from './front.js';
 
 const blank = (v) => v === null || v === undefined || v === '';
 const TYPE = { M: `Measured${vm('M')}`, E: `Estimated${vm('E')}`, C: `Calculated${vm('C')}`, S: 'Specified', D: 'App default', T: 'Code table' };
@@ -55,7 +55,7 @@ export function calcFloor({ job, layout, calc, N }) {
     ['Bottom plate minimum', T(calc.mBot), 'S', 'API 653 page (Table 4.4 preset)'],
     ...(anyAnn ? [['Annular plate minimum', T(calc.mAnn), calc.ann?.src === 'entered' ? 'S' : 'C', `${h(calc.ann?.src || '')} — see the annular plate calculation`]] : []),
     ['Critical zone width / limit', `${fmt(C.czDist, 'small', job)} / ${T(calc.czLim)}`, blank(C.czLimit) ? 'C' : 'S', blank(C.czLimit) ? 'see the critical zone calculation' : `entered: ${h(C.czLimitReason || 'no reason recorded')}`],
-    ['Locations used', `${used.length} of ${inds.length} indications`, 'M', 'proven-up indications with a remaining thickness (UT / VT; MFL estimate where no UT / VT)'],
+    ['Locations used', `${used.length} of ${inds.length} indications`, 'C', 'proven-up indications with a remaining thickness (UT / VT; MFL estimate where no UT / VT)'],
   ];
   const assumptions = [
     'Corrosion rates are linear: the wall loss at each location divided by the rate basis in years (§4.4.5.1).',
@@ -81,7 +81,7 @@ export function calcFloor({ job, layout, calc, N }) {
         : step('UPᵣ', C.cp ? 'effective CP' : 'no soil-side loss', '', fmtRate(calc.UPr, job), 'UPr');
   const kLine = step('StPᵣ + UPᵣ', 'combined rate', `${fmtRate(calc.StPr, job, false)} + ${fmtRate(calc.UPr, job, false)}`, fmtRate(calc.K, job), 'K');
   // locations
-  const locRows = used.map((i) => { const a = per.get(i.id); return `<tr><td>${h(i.no)}</td><td>${a.region === 'annular' ? 'Annular' : 'Bottom'}${a.critical ? ' (CZ)' : ''}</td><td>${RESULT_SHORT[i.result || 'pending']}</td><td class="n">${tn(a.rem)}${a.est ? vm('E') : vm('M')}</td><td class="n">${a.top > 0 ? tn(a.top) : '—'}</td><td class="n">${a.bot > 0 ? tn(a.bot) : '—'}</td><td>${a.repair ? (a.auto ? 'Yes — calculated' : 'Yes — specified') : 'No'}</td></tr>`; }).join('');
+  const locRows = used.map((i) => { const a = per.get(i.id); return `<tr><td>${h(i.no)}</td><td>${a.region === 'annular' ? 'Annular' : 'Bottom'}${a.critical ? ' (CZ)' : ''}</td><td>${RESULT_SHORT[i.result || 'pending']}</td><td class="n">${tn(a.rem)}${remMark(a)}</td><td class="n">${a.top > 0 ? tn(a.top) : '—'}</td><td class="n">${a.bot > 0 ? tn(a.bot) : '—'}</td><td>${a.repair ? (a.auto ? 'Yes — calculated' : 'Yes — specified') : 'No'}</td></tr>`; }).join('');
   // rounds
   const rounds = tr.rounds.map((r, k) => `<tr><td>${k + 1}</td><td>${h(r.no)}</td><td class="n">${tn(r.rem)}</td><td class="n">${fmtRate(r.K, job, false)}</td><td class="n">${tn(r.projected)}</td><td class="n">${tn(r.limit)}</td><td>${tr.pruned.includes(r.id) ? 'repair removed — not needed once the others are repaired' : 'repair'}</td></tr>`).join('');
   // regions

@@ -5,7 +5,7 @@ import { RESULTS, RESULT_SHORT, statusText } from '../calc.js';
 import { equipLine } from '../equipment.js';
 import { fmt, fmtRate } from '../units.js';
 import { escText as h } from '../util.js';
-import { vm } from './front.js';
+import { remMark, vm } from './front.js';
 
 const PROVEN = ['ps', 'ss', 'both'];
 const has = (v) => v !== null && v !== undefined && v !== '';
@@ -32,7 +32,7 @@ export function floorParts({ job, layout, calc, N, patches, opts = {} }) {
   const inds = (job.indications || []).slice().sort((a, b) => String(a.no).localeCompare(String(b.no), undefined, { numeric: true }));
   const res = (i) => i.result || 'pending';
   const areaOf = (a) => (a?.region === 'annular' ? 'Annular' : 'Bottom');
-  const basisMark = (a) => (a?.src === 'MFL estimate' ? vm('E') : a?.src ? vm('M') : '');
+  const basisMark = remMark;
   const basisTxt = (a) => (a?.src === 'UT' ? 'UT' : a?.src === 'VT pit depth' ? 'Nominal − VT pit depth' : a?.src === 'MFL estimate' ? 'MFL estimate' : '—');
 
   /* ---- MFL inspection: set-up, coverage, counts */
@@ -75,7 +75,7 @@ export function floorParts({ job, layout, calc, N, patches, opts = {} }) {
   const proveRows = proven.map((i) => { const a = per.get(i.id) || {}; return `<tr data-ind="${h(i.id)}"><td>${h(i.no)}</td><td>${h(a.plate?.label ?? '?')}</td><td class="n">${i.mflPct ?? '—'}</td><td>${RESULT_SHORT[res(i)]}</td><td class="n">${fmt(i.utMin, 't', job, false)}</td><td>${h(i.utMethod || '')}</td><td class="n">${fmt(i.vtDepth, 't', job, false)}</td><td class="n" data-c="rem">${fmt(a.rem, 't', job, false)}${basisMark(a)}</td><td>${basisTxt(a)}</td></tr>`; }).join('');
   const prove = () => `${N.sub('Prove-up — UT and VT')}
     ${proven.length ? `${N.table('Proven-up indications: MFL estimate, measurements and the remaining thickness used')}<table class="grid small wrap"><thead><tr><th>No.</th><th>Plate</th><th class="n">MFL %${vm('E')}</th><th>Side</th><th class="n">UT min${vm('M')}</th><th>UT method</th><th class="n">VT pit${vm('M')}</th><th class="n">Remaining used</th><th>Basis</th></tr></thead><tbody>${proveRows}</tbody></table>
-    <p class="note">Thickness in ${job.units === 'metric' ? 'mm' : 'in'}. Remaining used: the UT minimum where one was read (M); otherwise nominal less the VT pit depth (M, product side); otherwise the MFL estimate (E). The calculation uses this value.</p>` : '<p class="muted">No indications proven up.</p>'}
+    <p class="note">Thickness in ${job.units === 'metric' ? 'mm' : 'in'}. Remaining used: from the UT minimum where one was read (C); otherwise nominal less the VT pit depth (E, product side); otherwise the MFL estimate (E). The calculation uses this value.</p>` : '<p class="muted">No indications proven up.</p>'}
     ${pending.length ? `${N.table('Indications not proven — pending prove-up')}<table class="grid small wrap"><thead><tr><th>No.</th><th>Plate</th><th class="n">X</th><th class="n">Y</th><th class="n">MFL %${vm('E')}</th><th>In the calculation</th></tr></thead><tbody>${pending.map((i) => { const a = per.get(i.id) || {}; return `<tr><td>${h(i.no)}</td><td>${h(a.plate?.label ?? '?')}</td><td class="n">${fmt(i.x, 'small', job, false)}</td><td class="n">${fmt(i.y, 'small', job, false)}</td><td class="n">${i.mflPct ?? '—'}</td><td>${a.counts ? 'Yes — as soil side, on the MFL estimate' : 'No'}</td></tr>`; }).join('')}</tbody></table>` : ''}
     ${inds.some((i) => ['nri', 'other'].includes(res(i))) ? `<p class="note">${inds.filter((i) => ['nri', 'other'].includes(res(i))).length} indication(s) proved to be no indication or other (not corrosion); they are listed in the floor indication register.</p>` : ''}`;
 

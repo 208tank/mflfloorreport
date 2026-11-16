@@ -33,6 +33,7 @@ export const APPENDICES = [
   ['floorinds', 'Floor indication register'],
   ['shellrd', 'Shell UT readings'],
   ['roofrd', 'Roof UT readings and rim seal gaps'],
+  ['photolog', 'Photo log'],
   ['plates', 'Plate register'],
   ['floorphotos', 'Floor indication photographs'],
 ];
@@ -268,7 +269,7 @@ export const FRAME_CSS = `
   .report .grid th, .report .grid td { white-space: normal; overflow-wrap: break-word; }
   .report .grid td.n { white-space: nowrap; overflow-wrap: normal; }
   .report .grid th { font-size: 8.5px; padding: 3px 3px; } .report .grid.small td { font-size: 9.5px; padding: 3px 3px; }
-  .report .grid:has(th:nth-child(12)) th, .report .grid:has(th:nth-child(12)) td { font-size: 8.5px; padding: 2px 2px; }
+  .report .grid:has(th:nth-child(12)) th, .report .grid:has(th:nth-child(12)) td { font-size: 8px; padding: 2px 2px; }
   .report h2.rp-ch, .report h3.rp-s, .report .rp-tcap { break-after: avoid; }
   .report .rp-fcap { break-before: avoid; }
   .report .rp-draft { display: block; position: fixed; top: 42%; left: 0; right: 0; text-align: center; font: 700 110px Arial, sans-serif; color: rgba(0, 0, 0, .06); transform: rotate(-30deg); pointer-events: none; z-index: 0; }
@@ -276,7 +277,7 @@ export const FRAME_CSS = `
 
 /** The value-type key and abbreviations (front matter). Marks are applied to values from stage R6. */
 export function keyHTML() {
-  const rows = [['M', 'Measured', 'A reading taken on the tank and entered or loaded.'], ['C', 'Calculated', 'Worked out by the app from measured, entered and table values.'], ['E', 'Estimated', 'An inferred or screening value, not a direct measurement (e.g. MFL % loss).'], ['O', 'Inspector observation', 'What the inspector saw and recorded.'], ['A', 'Engineering assessment', 'A judgement entered by the engineer.']];
+  const rows = [['M', 'Measured', 'A reading taken on the tank and entered or loaded.'], ['C', 'Calculated', 'Worked out by the app from measured, entered and table values (e.g. remaining thickness from a UT reading, MRT, shell t-min, Smax, gap area).'], ['E', 'Estimated', 'An inferred or screening value, not a direct measurement (e.g. MFL % loss, remaining thickness from an MFL estimate, nominal − VT pit depth).'], ['O', 'Inspector observation', 'What the inspector saw and recorded.'], ['A', 'Engineering assessment', 'A judgement entered by the engineer.']];
   const abbr = [['API', 'American Petroleum Institute'], ['CP', 'Cathodic protection'], ['CZ', 'Critical zone'], ['MFL', 'Magnetic flux leakage'], ['MRT', 'Minimum remaining thickness'], ['NDE', 'Non-destructive examination'], ['Oᵣ', 'Years to the next internal inspection'], ['RPB', 'Release prevention barrier'], ['RTbc / RTip', 'Minimum remaining thickness, soil side / product side'], ['StPr / UPr', 'Product-side / soil-side corrosion rate'], ['t-min', 'Minimum required thickness'], ['UT', 'Ultrasonic thickness testing'], ['VT', 'Visual testing']];
   return `<table class="grid small rp-key"><thead><tr><th>Mark</th><th>Value type</th><th>Meaning</th></tr></thead><tbody>${rows.map(([m, t, d]) => `<tr><td class="mk">${m}</td><td>${t}</td><td>${d}</td></tr>`).join('')}</tbody></table>
     <p class="note">Values without a mark are specified data (design, set-up and limits entered for the job) or labels. Calculated pass / fail results are compared with the limits configured in this job; they are not an engineering assessment.</p>
@@ -459,6 +460,11 @@ export const SHEET_CSS = `
 .report .dwg.port .dwg-side .dwg-tb { grid-column: 1 / -1; }
 .report .rp-anchor { display: block; height: 0; }
 .report .grid.wrap td, .report .grid.wrap td:nth-last-child(2) { white-space: normal; overflow-wrap: break-word; }
+.report .grid:has(th:nth-child(12)) sup.vm { font-size: 6px; padding: 0 1px; margin-left: 1px; border-width: 0.4px; }
+.report .rbox, .report .abox { border: 1.5px solid #1d232b; padding: 6px 10px; margin: 10px 0; font-size: 11px; break-inside: avoid; }
+.report .rbox .vk, .report .abox .vk { display: block; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 3px; }
+.report .rbox small, .report .abox small { display: block; color: #3a434e; font-size: 9.5px; margin-top: 3px; }
+.report .rbox.bad { border-color: #b91c1c; border-width: 2px; color: #1d232b; } .report .abox { border-style: double; border-width: 3px; } .report .abox.none { border: 1px dashed #8a939d; color: #3a434e; }
 .report sup.vm { font-size: 7px; font-weight: 700; color: #3a434e; border: 0.5px solid #8a939d; border-radius: 2px; padding: 0 1.5px; margin-left: 2px; vertical-align: super; line-height: 1; }
 .report .exec-scope { font-size: 11px; margin: 0 0 8px; }
 .report .verdict .vk { display: block; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; opacity: .8; margin-bottom: 2px; }
