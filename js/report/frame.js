@@ -3,6 +3,7 @@
 // draft mark. Content is supplied by report.js; the frame only numbers and assembles it. No browser APIs.
 import { escText as h } from '../util.js';
 import { personName } from '../personnel.js';
+import { CALC_CSS } from './calcapp.js';
 
 /** Chapters in their default order (decided 15 Nov 2026: the plan's order; the user can reorder them). */
 export const CHAPTERS = [
@@ -20,11 +21,18 @@ export const CHAPTERS = [
 ];
 /** Appendices in their default order. */
 export const APPENDICES = [
+  ['calcfloor', 'Calculation — floor minimum remaining thickness (API 653 §4.4.5)'],
+  ['calcann', 'Calculation — annular plate limit (API 653 §4.4.6)'],
+  ['calccz', 'Calculation — critical zone limit (API 653 §4.4.5.4)'],
+  ['calcpatch', 'Calculation — patch plates (API 653 §9.10, §9.11.1)'],
+  ['shelleval', 'Calculation — shell t-min and fill heights (API 653 §4.3.3)'],
+  ['calcnoz', 'Calculation — nozzle necks'],
+  ['calcroof', 'Calculation — roof plates (API 653 §4.2.1)'],
+  ['calcseal', 'Calculation — rim seal gaps'],
+  ['settlework', 'Calculation — settlement (API 653 Annex B)'],
   ['floorinds', 'Floor indication register'],
   ['shellrd', 'Shell UT readings'],
-  ['shelleval', 'Shell evaluation — working (API 653 §4.3.3)'],
   ['roofrd', 'Roof UT readings and rim seal gaps'],
-  ['settlework', 'Settlement — working and readings'],
   ['plates', 'Plate register'],
   ['floorphotos', 'Floor indication photographs'],
 ];
@@ -352,7 +360,7 @@ export function assembleReport({ job, company, opts, layout, N, chapterBody, app
   if (on('contents')) front.push(`<section class="rp-front"><h2>Contents</h2>${contentsHTML(items, N)}</section>`);
   if (on('key')) front.push(`<section class="rp-front"><h2>Value types and abbreviations</h2>${keyHTML()}</section>`);
   const revText = job.rev ? `Rev ${job.rev} · ${dateOf(job.savedAt)}` : 'Not saved to a job file';
-  const style = FRAME_CSS + SHEET_CSS + pageCSS({ size: company.pageSize, company: company.name, tankId: I.tankId, reportNo: I.reportNo, revText, status: issued ? 'ISSUED' : 'DRAFT', drawOrient: layout.drawOrient, drawPaper: layout.drawPaper,
+  const style = FRAME_CSS + SHEET_CSS + CALC_CSS + pageCSS({ size: company.pageSize, company: company.name, tankId: I.tankId, reportNo: I.reportNo, revText, status: issued ? 'ISSUED' : 'DRAFT', drawOrient: layout.drawOrient, drawPaper: layout.drawPaper,
     hf: { ...hfOf(company), logoSrc: company.logo }, vals: hfVals(job, company) });
   return `<article class="report rp2"><style>${style}</style>${issued ? '' : '<div class="rp-draft" aria-hidden="true">DRAFT</div>'}
   ${front.join('\n')}

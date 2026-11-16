@@ -7,6 +7,36 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Report improvements — R5: calculation appendices (v3.27.0)
+
+Every calculation the app performs has an appendix (`js/report/calcapp.js`) in the same five parts — **1 Inputs**
+(each value with its type: measured, estimated, calculated, specified, app default or code table, and its source),
+**2 Assumptions**, **3 References** (clause, table and figure numbers only), **4 Working** (the formula, the numbers
+substituted, the answer, in order) and **5 Result** (the calculated result against its limit, with the engineering
+assessment beside it if one was entered):
+
+| Appendix | Calculation |
+|---|---|
+| A | Floor minimum remaining thickness (§4.4.5) — locations used, rates with the governing location, MFL threshold rate, each auto-repair round, RTᵢₚ / RTᵦc / MRT / t required today / maximum Oᵣ by area |
+| B | Annular plate limit (§4.4.6) — Sb, the table row and interpolation, corrosion allowance |
+| C | Critical zone limit (§4.4.5.4) — course 1 t-min, the smaller-of rule, the lower bound, any entered limit |
+| D | Patch plates (§9.10, §9.11.1) — size per location from the default and the margin, combining, shape |
+| E | Shell t-min and fill heights (§4.3.3) — replaces the R4 "working" appendix |
+| F | Nozzle necks — nominal and minimum source, loss, comparison with the retirement thickness |
+| G | Roof plates (§4.2.1.2) — t-min source, readings below it, holes |
+| H | Rim seal gaps — area per gap, per metre of diameter, widest gap, limits and their source |
+| I | Settlement (Annex B) — cosine fit, R², tilt, Smax, U and S, arc method, edge results; replaces the R4 "working" appendix |
+
+The appendices use only values the calculations return. Three calculations gained a **trace** for this (the floor
+auto-repair rounds and governing locations, the annular table bracket, the parts of the critical-zone rule; the patch
+sizes per location). Traces are non-enumerable properties, so results, job files and the golden engineering outputs
+are unchanged — the golden calculation files are byte-for-byte identical.
+
+**Checks.** `tests/calcapp.test.mjs` compares every tagged appendix value with the calculation's result for all seven
+fixture jobs. `tests/handcheck/` recalculates the demo tank independently in Python (`export.mjs` exports the raw
+inputs, `handcheck.py` recalculates and writes `handcheck.md`): 117 of 117 values agree, including a replay of every
+auto-repair round.
+
 ## Report improvements — R4: shell, roof, nozzles and settlement (v3.26.0)
 
 Each chapter keeps its summary, drawings and results; the long reading tables and the detailed working move to four
@@ -1109,6 +1139,7 @@ every limit is editable.
 | `js/calc.js` | Indication analysis and API 653 MRT |
 | `js/map.js` | SVG floor map and pan/zoom |
 | `js/report.js` | Printable report: the content of each chapter |
+| `js/report/calcapp.js` | Calculation appendices (R5): the five-part layout and one builder per calculation |
 | `js/report/floor.js` | Floor chapter parts (R3): MFL inspection, prove-up, corrosion summaries, repair status |
 | `js/report/front.js` | Report front chapters (R2): executive summary, tank identification and design, scope and limitations, personnel / equipment / calibration |
 | `js/personnel.js` | Inspection personnel (schema 5) and the name helpers |

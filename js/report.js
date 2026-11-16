@@ -18,6 +18,7 @@ import { escText as h } from './util.js';
 import { assembleReport, layoutOf, legendList, numbering, sheetHTML, swatch } from './report/frame.js';
 import { execCh, personnelCh, scopeCh, tankCh, vm } from './report/front.js';
 import { floorParts } from './report/floor.js';
+import { calcAnnular, calcCritical, calcFloor, calcNozzles, calcPatches, calcRoof, calcSeal, calcSettle, calcShell } from './report/calcapp.js';
 
 const yn = (b) => (b ? 'Yes' : 'No');
 const or = (v, d = '—') => (v === null || v === undefined || v === '' ? d : v);
@@ -182,7 +183,8 @@ ${patches.some((pp) => pp.checks.length) ? `${N.table('Critical zone patch plate
           return `<tr class="${s2?.status === 'Below t-min' ? 'is-bad' : ''}"><td><b>${c.no}</b></td><td>${h(d.matl)}</td><td>${h(jointLabel(d.jKey))}</td><td class="n">${d.Ej}</td><td class="n">${Math.round(d.Y).toLocaleString()}</td><td class="n">${Math.round(d.Sd).toLocaleString()}</td><td class="n">${Math.round(d.St).toLocaleString()}</td><td class="n">${fmt(Math.max(0, B.fill - c.z0), 'big', job, false)}</td><td class="n">${fmt(c.tMinCalc, 't', job, false)}</td><td class="n"><b>${fmt(c.tMin, 't', job, false)}</b>${c.tMinSet ? '<sup>†</sup>' : ''}</td><td class="n">${s2?.min != null ? fmt(s2.min, 't', job, false) : '—'}</td><td class="n">${f.prod != null ? fmt(f.prod, 'big', job, false) : '—'}</td><td class="n">${f.hydro != null ? fmt(f.hydro, 'big', job, false) : '—'}</td></tr>`; }).join('');
         const working = () => `${N.table('Shell evaluation — API 653 §4.3.3')}<table class="grid small"><thead><tr><th>Course</th><th>Material</th><th>Joint</th><th class="n">E</th><th class="n">Y (psi)</th><th class="n">Sd (psi)</th><th class="n">St (psi)</th><th class="n">Liquid above (${U.big})</th><th class="n">t-min calc</th><th class="n">t-min used</th><th class="n">Min reading</th><th class="n">Max fill (${U.big})</th><th class="n">Hydrotest Ht (${U.big})</th></tr></thead><tbody>${rr}</tbody></table>
         <p class="note">t-min = 2.6 (H − 1) D G / (S E), not less than 0.100 in (SI form for metric jobs) (API 653 §4.3.3.1 a); single readings compared with the t-min at their elevation (§4.3.3.1 b) and evaluated per §4.3.2 when below it, D = ${fmt(B.D, 'big', job)}, G = ${B.G}, maximum fill height ${fmt(B.fill, 'big', job)}; S from API 653 Table 4.1 (lower two courses / upper courses), E from Table 4.2 / 4.3 for ${h([job.tank.code, job.tank.edition].filter(Boolean).join(', ') || 'unknown code')}. <sup>†</sup> t-min entered by the inspector. ${[...new Set(courses.map((c) => c.d?.matl))].filter((m) => MAT_NOTES[m]).map((m) => h(m) + ': ' + h(MAT_NOTES[m])).join(' ')} Fill and hydrostatic test heights (Ht = St E t / (2.6 D) + 1) from each course's minimum reading, measured from the tank bottom${pm ? `: maximum product fill <b>${fmt(pm.v, 'big', job)}</b> (course ${pm.c})` : ''}${hm ? `, hydrostatic test height <b>${fmt(hm.v, 'big', job)}</b> (course ${hm.c})` : ''}.</p>`;
-        return summary + defer('shelleval', () => `<section>${working()}</section>`); })()}
+        later.shellRows = ev.map(({ c, s2 }) => [`Course ${c.no} — minimum reading`, s2?.min != null ? fmt(s2.min, 't', job) : '—', `t-min ${fmt(c.tMin, 't', job)}`, s2?.status === 'Below t-min' ? '<b>Below t-min</b>' : h(s2?.status || '—'), 'course.' + c.id]).concat(pm ? [['Maximum product fill height', fmt(pm.v, 'big', job), `course ${pm.c} governs`, '—', 'fill']] : [], hm ? [['Hydrostatic test height', fmt(hm.v, 'big', job), `course ${hm.c} governs`, '—', 'hydro']] : []);
+        return summary + defer('shelleval', () => working()); })()}
       </section>
     ${sheetHTML(N, SI, { cls: drawBig, section: 'Shell roll-out', figure: 'Shell roll-out — courses, plates, UT stations and nozzles, viewed from outside', view: 'Shell roll-out — viewed from outside', scale: 'To scale, as dimensioned',
       drawing: rolloutSVG(job, { print: true }), wrap: 'ro-print',
@@ -318,7 +320,17 @@ ${c.arcs?.arcs?.length && (!c.valid || c.oopOk === false) ? `<h3 class="rp-h3">B
     findings: () => sectionChaptersHTML(job, photos, opts, N),
     defs: () => defTableHTML(job, photos, 'Deficiencies and recommendations', { N }),
   };
-  const appendixBody = { shellrd: app('shellrd'), shelleval: app('shelleval'), roofrd: app('roofrd'), settlework: app('settlework'), floorinds: () => (inScope(job, 'floor') && inds.length ? indRegister() : ''), plates: () => (inScope(job, 'floor') ? platesBlock() : ''), floorphotos: () => (inScope(job, 'floor') ? photoBlock() : '') };
+  const appendixBody = {
+    calcfloor: () => (inScope(job, 'floor') && (job.indications || []).length ? `<section>${calcFloor(ctx)}</section>` : ''),
+    calcann: () => (inScope(job, 'floor') ? (() => { const x = calcAnnular(ctx); return x ? `<section>${x}</section>` : ''; })() : ''),
+    calccz: () => (inScope(job, 'floor') ? `<section>${calcCritical(ctx)}</section>` : ''),
+    calcpatch: () => (inScope(job, 'floor') && patches.length ? `<section>${calcPatches(ctx)}</section>` : ''),
+    shelleval: () => (later.shelleval ? `<section>${calcShell({ job, N, working: app('shelleval'), rows: later.shellRows || [] })}</section>` : ''),
+    calcnoz: () => (inScope(job, 'nozzles') && (job.nozzles || []).length ? `<section>${calcNozzles(ctx)}</section>` : ''),
+    calcroof: () => ((inScope(job, 'froof') && hasFixed(job)) || (inScope(job, 'flroof') && hasFloating(job)) ? `<section>${calcRoof(ctx)}</section>` : ''),
+    calcseal: () => (inScope(job, 'flroof') && hasFloating(job) ? (() => { const x = calcSeal(ctx); return x ? `<section>${x}</section>` : ''; })() : ''),
+    settlework: () => (later.settlework ? `<section>${calcSettle({ job, N, c: settleCalc(job), working: app('settlework') })}</section>` : ''),
+    shellrd: app('shellrd'), roofrd: app('roofrd'), floorinds: () => (inScope(job, 'floor') && inds.length ? indRegister() : ''), plates: () => (inScope(job, 'floor') ? platesBlock() : ''), floorphotos: () => (inScope(job, 'floor') ? photoBlock() : '') };
   return assembleReport({ job, company, opts, layout: LY, N, chapterBody, appendixBody, footer: `<footer class="rp-foot">${job.rev ? `${h(I.tankId || '')} Rev ${job.rev} (${h(new Date(job.savedAt).toLocaleDateString())}). ` : ''}${h(company.footer || '')} Calculations per API 653, 5th ed. Addendum 4 (2025) (§4.4.5 bottom), with corrections ${h(CORRECTIONS)}, as configured in this report; verify limits against the edition and tank design in force.</footer>` });
 }
 

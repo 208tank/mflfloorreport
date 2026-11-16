@@ -71,5 +71,8 @@ export function annularReq(job) {
   const B = designBasis(job), c1 = (job.shell?.courses || [])[0];
   if (!(B.D > 0) || !(B.fill > 0) || !(+c1?.tNom > 0)) return null;
   const r = annularMin(B.D / FT, B.fill / FT, B.G ?? 1, +c1.tNom / IN);
-  return r ? { ...r, tmm: r.t === null ? null : r.t * IN } : null;
+  if (!r) return null;
+  const o = { ...r, tmm: r.t === null ? null : r.t * IN };
+  if (r.trace) Object.defineProperty(o, 'trace', { value: r.trace, enumerable: false }); // report trace (R5)
+  return o;
 }

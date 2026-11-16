@@ -245,8 +245,14 @@ export function annularMin(Dft, Hft, Gsg, t1in) {
   let t;
   if (Sb <= xs[0]) t = ys[0];
   else if (Sb > xs[xs.length - 1]) t = null;
-  else for (let i = 0; i < xs.length - 1; i++) if (Sb <= xs[i + 1]) { t = ys[i] + ((Sb - xs[i]) / (xs[i + 1] - xs[i])) * (ys[i + 1] - ys[i]); break; }
-  return { Sb, t, table: big ? 'API 650 Table 5.1b' : 'API 653 Table 4.5', over: t === null };
+  let br = null;
+  if (Sb <= xs[0]) br = { at: 'first', x0: xs[0], y0: ys[0] };
+  else if (Sb > xs[xs.length - 1]) br = { at: 'beyond', x0: xs[xs.length - 1], y0: ys[ys.length - 1] };
+  else for (let i = 0; i < xs.length - 1; i++) if (Sb <= xs[i + 1]) { t = ys[i] + ((Sb - xs[i]) / (xs[i + 1] - xs[i])) * (ys[i + 1] - ys[i]); br = { at: 'between', x0: xs[i], x1: xs[i + 1], y0: ys[i], y1: ys[i + 1] }; break; }
+  const out = { Sb, t, table: big ? 'API 650 Table 5.1b' : 'API 653 Table 4.5', over: t === null };
+  // report trace (R5): the row and the stress bracket used; not enumerable, so results and goldens are unchanged
+  Object.defineProperty(out, 'trace', { value: { D: Dft, H: Hft, G: Gsg ?? 1, t1: t1in, big, rowUpTo: row[0], ...br }, enumerable: false });
+  return out;
 }
 
 /* --------------------------------------------------------------- nozzle necks (pipe wall) --- */

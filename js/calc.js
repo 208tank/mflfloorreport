@@ -61,12 +61,15 @@ export function plateNominal(job, plate) {
 }
 
 /** §4.4.5.4: the smaller of 0.118 in (3 mm) and 50 % of the bottom shell course t-min, but not less than 0.10 in (2.5 mm). */
-export function czLimitAuto(job) {
+export function czLimitAuto(job) { return czLimitParts(job).value; }
+/** The parts of the §4.4.5.4 rule, for the report's calculation appendix (R5). */
+export function czLimitParts(job) {
   const C = { ...defaultCalc(), ...job.calc }, met = job.units === 'metric';
   const cap = met ? 3 : 0.118 * IN, floor = met ? 2.5 : 0.1 * IN;
   const c1 = (job.shell?.courses || [])[0], st = n(C.shellTmin) ?? (n(c1?.tMin) > 0 ? +c1.tMin : courseDesigns(job)[0]?.tmin ?? null);
+  const stSrc = n(C.shellTmin) !== null ? 'entered on the API 653 page' : n(c1?.tMin) > 0 ? 'course 1 t-min entered' : st !== null ? 'course 1 t-min calculated (§4.3.3)' : 'not available';
   const lim = st !== null ? Math.min(cap, st / 2) : cap;
-  return Math.max(floor, lim);
+  return { value: Math.max(floor, lim), cap, floor, st, stSrc, half: st !== null ? st / 2 : null, lim };
 }
 
 /** Annular plate limit: entered value, else the table value (+ CA) when it can be computed. */
@@ -182,6 +185,7 @@ export function api653(job, layout) {
 
   const repaired = new Set(use.filter((it) => it.ind.repair === 'yes' && isWelded(it.ind)).map((it) => it.ind.id));
   const autoSet = new Set();
+  const trace = { specified: [...repaired], rounds: [], pruned: [], kept: [] }; // report trace (R5); not part of the result
   let rates = ratesFrom(repaired);
   if (!noBasis) {
     for (let guard = 0; guard < use.length + 1; guard++) {
@@ -194,6 +198,7 @@ export function api653(job, layout) {
         if (margin < -1e-9 && (worst === null || margin < worstMargin)) { worst = it; worstMargin = margin; }
       }
       if (!worst) break;
+      trace.rounds.push({ id: worst.ind.id, no: worst.ind.no, rem: worst.a.rem, K: k, projected: worst.a.rem - Or * k, limit: limitFor(worst.a), margin: worstMargin });
       repaired.add(worst.ind.id); autoSet.add(worst.ind.id);
     }
     // prune: drop any auto repair that turns out not to be needed once the others are done
@@ -204,7 +209,7 @@ export function api653(job, layout) {
     const remOf = new Map(use.map((x) => [x.ind.id, x.a.rem]));
     for (const id of [...autoSet].sort((a, b) => remOf.get(b) - remOf.get(a))) {
       repaired.delete(id);
-      if (allPass(repaired)) autoSet.delete(id); else repaired.add(id);
+      if (allPass(repaired)) { autoSet.delete(id); trace.pruned.push(id); } else { repaired.add(id); trace.kept.push(id); }
     }
   }
   rates = ratesFrom(repaired);
@@ -249,12 +254,15 @@ export function api653(job, layout) {
     const bc = un.filter((it) => it.a.bot > 0).map((it) => it.a.rem);
     const RTip = ip.length ? Math.min(...ip) : base;
     const RTbc = bc.length ? Math.min(...bc) : base;
+    const gov = (side) => { const xs = un.filter((it) => (side === 'ip' ? it.a.top : it.a.bot) > 0); if (!xs.length) return null; const g = xs.reduce((m, it) => (it.a.rem < m.a.rem ? it : m)); return { id: g.ind.id, no: g.ind.no }; };
+    trace.regions[name] = { ipFrom: gov('ip'), bcFrom: gov('bc'), base, ipCount: ip.length, bcCount: bc.length };
     const RT = RTip === null ? RTbc : RTbc === null ? RTip : Math.min(RTip, RTbc);
     const MRT = RT === null ? null : RT - Or * K;
     const OrMax = RT === null || noBasis ? null : K > 0 ? (RT - limit) / K : Infinity;
     const provisional = un.filter((it) => it.a.est).length;
     return { name, label, RTip, RTbc, RT, MRT, limit, ok: MRT === null || noBasis ? null : MRT >= limit - 1e-9, OrMax, tReq: limit + Or * K, provisional, notEvaluated: noBasis };
   };
+  trace.regions = {};
   const regions = [summarize('bottom', 'Bottom plates', (a) => a.region === 'bottom', mBot)];
   if (layout.Ri < layout.R) regions.push(summarize('annular', 'Annular plates', (a) => a.region === 'annular', mAnn));
   if (use.some((it) => it.a.critical)) regions.push(summarize('critical', 'Critical zone', (a) => a.critical, Math.max(czLim, layout.Ri < layout.R ? mAnn : mBot)));
@@ -303,7 +311,9 @@ export function api653(job, layout) {
   const projection = pT === null && pW === null ? null : { t: pT, w: pW, tMin: pTmin, wMin: pWmin, tOk: pT === null ? null : pT >= pTmin - 1e-9, wOk: pW === null ? null : pW >= pWmin - 1e-9 };
   if (projection) { projection.ok = projection.tOk === false || projection.wOk === false ? false : projection.tOk && projection.wOk ? true : null; if (projection.ok === false) warnings.push(`Bottom projection beyond the shell does not meet API 653 §4.4.5.7 (at least ${met ? '2.5 mm' : '0.10 in'} thick at the outside weld toe and ${met ? '10 mm' : '3/8 in'} wide).`); }
 
-  return { C, years, stYears, Or, czLim, ann, mBot, mAnn, noBasis, thrRate, projection, ...rates, K, per, regions, warnings, repairs: [...repaired], autoRepairs: [...autoSet] };
+  const result = { C, years, stYears, Or, czLim, ann, mBot, mAnn, noBasis, thrRate, projection, ...rates, K, per, regions, warnings, repairs: [...repaired], autoRepairs: [...autoSet] };
+  Object.defineProperty(result, 'trace', { value: trace, enumerable: false });
+  return result;
 }
 
 /* ------------------------------------------------------------------ shell nozzle neck UT --- */

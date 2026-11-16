@@ -117,6 +117,7 @@ export function patchList(job, layout, calc) {
     const inCZ = R > 0 && farR > R - cz - 1;
     const c = (r.x0 + r.x1) / 2, d = (r.y0 + r.y1) / 2;
     const out = { ...r, id, inds: r.inds.map((q) => q.ind), cx: r.kind === 'tomb' ? unit(r.th)[0] * (R + r.rIn) / 2 : c, cy: r.kind === 'tomb' ? unit(r.th)[1] * (R + r.rIn) / 2 : d, auto: !r.manual, cz: inCZ, tAssumed: r.t == null, t: r.t ?? num(C.patchT) ?? 0.25 * IN };
+    Object.defineProperty(out, 'trace', { value: r.inds.map((q) => ({ id: q.ind.id, no: q.ind.no, ext: q.ext, L: q.L, W: q.W })), enumerable: false }); // report trace (R5)
     out.alongShell = alongShell(out, R);
     out.checks = czChecks(job, layout, out, C, R, calc);
     return out;
