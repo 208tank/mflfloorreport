@@ -20,6 +20,7 @@ export const CHAPTERS = [
 ];
 /** Appendices in their default order. */
 export const APPENDICES = [
+  ['floorinds', 'Floor indication register'],
   ['plates', 'Plate register'],
   ['floorphotos', 'Floor indication photographs'],
 ];

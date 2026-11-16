@@ -1753,7 +1753,7 @@ export default {
     let ch = await chapters();
     assert.deepEqual(ch.slice(0, 5), ['1Executive summary', '2Tank identification and design', '3Inspection scope and limitations', '4Personnel, equipment and calibration', '5Floor — MFL inspection']);
     assert.ok(await page.$('#reportRoot .rp-cover'), 'cover'); assert.ok(await page.$('#reportRoot .rp-toc'), 'contents');
-    assert.match(await page.textContent('#reportRoot'), /Table 5-1 API 653 bottom evaluation by area/);
+    assert.match(await page.textContent('#reportRoot'), /Table 5-3 API 653 bottom evaluation by area/);
     assert.match(await page.textContent('#reportRoot'), /Figure 5-1\s*Floor plan/);
     // contents lists each numbered section with a link to it
     const toc = await page.$$eval('#reportRoot .rp-toc a', (as) => as.map((a) => [a.textContent, document.querySelector(a.getAttribute('href')) ? 'ok' : 'missing']));
@@ -1766,7 +1766,7 @@ export default {
     await page.waitForFunction(() => document.querySelectorAll('#reportRoot h2.rp-ch')[2]?.textContent.includes('Floor'));
     ch = await chapters();
     assert.deepEqual(ch.slice(0, 4), ['1Tank identification and design', '2Inspection scope and limitations', '3Floor — MFL inspection', '4Personnel, equipment and calibration']);
-    assert.match(await page.textContent('#reportRoot'), /Table 3-1 API 653 bottom evaluation by area/, 'tables renumber with their chapter');
+    assert.match(await page.textContent('#reportRoot'), /Table 3-3 API 653 bottom evaluation by area/, 'tables renumber with their chapter');
     // kept on the device (it is read back at start-up)
     const saved = await page.evaluate(async () => (await (await import('./js/db.js')).db.getMeta('report:opts')).layout);
     assert.ok(saved.off.includes('exec') && saved.order.indexOf('floor') < saved.order.indexOf('personnel'), JSON.stringify(saved));
@@ -1824,6 +1824,28 @@ export default {
     const j = await page.evaluate(() => window.tfi.job());
     assert.equal(j.schema, 5); assert.equal(j.docctl.approvedBy, 'P. Approver'); assert.equal(j.tank.src.opTemp, 'assumed');
     assert.equal(j.secs.shell.assess.by, 'E. Engineer'); assert.ok(!('inspector' in j.info));
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'report R3: repair status is entered on Floor → Analysis and printed in the floor chapter; the register is an appendix'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => window.tfi.go('api'));
+    await page.waitForSelector('.rs-t select');
+    const key = await page.$eval('.rs-t select', (el) => el.dataset.bind);
+    await page.selectOption('.rs-t select >> nth=0', 'verified');
+    await page.waitForFunction((k) => window.tfi.job().repairs?.[k.split('.')[1]]?.status === 'verified', key);
+    const date = key.replace('.status', '.date'), exam = key.replace('.status', '.exam');
+    await page.fill(`[data-bind="${date}"]`, '2026-11-21'); await page.dispatchEvent(`[data-bind="${date}"]`, 'change');
+    await page.fill(`[data-bind="${exam}"]`, 'MT of the fillet welds'); await page.press(`[data-bind="${exam}"]`, 'Tab');
+    await page.evaluate(() => window.tfi.go('report'));
+    await page.waitForSelector('#reportRoot .report h2.rp-ch');
+    const txt = await page.textContent('#reportRoot');
+    assert.match(txt, /Verified\s*2026-11-21\s*MT of the fillet welds/);
+    assert.match(txt, /Lowest remaining thickness — \d+ worst location/);
+    assert.match(txt, /Floor indication register — all MFL indications and prove-up results/);
+    const apps = await page.$$eval('#reportRoot .rp-app h2.rp-ch', (hs) => hs.map((x) => x.textContent.trim()));
+    assert.ok(apps.some((x) => /Floor indication register/.test(x)), apps.join(' | '));
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },

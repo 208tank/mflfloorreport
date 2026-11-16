@@ -883,3 +883,4 @@ dialog.wide-dlg { max-width: 96vw; }
 .src-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 .rdoc { padding: 8px 4px; } .rdoc h3 { font-size: 13px; margin: 12px 0 6px; }
 .dist-t input { width: 100%; }
+.rs-t input, .rs-t select { width: 100%; min-width: 7em; }

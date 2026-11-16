@@ -7,6 +7,36 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Report improvements — R3: the floor chapter (v3.25.0)
+
+The floor chapter (`js/report/floor.js` with `js/report.js`) now has, in order:
+
+1. **Floor summary** — counts and the calculated result (marked C), then **MFL inspection**: scanner and reference
+   plate (from the equipment picked for *MFL floor scan*), the scanner's reporting threshold, the MFL threshold used
+   for UPᵣ, coverage of bottom and annular plates (full / partial / not scanned, C), the plates not scanned; and the
+   indications by prove-up result and area (bottom, annular, critical zone).
+2. **API 653 bottom minimum remaining thickness** — as before.
+3. **Corrosion and remaining thickness** — product side and soil side (locations, minimum remaining, maximum loss,
+   the rate the calculation used and the location or basis that governs it); results by area (bottom, annular,
+   critical zone, with the calculation's limits); the 10 locations with the lowest remaining thickness (remaining,
+   loss, thickness at Oᵣ, limit, status); minimum remaining thickness by plate.
+4. **Floor plan** drawing sheet.
+5. **Prove-up — UT and VT** — each proven-up indication: MFL % (E), side, UT minimum (M), UT method, VT pit depth (M),
+   the remaining thickness the calculation used and its basis; indications still pending listed separately, saying
+   whether the calculation counts them.
+6. **Repairs** — repairs and patch plates as before, then **Repair status** for each patch or unpatched repair.
+
+The full indication table moved to a new appendix, **Floor indication register** (on by default; reorder or switch
+it off in the report layout).
+
+**Repair status** is entered on Floor → Analysis: proposed / completed / verified, date, contractor, examination
+after repair and notes (`job.repairs`, schema 5). Each status is keyed by the indications it covers, so renumbering
+patch plates does not move it.
+
+Every number in these tables is a value the calculation returned; `tests/floorreport.test.mjs` checks the worst
+locations (choice, order and values), the prove-up remaining thickness, the side rates and minimums and the area
+limits against `api653()` for all seven fixture jobs.
+
 ## Report improvements — R2: front chapters and schema 5 (v3.24.0)
 
 **Schema 5** (job migration step 4 → 5; a revision of each job is kept before it is updated):
@@ -1062,6 +1092,7 @@ every limit is editable.
 | `js/calc.js` | Indication analysis and API 653 MRT |
 | `js/map.js` | SVG floor map and pan/zoom |
 | `js/report.js` | Printable report: the content of each chapter |
+| `js/report/floor.js` | Floor chapter parts (R3): MFL inspection, prove-up, corrosion summaries, repair status |
 | `js/report/front.js` | Report front chapters (R2): executive summary, tank identification and design, scope and limitations, personnel / equipment / calibration |
 | `js/personnel.js` | Inspection personnel (schema 5) and the name helpers |
 | `js/sources.js` | Sources of design data (schema 5) |

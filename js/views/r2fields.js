@@ -9,6 +9,8 @@ import { commit } from '../app/persist.js';
 import { calState, EQ_LABEL, equipName } from '../equipment.js';
 import { certState, CERTS, newPerson, ROLES } from '../personnel.js';
 import { SRC_FIELDS, SRC_OPTS } from '../sources.js';
+import { patchList } from '../patches.js';
+import { repairUnits, REPAIR_STATUSES } from '../report/floor.js';
 import { $, askConfirm } from '../ui.js';
 import { esc as h } from '../util.js';
 
@@ -87,6 +89,21 @@ export function assessCardHTML(k) {
       ${field('Assessment', `secs.${k}.assess.text`, 'area', { rows: 3, cls: 'span2', ph: 'e.g. Suitable for continued service to the next internal inspection, subject to the P2 repairs.' })}
       ${field('Engineer', `secs.${k}.assess.by`)}${field('Date', `secs.${k}.assess.date`, 'date')}
     </div></section>`;
+}
+
+/* ---------------------------------------------------------------------------- repair status --- */
+
+export function repairStatusCardHTML() {
+  if (!S.calc?.per) return '';
+  const units = repairUnits(S.job, S.calc, patchList(S.job, S.layout, S.calc)), R = S.job.repairs || {};
+  if (!units.length) return '';
+  const inp = (u, f, ph = '', type = 'text') => `<input ${type === 'date' ? 'type="date"' : ''} data-bind="repairs.${h(u.key)}.${f}" data-kind="text" value="${h(R[u.key]?.[f] || '')}" placeholder="${h(ph)}">`;
+  const sel = (u) => `<select data-bind="repairs.${h(u.key)}.status" data-kind="text">${REPAIR_STATUSES.map(([k, l]) => `<option value="${k}" ${(R[u.key]?.status || '') === k ? 'selected' : ''}>${h(l)}</option>`).join('')}</select>`;
+  return `<section class="card"><div class="sp-head"><h2>Repair status</h2><span class="muted small">${units.length} repair${units.length === 1 ? '' : 's'}</span></div>
+    <p class="muted small">For each patch plate or repair: proposed, completed or verified, with the date, contractor and the examination after repair. Printed in the report's repair status table. A status stays with the indications it covers, so renumbering the patches does not move it.</p>
+    <div class="tblwrap"><table class="grid rs-t"><thead><tr><th>Repair</th><th>Indications</th><th>Status</th><th>Date</th><th>Contractor</th><th>Examination after repair</th><th>Notes</th></tr></thead><tbody>
+      ${units.map((u) => `<tr><td><b>${h(u.label)}</b><br><small class="muted">${h(u.kind)}</small></td><td>${h(u.inds.map((i) => i.no).join(', '))}</td><td>${sel(u)}</td><td>${inp(u, 'date', '', 'date')}</td><td>${inp(u, 'contractor', 'Contractor')}</td><td>${inp(u, 'exam', 'e.g. MT of welds, vacuum box')}</td><td>${inp(u, 'notes', '')}</td></tr>`).join('')}
+    </tbody></table></div></section>`;
 }
 
 /* -------------------------------------------------------------------------- document control --- */
