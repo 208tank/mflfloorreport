@@ -857,3 +857,14 @@ dialog.wide-dlg { max-width: 96vw; }
 .rsec-no { width: 1.8em; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .rsec-mv { white-space: nowrap; } .rsec-mv .btn { padding: 0 6px; min-height: 0; }
 @media (max-width: 900px) { .rsec-cols { grid-template-columns: 1fr; } }
+.hf-grid { display: grid; gap: 6px; margin: 8px 0; }
+.hf-row { display: grid; grid-template-columns: 60px repeat(3, minmax(0, 1fr)); gap: 8px; align-items: end; }
+.hf-row > b { padding-bottom: 8px; }
+.hf-opts { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: end; }
+.hf-opts .fld { min-width: 150px; }
+.hf-prev { margin-top: 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: #1d232b; padding: 8px 14px; font-family: Arial, Helvetica, sans-serif; max-width: 720px; }
+.hf-pv-band { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 3px 0; min-height: 1.4em; align-items: center; }
+.hf-pv-band span:nth-child(2) { text-align: center; } .hf-pv-band span:nth-child(3) { text-align: right; }
+.hf-pv-band img { height: 22px; vertical-align: middle; margin-right: 6px; }
+.hf-pv-body { color: #9aa3ad; font-size: 11px; text-align: center; padding: 26px 0; }
+@media (max-width: 720px) { .hf-row { grid-template-columns: 1fr; } }

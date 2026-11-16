@@ -87,16 +87,19 @@
   .report .dwg-area .map-wrap svg, .report .dwg-area .ro-print svg, .report .dwg-area .roof-print svg { width: 100%; height: 100%; max-height: none; }
   .report .dwg-area > div:first-child { flex: 1 1 0; }
 }@media print {
-    @page { size: letter portrait; margin: 0.75in 0.6in 0.7in; @top-left { content: "Test Co"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; } @top-right { content: "Tank TK-101 · Report DEMO-001"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; }
-      @bottom-left { content: "Not saved to a job file · DRAFT"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; }
-      @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; } }
-    @page cover { size: letter portrait; margin: 0.75in 0.6in; @top-left { content: none; } @top-right { content: none; } @bottom-left { content: none; } @bottom-right { content: none; } }
-    @page drawing { size: letter landscape; margin: 0.6in; @top-left { content: "Test Co"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; } @top-right { content: "Tank TK-101 · Report DEMO-001"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; }
-      @bottom-left { content: "Not saved to a job file · DRAFT"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; }
-      @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; } }
-    @page drawing-lg { size: letter landscape; margin: 0.6in; @top-left { content: "Test Co"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; } @top-right { content: "Tank TK-101 · Report DEMO-001"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; }
-      @bottom-left { content: "Not saved to a job file · DRAFT"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; }
-      @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; } }
+    @page { size: letter portrait; margin: 0.75in 0.6in 0.7in; @top-left { content: "Test Co"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; text-align: left; vertical-align: bottom; width: 33.3%;  }
+      @top-right { content: "Tank TK-101 · Report DEMO-001"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; text-align: right; vertical-align: bottom; width: 33.3%;  }
+      @bottom-left { content: "Not saved to a job file · DRAFT"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; text-align: left; vertical-align: top; width: 33.3%;  }
+      @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; text-align: right; vertical-align: top; width: 33.3%;  } }
+    @page cover { size: letter portrait; margin: 0.75in 0.6in; @top-left { content: none; } @top-center { content: none; } @top-right { content: none; } @bottom-left { content: none; } @bottom-center { content: none; } @bottom-right { content: none; } }
+    @page drawing { size: letter landscape; margin: 0.6in; @top-left { content: "Test Co"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; text-align: left; vertical-align: bottom; width: 33.3%;  }
+      @top-right { content: "Tank TK-101 · Report DEMO-001"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; text-align: right; vertical-align: bottom; width: 33.3%;  }
+      @bottom-left { content: "Not saved to a job file · DRAFT"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; text-align: left; vertical-align: top; width: 33.3%;  }
+      @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; text-align: right; vertical-align: top; width: 33.3%;  } }
+    @page drawing-lg { size: letter landscape; margin: 0.6in; @top-left { content: "Test Co"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; text-align: left; vertical-align: bottom; width: 33.3%;  }
+      @top-right { content: "Tank TK-101 · Report DEMO-001"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; text-align: right; vertical-align: bottom; width: 33.3%;  }
+      @bottom-left { content: "Not saved to a job file · DRAFT"; font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; text-align: left; vertical-align: top; width: 33.3%;  }
+      @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt Arial, Helvetica, sans-serif; color: #5b6470; text-align: right; vertical-align: top; width: 33.3%;  } }
     .report .rp-draw { height: 7.25in; }
     .report .rp-draw.lg { height: 7.25in; }
   }</style><div class="rp-draft" aria-hidden="true">DRAFT</div>

@@ -1777,6 +1777,40 @@ export default {
     await page.context().close();
   },
 
+  async 'report header and footer: the company sets the text, logo, colour and rules, sees a preview, and the PDF prints them'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => window.tfi.go('jobs'));
+    await page.waitForSelector('#hfCard');
+    // default preview is the original header and footer
+    assert.match(await page.textContent('#hfPreview'), /Tank TK-101 · Report DEMO-001/);
+    await page.fill('[data-hf="hc"]', 'CONFIDENTIAL — {client}');
+    await page.fill('[data-hf="fl"]', 'Form QF-12 · {report} · {nothing}');
+    await page.fill('[data-hf="fr"]', '{page}/{pages}');
+    await page.dispatchEvent('[data-hf="fr"]', 'change');
+    await page.fill('[data-hf="color"]', '#123456').catch(async () => { await page.$eval('[data-hf="color"]', (el) => { el.value = '#123456'; el.dispatchEvent(new Event('change', { bubbles: true })); }); });
+    await page.check('[data-hf="rule"]');
+    await page.waitForTimeout(200);
+    assert.match(await page.textContent('#hfPreview'), /CONFIDENTIAL — Demo Energy Ltd\./);
+    // saved with the company settings
+    const saved = await page.evaluate(async () => (await (await import('./js/db.js')).db.getMeta('company')).hf);
+    assert.equal(saved.hc, 'CONFIDENTIAL — {client}'); assert.equal(saved.rule, true);
+    await page.evaluate(() => window.tfi.go('report'));
+    await page.waitForSelector('#reportRoot .report h2.rp-ch');
+    const css = await page.$eval('#reportRoot .report style', (s) => s.textContent);
+    assert.match(css, /@top-center \{ content: "CONFIDENTIAL — Demo Energy Ltd\."/);
+    assert.match(css, /@bottom-right \{ content: counter\(page\) "\/" counter\(pages\)/);
+    assert.match(css, /border-bottom: 0\.75pt solid #123456/);
+    assert.match(css, /@bottom-left \{ content: "Form QF-12 · DEMO-001 · \{nothing\}"/);
+    await page.emulateMedia({ media: 'print' });
+    const buf = await page.pdf({ preferCSSPageSize: true, printBackground: true });
+    await page.emulateMedia({ media: 'screen' });
+    assert.ok(buf.length > 10000);
+    // reset brings back the original
+    await page.evaluate(() => window.tfi.go('jobs'));
+    await page.click('[data-act="hf-reset"]');
+    await page.waitForFunction(() => /Page 3 of 24/.test(document.getElementById('hfPreview')?.textContent || ''));
+    assert.equal(await page.evaluate(async () => (await (await import('./js/db.js')).db.getMeta('company')).hf), undefined);
+  },
   async 'report frame: the PDF has numbered pages, landscape drawing pages, and follows the page-size and orientation options'({ browser, url, appPage }) {
     const page = await appPage(browser, url);
     const pdfPages = async () => {

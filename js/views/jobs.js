@@ -10,6 +10,7 @@ import { resizeImage } from '../app/images.js';
 import { addRevision } from '../app/revisions.js';
 import { logChange, setAuditBase } from '../app/auditlog.js';
 import { indCount } from '../cards.js';
+import { HF_DEFAULTS, HF_TOKENS, hfOf, hfPreview, hfVals } from '../report/frame.js';
 import { db, requestPersistence } from '../db.js';
 import { makeDemo } from '../demo.js';
 import { pendingSteps } from '../migrations.js';
@@ -55,6 +56,7 @@ function viewJobs() {
         <p class="muted">Install the app from the browser's address bar (or the Install button above) so it opens full-window and works without a connection.</p>
       </section>
     </div>
+    <section class="card" id="hfCard">${hfCardHTML()}</section>
     <section class="card" id="storageCard">${storageCardHTML()}</section>
     <section class="card" id="backupCard">${backupCardHTML()}</section></div>`;
 }
@@ -154,3 +156,51 @@ onChange([
     { const f = el.files[0]; if (!f) return; S.company.logo = await resizeImage(f, 600, 'image/png'); await db.setMeta('company', S.company); renderView(); return; }
   } }
 ]);
+
+/* ---- report page header and footer (company settings) ---- */
+function hfCardHTML() {
+  const o = hfOf(S.company), f = (k, lbl) => `<label class="fld"><span class="lbl">${lbl}</span><span class="ctl"><input data-hf="${k}" value="${h(o[k])}" placeholder="(blank)"></span></label>`;
+  return `<h2>Report page header and footer</h2>
+    <p class="muted">Printed at the top and bottom of every report page (not the cover). Type text and placeholders; a part between <b>·</b> separators whose placeholders are all empty is left out.</p>
+    <div class="hf-grid"><div class="hf-row"><b>Header</b>${f('hl', 'Left')}${f('hc', 'Centre')}${f('hr', 'Right')}</div>
+      <div class="hf-row"><b>Footer</b>${f('fl', 'Left')}${f('fc', 'Centre')}${f('fr', 'Right')}</div></div>
+    <div class="hf-opts">
+      <label class="fld"><span class="lbl">Logo in the header</span><span class="ctl"><select data-hf="logo">${[['none', 'No logo'], ['left', 'Left'], ['centre', 'Centre'], ['right', 'Right']].map(([v, l]) => `<option value="${v}" ${o.logo === v ? 'selected' : ''}>${l}</option>`).join('')}</select></span></label>
+      <label class="fld"><span class="lbl">Colour</span><span class="ctl"><input type="color" data-hf="color" value="${h(o.color)}"></span></label>
+      <label class="fld"><span class="lbl">Text size (pt)</span><span class="ctl"><input type="number" min="6" max="11" step="0.5" data-hf="size" value="${o.size}"></span></label>
+      <label class="chk"><input type="checkbox" data-hf="rule" ${o.rule ? 'checked' : ''}> Rule lines under the header and over the footer</label>
+      <button class="btn sm ghost" data-act="hf-reset">Reset to default</button></div>
+    ${o.logo !== 'none' && !S.company.logo ? '<p class="warn small">Choose a logo under Report header to show it.</p>' : ''}
+    <p class="muted small">Placeholders: ${HF_TOKENS.map(([k, l]) => `<code>{${k}}</code> ${l}`).join(' · ')}</p>
+    <div id="hfPreview">${hfPreviewHTML()}</div>`;
+}
+function hfPreviewHTML() {
+  const o = hfOf(S.company), sample = { client: 'Client', site: 'Site', tank: 'TK-101', report: 'R-001', rev: 'Rev 2 · 2026-11-15', date: '2026-11-15', inspector: 'Inspector' };
+  const vals = S.job ? hfVals(S.job, S.company) : { ...hfVals(null, S.company), ...sample };
+  const [[hl, hc, hr], [fl, fc, fr]] = hfPreview(S.company, vals);
+  const logo = (pos) => (o.logo === pos && S.company.logo ? `<img src="${S.company.logo}" alt="">` : '');
+  const st = `color:${o.color};font-size:${o.size}pt`, rule = (side) => (o.rule ? `border-${side}:1px solid ${o.color}` : '');
+  return `<div class="hf-prev"><div class="hf-pv-band" style="${st};${rule('bottom')}"><span>${logo('left')}${h(hl)}</span><span>${logo('centre')}${h(hc)}</span><span>${logo('right')}${h(hr)}</span></div>
+    <div class="hf-pv-body">Report page${S.job ? ` — preview uses ${h(S.job.info?.tankId || 'the open job')}` : ' — sample values'}</div>
+    <div class="hf-pv-band" style="${st};${rule('top')}"><span>${h(fl)}</span><span>${h(fc)}</span><span>${h(fr)}</span></div></div>`;
+}
+async function saveHF(key, value) {
+  S.company.hf = { ...(S.company.hf || {}), [key]: value };
+  await db.setMeta('company', S.company);
+}
+document.addEventListener('input', (e) => {
+  const k = e.target.dataset?.hf; if (!k || e.target.type === 'checkbox' || e.target.tagName === 'SELECT') return;
+  S.company.hf = { ...(S.company.hf || {}), [k]: k === 'size' ? +e.target.value : e.target.value };
+  const p = document.getElementById('hfPreview'); if (p) p.innerHTML = hfPreviewHTML();
+});
+onChange([
+  { order: 272, when: (el) => el.matches('[data-hf]'), run: async (el) => {
+    const k = el.dataset.hf;
+    await saveHF(k, el.type === 'checkbox' ? el.checked : k === 'size' ? +el.value : el.value);
+    const c = document.getElementById('hfCard'); if (c && (k === 'logo' || el.type === 'checkbox')) c.innerHTML = hfCardHTML(); else { const p = document.getElementById('hfPreview'); if (p) p.innerHTML = hfPreviewHTML(); }
+  } }
+]);
+onAction({
+  'hf-reset': async () => { delete S.company.hf; await db.setMeta('company', S.company); const c = document.getElementById('hfCard'); if (c) c.innerHTML = hfCardHTML(); },
+});
+void HF_DEFAULTS;

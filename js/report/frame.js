@@ -119,18 +119,86 @@ export function drawArea(paper, orient) {
  *  Drawing pages are named pages: 'drawing' at the report's paper size, 'drawing-lg' on 11 × 17 when that option is
  *  chosen for the floor, shell and roof drawings; landscape unless the option says portrait. Each drawing page is
  *  given the exact height of its printable area, so the drawing can fill what its heading, legend and notes leave. */
-export function pageCSS({ size = 'letter', company = '', tankId = '', reportNo = '', revText = '', status = '', drawOrient = 'landscape', drawPaper = 'report' }) {
+/* ------------------------------------------------------------ page header and footer ---
+   Each company sets the text in the six margin positions (header and footer, left / centre / right) from
+   placeholders, where the logo goes, the rule lines and the colour. Kept in the company settings (meta 'company',
+   key hf). An unset setting prints the original header and footer. */
+export const HF_DEFAULTS = Object.freeze({
+  hl: '{company}', hc: '', hr: 'Tank {tank} · Report {report}',
+  fl: '{rev} · {status}', fc: '', fr: 'Page {page} of {pages}',
+  logo: 'none', rule: false, color: '#5b6470', size: 8,
+});
+export const HF_TOKENS = [
+  ['company', 'Company name'], ['client', 'Client'], ['site', 'Site'], ['tank', 'Tank ID'], ['report', 'Report number'],
+  ['rev', 'Revision and date'], ['status', 'DRAFT or ISSUED'], ['date', 'Inspection date'], ['inspector', 'Inspector'],
+  ['title', 'Report title'], ['page', 'Page number'], ['pages', 'Page count'],
+];
+export function hfOf(company) {
+  const o = { ...HF_DEFAULTS, ...(company?.hf || {}) };
+  o.size = Math.min(11, Math.max(6, +o.size || 8));
+  if (!/^#[0-9a-f]{6}$/i.test(o.color)) o.color = HF_DEFAULTS.color;
+  if (!['none', 'left', 'centre', 'right'].includes(o.logo)) o.logo = 'none';
+  return o;
+}
+/** Splits a template into pieces: text, or {page}/{pages}. Parts between " · " whose placeholders are all empty are
+ *  dropped, so "Tank {tank} · Report {report}" with no tank number prints "Report 7". */
+export function hfPieces(tpl, vals) {
+  const out = [];
+  const parts = String(tpl || '').split(' · ').filter((part) => {
+    const toks = [...part.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).filter((k) => k in vals || k === 'page' || k === 'pages');
+    return !toks.length || toks.some((k) => k === 'page' || k === 'pages' || String(vals[k] ?? '').trim());
+  });
+  parts.forEach((part, i) => {
+    if (i) out.push(' · ');
+    for (const bit of part.split(/(\{\w+\})/)) {
+      const m = /^\{(\w+)\}$/.exec(bit);
+      if (m && (m[1] === 'page' || m[1] === 'pages')) out.push({ counter: m[1] });
+      else if (m) out.push(m[1] in vals ? String(vals[m[1]] ?? '') : bit);
+      else if (bit) out.push(bit);
+    }
+  });
+  return out;
+}
+const hfContent = (pieces, logo) => {
+  const merged = [];
+  for (const p of pieces) { if (typeof p === 'string' && typeof merged[merged.length - 1] === 'string') merged[merged.length - 1] += p; else merged.push(p); }
+  const v = merged.map((p) => (typeof p === 'string' ? css(p) : `counter(${p.counter})`));
+  if (logo) v.unshift(`url(${css(logo)})`, ...(v.length ? ['"  "'] : []));
+  return v.length ? v.join(' ') : '""';
+};
+/** The logo wrapped in an SVG of a fixed printed size, so the page header shows it at a set height whatever its
+ *  pixel size. */
+function hfLogo(src, align) {
+  if (!src) return '';
+  const a = align === 'right' ? 'xMaxYMid' : align === 'centre' ? 'xMidYMid' : 'xMinYMid';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="110" height="26" viewBox="0 0 110 26"><image width="110" height="26" preserveAspectRatio="${a} meet" xlink:href="${src}" href="${src}"/></svg>`;
+  return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+}
+/** The text of the six positions, for previews: [[hl, hc, hr], [fl, fc, fr]] with sample page numbers. */
+export function hfPreview(company, vals) {
+  const o = hfOf(company), t = (k) => hfPieces(o[k], vals).map((p) => (typeof p === 'string' ? p : p.counter === 'page' ? '3' : '24')).join('');
+  return [[t('hl'), t('hc'), t('hr')], [t('fl'), t('fc'), t('fr')]];
+}
+
+export function pageCSS({ size = 'letter', company = '', tankId = '', reportNo = '', revText = '', status = '', drawOrient = 'landscape', drawPaper = 'report', hf = null, vals = null }) {
   const paper = size === 'a4' ? 'a4' : 'letter', S = PAPER[paper][2], o = drawOrient === 'portrait' ? 'portrait' : 'landscape';
-  const font = 'font: 8pt Arial, Helvetica, sans-serif; color: #5b6470;';
-  const right = [tankId && 'Tank ' + tankId, reportNo && 'Report ' + reportNo].filter(Boolean).join(' · ');
-  const boxes = `@top-left { content: ${css(company)}; ${font} } @top-right { content: ${css(right)}; ${font} }
-      @bottom-left { content: ${css([revText, status].filter(Boolean).join(' · '))}; ${font} }
-      @bottom-right { content: "Page " counter(page) " of " counter(pages); ${font} }`;
+  const H = hfOf(hf ? { hf, logo: hf.logoSrc } : null);
+  vals = { ...(vals || {}), company, tank: tankId, report: reportNo, rev: revText, status };
+  const font = `font: ${H.size}pt Arial, Helvetica, sans-serif; color: ${H.color};`;
+  const logo = H.logo !== 'none' && hf?.logoSrc ? hfLogo(hf.logoSrc, H.logo) : '';
+  const box = (pos, key, edge) => {
+    const pieces = hfPieces(H[key], vals), withLogo = logo && edge === 'top' && pos === H.logo;
+    const rule = H.rule ? (edge === 'top' ? `border-bottom: 0.75pt solid ${H.color}; padding-bottom: 3pt;` : `border-top: 0.75pt solid ${H.color}; padding-top: 3pt;`) : '';
+    if (!pieces.length && !withLogo && !rule) return '';
+    const align = pos === 'left' ? 'left' : pos === 'right' ? 'right' : 'center';
+    return `@${edge}-${pos === 'centre' ? 'center' : pos} { content: ${hfContent(pieces, withLogo ? logo : '')}; ${font} text-align: ${align}; vertical-align: ${edge === 'top' ? 'bottom' : 'top'}; width: 33.3%; ${rule} }`;
+  };
+  const boxes = ['left', 'centre', 'right'].map((p, i) => box(p, ['hl', 'hc', 'hr'][i], 'top')).concat(['left', 'centre', 'right'].map((p, i) => box(p, ['fl', 'fc', 'fr'][i], 'bottom'))).filter(Boolean).join('\n      ');
   const big = drawPaper === 'tabloid' ? 'tabloid' : paper;
   const [, hs] = drawArea(paper, o), [, hb] = drawArea(big, o);
   return `@media print {
     @page { size: ${S} portrait; margin: 0.75in 0.6in 0.7in; ${boxes} }
-    @page cover { size: ${S} portrait; margin: 0.75in 0.6in; @top-left { content: none; } @top-right { content: none; } @bottom-left { content: none; } @bottom-right { content: none; } }
+    @page cover { size: ${S} portrait; margin: 0.75in 0.6in; @top-left { content: none; } @top-center { content: none; } @top-right { content: none; } @bottom-left { content: none; } @bottom-center { content: none; } @bottom-right { content: none; } }
     @page drawing { size: ${S} ${o}; margin: ${DRAW_MARGIN}in; ${boxes} }
     @page drawing-lg { size: ${big === 'tabloid' ? (o === 'landscape' ? '17in 11in' : '11in 17in') : PAPER[big][2] + ' ' + o}; margin: ${DRAW_MARGIN}in; ${boxes} }
     .report .rp-draw { height: ${(hs - 0.05).toFixed(2)}in; }
@@ -276,13 +344,22 @@ export function assembleReport({ job, company, opts, layout, N, chapterBody, app
   if (on('contents')) front.push(`<section class="rp-front"><h2>Contents</h2>${contentsHTML(items, N)}</section>`);
   if (on('key')) front.push(`<section class="rp-front"><h2>Value types and abbreviations</h2>${keyHTML()}</section>`);
   const revText = job.rev ? `Rev ${job.rev} · ${dateOf(job.savedAt)}` : 'Not saved to a job file';
-  const style = FRAME_CSS + SHEET_CSS + pageCSS({ size: company.pageSize, company: company.name, tankId: I.tankId, reportNo: I.reportNo, revText, status: issued ? 'ISSUED' : 'DRAFT', drawOrient: layout.drawOrient, drawPaper: layout.drawPaper });
+  const style = FRAME_CSS + SHEET_CSS + pageCSS({ size: company.pageSize, company: company.name, tankId: I.tankId, reportNo: I.reportNo, revText, status: issued ? 'ISSUED' : 'DRAFT', drawOrient: layout.drawOrient, drawPaper: layout.drawPaper,
+    hf: { ...hfOf(company), logoSrc: company.logo }, vals: hfVals(job, company) });
   return `<article class="report rp2"><style>${style}</style>${issued ? '' : '<div class="rp-draft" aria-hidden="true">DRAFT</div>'}
   ${front.join('\n')}
   ${chapters.join('\n')}
   ${apps.join('\n')}
   ${footer}
 </article>`;
+}
+
+/** Placeholder values for the page header and footer. */
+export function hfVals(job, company) {
+  const I = job?.info || {};
+  return { company: company?.name || '', client: I.client || '', site: I.site || '', tank: I.tankId || '', report: I.reportNo || '',
+    rev: job?.rev ? `Rev ${job.rev} · ${dateOf(job.savedAt)}` : 'Not saved to a job file', status: job?.status?.stage === 'complete' ? 'ISSUED' : 'DRAFT',
+    date: I.inspDate || '', inspector: I.inspector || job?.status?.inspector || '', title: 'Storage Tank Inspection Report' };
 }
 
 /* ------------------------------------------------------------------ drawing sheets ---

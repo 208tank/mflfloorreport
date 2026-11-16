@@ -7,6 +7,23 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Report — company page header and footer (v3.23.0)
+
+Jobs page → **Report page header and footer** lets each company make the running header and footer its own:
+
+- six positions — header and footer, each left / centre / right — filled with text and placeholders:
+  `{company}` `{client}` `{site}` `{tank}` `{report}` `{rev}` `{status}` `{date}` `{inspector}` `{title}`
+  `{page}` `{pages}`. A part between ` · ` separators whose placeholders are all empty is left out (so
+  "Tank {tank} · Report {report}" with no report number prints just the tank); an unknown placeholder prints as
+  typed, so a typo shows in the preview;
+- the company logo in the header (left, centre or right), printed at a fixed height whatever its pixel size;
+- colour, text size (6–11 pt) and optional rule lines under the header and over the footer;
+- a live preview using the open job (or sample values), and **Reset to default**.
+
+Saved with the company settings (meta `company`, key `hf`) and in backups. Unset, the report prints the original
+header and footer. The cover page has no header or footer. Issued reports keep the header and footer they were
+issued with.
+
 ## Report — drawing sheets (v3.22.0)
 
 The floor plan, shell roll-out and roof plans print as **engineering drawing sheets**:
