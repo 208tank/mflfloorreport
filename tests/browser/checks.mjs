@@ -1900,7 +1900,7 @@ export default {
     const job = JSON.parse(readFileSync(new URL('../small/small-tank.json', import.meta.url), 'utf8'));
     await page.evaluate(async (j) => { const { db } = await import('./js/db.js'); await db.putJob(j); const { openJob } = await import('./js/views/jobs.js'); await openJob(j.id, 'report'); }, job);
     await page.waitForSelector('#reportRoot .rp-small h2.rp-ch');
-    const heads = await page.$$eval('#reportRoot h2.rp-ch', (x) => x.map((e) => e.textContent.trim()));
+    const heads = await page.$$eval('#reportRoot .rp-chap h2.rp-ch', (x) => x.map((e) => e.textContent.trim()));
     assert.equal(heads[0], '1Job information'); assert.equal(heads.at(-1), '12Follow-up and sign-off'); assert.equal(heads.length, 12);
     assert.match(await page.$eval('#reportRoot .rp-cover h1', (e) => e.textContent), /Out of Service Tank Inspection Report \(Small Diameter\)/);
     await page.click('.rsec summary');
@@ -1910,6 +1910,33 @@ export default {
     await page.waitForFunction(() => /In Service/.test(document.querySelector('#reportRoot .rp-cover h1')?.textContent || ''));
     const pdf = await page.pdf({ format: 'Letter' });
     assert.ok(pdf.length > 10000);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+  async 'small tank S4: appendices — nothing wider than the page, three drawing sheets, the appendix switches work'({ browser, url, appPage }) {
+    const page = await appPage(browser, url, { demo: false });
+    const { readFileSync } = await import('node:fs');
+    const job = JSON.parse(readFileSync(new URL('../small/small-tank.json', import.meta.url), 'utf8'));
+    await page.evaluate(async (j) => { const { db } = await import('./js/db.js'); await db.putJob(j); const { openJob } = await import('./js/views/jobs.js'); await openJob(j.id, 'report'); }, job);
+    await page.waitForSelector('#reportRoot .rp-small .rp-app');
+    const apps = await page.$$eval('#reportRoot .rp-app h2.rp-ch', (x) => x.map((e) => e.textContent.trim()));
+    assert.deepEqual(apps.map((x) => x[0]), ['A', 'B', 'C', 'D']);
+    const sheets = await page.$$eval('#reportRoot .rp-draw.dwg', (ds) => ds.map((d) => ({ title: d.querySelector('.tb-title')?.textContent.replace('Title', '').trim(), zones: d.querySelectorAll('.zt span').length + d.querySelectorAll('.zl span').length })));
+    assert.deepEqual(sheets.map((x) => x.title), ['External shell and nozzle UT — plan', 'Fixed roof UT — plan', 'Floor internal — MFL indications and UT prove-up']);
+    assert.ok(sheets.every((x) => x.zones === 14));
+    await page.emulateMedia({ media: 'print' });
+    for (const [paper, px] of [['Letter', Math.floor((8.5 - 1.2) * 96)], ['A4', Math.floor((8.27 - 1.2) * 96)]]) {
+      await page.setViewportSize({ width: px, height: 900 }); await page.waitForTimeout(200);
+      const wide = await page.evaluate(() => { const W = document.documentElement.clientWidth; return [...document.querySelectorAll('#reportRoot .report *')].filter((e) => !e.closest('.rp-draw') && e.getBoundingClientRect().right > W + 1).slice(0, 5).map((e) => `${e.tagName}.${e.className} ${Math.round(e.getBoundingClientRect().width)}px`); });
+      assert.deepEqual(wide, [], `${paper}: elements wider than the printable width`);
+    }
+    await page.emulateMedia({ media: 'screen' }); await page.setViewportSize({ width: 1280, height: 900 });
+    // switch off the floor calculation appendix on the Report screen
+    await page.click('.rsec summary');
+    await page.click('input[data-act="rsec"][data-id="small-calcfloor"]');
+    await page.waitForFunction(() => document.querySelectorAll('#reportRoot .rp-app').length === 3);
+    await page.click('input[data-act="rsec"][data-id="small-calcfloor"]');
+    await page.waitForFunction(() => document.querySelectorAll('#reportRoot .rp-app').length === 4);
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },

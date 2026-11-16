@@ -386,7 +386,7 @@ export function hfVals(job, company) {
 const ZONES_X = 8, ZONES_Y = 6;
 
 /** info: { company: {name, logo}, client, site, tankId, reportNo, rev, revDate, status, drawnBy, checkedBy } */
-export function sheetHTML(N, info, { cls = '', section, figure, view, scale = 'Not to scale', drawing, wrap = 'map-wrap', data = [], legend = '', notes = [] }) {
+export function sheetHTML(N, info, { cls = '', section, figure, view, scale = 'Not to scale', drawing, wrap = 'map-wrap', data = [], legend = '', notes = [], blocks = [] }) {
   const anchor = section ? N.anchor(section) : '';
   const f = N.figureRef(figure);
   const dwgNo = `${info.reportNo || info.tankId || 'DWG'}-F${f.no}`;
@@ -409,7 +409,7 @@ export function sheetHTML(N, info, { cls = '', section, figure, view, scale = 'N
       <div class="dwg-in">
         <div class="dwg-area"><div class="${wrap}">${drawing}</div><div class="dwg-view"><b>${h(view)}</b><span>${h(scale)}</span></div></div>
         <aside class="dwg-side">
-          ${block('Design data', data.length ? kv(data) : '')}
+          ${block('Design data', data.length ? kv(data) : '')}${blocks.map(([title, body]) => block(title, body)).join('')}
           ${block('Legend', legend)}
           ${block('Notes', notes.length ? `<ol class="dwg-notes">${notes.map((n) => `<li>${n}</li>`).join('')}</ol>` : '')}
           ${tb}

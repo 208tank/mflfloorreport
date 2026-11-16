@@ -7,7 +7,7 @@ import { db } from '../db.js';
 import { buildReport } from '../report.js';
 import { layoutOf } from '../report/frame.js';
 import { isSmall } from '../small.js';
-import { SMALL_CHAPTERS } from '../report/small.js';
+import { SMALL_APPENDICES, SMALL_CHAPTERS } from '../report/small.js';
 import { reportHistory } from '../app/stage.js';
 import { $ } from '../ui.js';
 import { esc as h, sha256 } from '../util.js';
@@ -20,7 +20,7 @@ const issuedOf = (j) => (j?.status?.stage === 'complete' && j.issued ? j.issued 
 const optsLoaded = db.getMeta('report:opts').then((o) => { if (o && typeof o === 'object') Object.assign(S.reportOpts, o); }).catch(() => {});
 function storedLayout() {
   const L = layoutOf(S.reportOpts);
-  return { order: L.chapters.map((c) => c.id), appOrder: L.appendices.map((a) => a.id), off: [...L.front, ...L.chapters, ...L.appendices].filter((x) => !x.on).map((x) => x.id), drawOrient: L.drawOrient, drawPaper: L.drawPaper };
+  return { order: L.chapters.map((c) => c.id), appOrder: L.appendices.map((a) => a.id), off: [...[...L.front, ...L.chapters, ...L.appendices].filter((x) => !x.on).map((x) => x.id), ...(S.reportOpts.layout?.off || []).filter((x) => String(x).startsWith('small-'))], drawOrient: L.drawOrient, drawPaper: L.drawPaper };
 }
 async function saveOpts() { await db.setMeta('report:opts', S.reportOpts).catch(() => {}); }
 
@@ -33,7 +33,7 @@ function sectionsPanel() {
       <label class="fld"><span class="lbl">Floor, shell and roof drawings on</span><select data-act="rpaper"><option value="report" ${L.drawPaper === 'report' ? 'selected' : ''}>Report paper (${S.company.pageSize === 'a4' ? 'A4' : 'Letter'})</option><option value="tabloid" ${L.drawPaper === 'tabloid' ? 'selected' : ''}>11 × 17 in (Tabloid / Ledger)</option></select></label>
       <p class="muted small">Report paper: ${S.company.pageSize === 'a4' ? 'A4' : 'Letter'} (Jobs → Company). Drawings fill their page.</p></div>
     ${isSmall(S.job) ? `<div><h4>Small tank report</h4><ol class="small">${SMALL_CHAPTERS.map(([, t]) => `<li>${h(t)}</li>`).join('')}</ol><p class="muted small">The small tank report follows the template's order; chapters run on without page breaks. Front matter switches and the drawing options apply.</p></div>` : `<div><h4>Chapters</h4><ul class="rsec-list">${L.chapters.map((x, i, a) => row(x, 'order', i, a.length, i + 1 + '.')).join('')}</ul></div>`}
-    <div>${isSmall(S.job) ? '' : `<h4>Appendices</h4><ul class="rsec-list">${L.appendices.map((x, i, a) => row(x, 'appOrder', i, a.length, String.fromCharCode(65 + i) + '.')).join('')}</ul>`}
+    <div>${isSmall(S.job) ? `<h4>Appendices (as needed)</h4><ul>${SMALL_APPENDICES.map(([k, t]) => `<li><label class="chk sm"><input type="checkbox" data-act="rsec" data-id="small-${k}" ${(S.reportOpts.layout?.off || []).includes('small-' + k) ? '' : 'checked'}><span>${h(t)}</span></label></li>`).join('')}</ul>` : `<h4>Appendices</h4><ul class="rsec-list">${L.appendices.map((x, i, a) => row(x, 'appOrder', i, a.length, String.fromCharCode(65 + i) + '.')).join('')}</ul>`}
       <h4>Content</h4>${[['photos', 'Photos'], ['indSize', 'Indication sizes'], ['provenOnly', 'Hide false calls'], ['plateLabels', 'Plate labels on map'], ['datums', 'Datum marks']].map(([k, l]) => `<label class="chk sm"><input type="checkbox" data-act="ropt" data-k="${k}" ${S.reportOpts[k] ? 'checked' : ''}><span>${l}</span></label>`).join('')}
       <p><button type="button" class="btn sm ghost" data-act="rsec-reset">Default layout</button></p></div>
   </div><p class="muted small">Chapters and appendices are numbered in the order shown; those without content for this job are left out. Contents lists section, table and figure numbers; the browser adds page numbers to each page.</p></details>`;

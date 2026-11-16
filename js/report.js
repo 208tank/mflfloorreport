@@ -41,7 +41,9 @@ export function legendHTML() {
 }
 
 export function buildReport(job, layout, calc, company, photos, opts) {
-  if (isSmall(job)) return buildSmallReport(job, layout, calc, company, photos, opts || {}); // S3: the small tank template
+  // S3 / S4: the small tank template; the photo and floor-drawing helpers of this module are passed in
+  if (isSmall(job)) return buildSmallReport(job, layout, calc, company, photos, opts || {}, { legendHTML, fig, photoNo, indPhotoNo, phBox,
+    floorMap: () => renderMapSVG(job, layout, { calc, print: true, plateLabels: (opts || {}).plateLabels !== false, indLabels: true, showDatums: (opts || {}).datums !== false, floorOf: (ft) => itemFloor(layout, ft) }) });
   const U = u(job), I = job.info || {}, T = job.tank || {}, C = calc.C;
   const t = (mm) => fmt(mm, 't', job);
   const inds = (job.indications || []).slice().sort((a, b) => String(a.no).localeCompare(String(b.no), undefined, { numeric: true }));

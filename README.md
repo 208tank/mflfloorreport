@@ -7,6 +7,35 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Small tank report — S4: appendices and print (v3.33.0)
+
+The small tank report now ends with its appendices, each printed only when the job has something for it (and each
+can be switched off under *Report sections and layout*):
+
+- **Photographs** — two per row in the fixed 4 : 3 frame, captioned *Photo SH-1 · Shell · location · caption*; floor
+  indication photos numbered by indication (003a). Photos marked "not in report" are left out.
+- **NDE — UT thickness** — the shell UT readings table (the thinnest reading in each course at each station, top course
+  first), the nozzle schedule with neck readings at 12, 3, 6 and 9 o'clock, and the fixed roof readings; then two
+  drawing sheets: a new **external shell and nozzle UT plan** (`shellPlanSVG`: the shell from above, each UT station with
+  its minimum reading, nozzles at their angle in hexagon tags, a nozzle list in the side panel) and the **fixed roof UT
+  plan**.
+- **NDE — MFL floor inspection** — the indication table (plate, X, Y, MFL %, TS / BS, UT, VT pit, T-actual, repair),
+  then the **floor drawing sheet** with the indication list in its side panel (No., X, Y, TS/BS, T-act) — the list
+  moves off the sheet when there are more than 22 indications.
+- **Calculations** — the five-part layout of the full report's appendices: inputs, assumptions, references (clause
+  numbers only), working (CR and RL for the shell and roof, the floor life, the interval formulas with their numbers,
+  the planar tilt) and results.
+- **Floor minimum remaining thickness (API 653 §4.4.5)** — the full report's floor calculation, when the floor has
+  indications.
+
+Tables come before the drawing sheets in each appendix, so an appendix heading never stands alone on a page. Drawing
+sheets follow the drawing options (landscape or portrait, report paper or 11 × 17). The test tank prints on 19 Letter
+pages; the print audit finds no orphans or split boxes on Letter, A4, 11 × 17 or portrait drawings, and nothing is
+wider than the page. The drawing sheet frame gained optional side-panel blocks (`blocks`); full-report output is
+byte-for-byte unchanged.
+
+`tests/smallreport.test.mjs` (S4 tests) and the browser check "small tank S4" cover the appendices.
+
 ## Small tank report — S3: the report (v3.32.0)
 
 A job on the small tank template now prints the **small tank report** (`js/report/small.js`), in the template's order:

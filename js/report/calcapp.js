@@ -15,7 +15,7 @@ const blank = (v) => v === null || v === undefined || v === '';
 const TYPE = { M: `Measured${vm('M')}`, E: `Estimated${vm('E')}`, C: `Calculated${vm('C')}`, S: 'Specified', D: 'App default', T: 'Code table' };
 
 /** The five parts. inputs: [[quantity, value, type key, source]]; results: [[item, value, limit, result, key]]. */
-function block(N, { name = '', inputs = [], assumptions = [], refs = [], working = '', results = [], assess = null, resultNote = '' }) {
+export function block(N, { name = '', inputs = [], assumptions = [], refs = [], working = '', results = [], assess = null, resultNote = '' }) {
   const assessHTML = assess === undefined ? '' : assess && assess.text
     ? `<div class="calc-assess"><b>Engineering assessment${vm('A')}:</b> ${h(assess.text)}${assess.by || assess.date ? ` <small>(${h([assess.by, assess.date].filter(Boolean).join(', '))})</small>` : ''}</div>`
     : '<div class="calc-assess none">Engineering assessment: none entered.</div>';
@@ -35,7 +35,7 @@ function block(N, { name = '', inputs = [], assumptions = [], refs = [], working
   </div>`;
 }
 /** A worked line: formula, the numbers in it, and the answer. */
-const step = (label, formula, subst, ans, key = '') => `<div class="calc-step"${key ? ` data-k="${h(key)}"` : ''}><span class="cs-l">${label}</span><span class="cs-f">${formula}</span>${subst ? `<span class="cs-s">= ${subst}</span>` : ''}<span class="cs-a" data-c="v">= ${ans}</span></div>`;
+export const step = (label, formula, subst, ans, key = '') => `<div class="calc-step"${key ? ` data-k="${h(key)}"` : ''}><span class="cs-l">${label}</span><span class="cs-f">${formula}</span>${subst ? `<span class="cs-s">= ${subst}</span>` : ''}<span class="cs-a" data-c="v">= ${ans}</span></div>`;
 const yesNo = (b) => (b ? 'yes' : 'no');
 
 /* ===================================================================================== A — floor MRT === */

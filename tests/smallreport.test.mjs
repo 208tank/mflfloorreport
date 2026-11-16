@@ -29,7 +29,6 @@ test('S3: the small report follows the template order, with the title chosen for
   assert.deepEqual(chapters(html), ['1 Job information', '2 Tank static data', '3 Inspection summary', '4 Code required recommendations', '5 Non-code recommendations', '6 NDE scope and summary of results', '7 Inspection intervals', '8 Thickness and corrosion rates', '9 External inspection', '10 Internal inspection', '11 Insulation', '12 Follow-up and sign-off']);
   assert.match(html, /<h1>Out of Service Tank Inspection Report \(Small Diameter\)<\/h1>/);
   assert.match(html, /class="report rp2 rp-small"/);
-  assert.doesNotMatch(html, /class="rp-app"/, 'no appendices yet (S4)');
   assert.doesNotMatch(html, /<h3 class="rp-h3">Tables<\/h3>/, 'contents without the table list');
   j.small.title = 'ins';
   assert.match(build(j), /<h1>In Service Tank Inspection Report \(Small Diameter\)<\/h1>/);
@@ -81,6 +80,64 @@ test('S3: ratings, comments, item tables and sign-off', () => {
   // user text is escaped
   j.small.items['x-lot'].text = '<img src=x onerror=alert(1)>';
   assert.doesNotMatch(build(j), /<img src=x/);
+});
+
+const apps = (html) => [...html.matchAll(/<div class="rp-app" id="app-(\w+)"><h2 class="rp-ch"><span class="rp-no">([A-Z])<\/span>([^<]+)<\/h2>/g)].map((m) => `${m[2]} ${m[3]}`);
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAGCAIAAABxZ0isAAAAEUlEQVR4nGM4YWODFTEMpAQAr9U8AVonTcEAAAAASUVORK5CYII=';
+
+test('S4: appendices as needed — photos, UT, MFL, calculations — and each can be switched off', () => {
+  const j = small(), L = buildLayout(j), c = api653(j, L);
+  let html = build(j);
+  assert.deepEqual(apps(html), ['A NDE — UT thickness', 'B NDE — MFL floor inspection', 'C Calculations — thickness, intervals and settlement', 'D Calculation — floor minimum remaining thickness (API 653 §4.4.5)'], 'no photos: no photo appendix');
+  const photos = [{ id: 'ph1', jobId: j.id, sec: 'shell', n: 1, dataUrl: PNG, w: 8, h: 6, caption: 'Shell at the chime', anno: [] }, { id: 'ph2', jobId: j.id, sec: 'floor', n: 1, dataUrl: PNG, w: 8, h: 6, caption: 'Hidden', inReport: false, anno: [] },
+    { id: 'ph3', jobId: j.id, indId: j.indications[2].id, dataUrl: PNG, w: 8, h: 6, caption: 'Pit at 003', anno: [] }];
+  html = buildReport(j, L, c, { name: 'Co' }, photos, {});
+  assert.equal(apps(html)[0], 'A Photographs');
+  const T = text(html);
+  assert.match(T, /Photo SH-1 · Shell · Shell at the chime/); assert.doesNotMatch(T, /Hidden/); assert.match(T, /Photo 003a · Floor · indication 003 · Pit at 003/);
+  html = buildReport(j, L, c, { name: 'Co' }, photos, { layout: { off: ['small-photos', 'small-calcfloor'] } });
+  assert.deepEqual(apps(html).map((x) => x.slice(2)), ['NDE — UT thickness', 'NDE — MFL floor inspection', 'Calculations — thickness, intervals and settlement']);
+});
+
+test('S4: UT appendix — shell readings by course and station, nozzles, the shell / nozzle plan and the roof plan sheets', () => {
+  const j = small(), html = build(j), T = text(html);
+  const ut = T.slice(T.lastIndexOf('A NDE — UT thickness'), T.lastIndexOf('B NDE — MFL'));
+  assert.match(ut, /Shell UT readings — minimum by course and station/);
+  assert.match(ut, /1 0\.250 (0\.\d{3} ){4}0\.231/, 'course 1 row ends with its minimum');
+  assert.match(ut, /N1 Water draw \/ drain · Drain/);
+  assert.match(html, /External shell and nozzle UT — plan/); assert.match(html, /<svg class="sm-plan"/);
+  assert.match(html, /Fixed roof UT — plan/);
+  assert.match(ut, /R2 90° 8\.00 ft 0\.150 OK/);
+  // tables come before the sheets, so the appendix heading never stands alone
+  const a = html.indexOf('id="app-ut"');
+  assert.ok(html.indexOf('Shell UT readings', a) < html.indexOf('class="rp-draw dwg', a));
+});
+
+test('S4: MFL appendix — the floor drawing sheet with the indication list (No, X, Y, TS/BS, T-act)', () => {
+  const j = small(), html = build(j);
+  const a = html.indexOf('id="app-mfl"'), sheet = html.slice(html.indexOf('class="rp-draw dwg', a));
+  assert.match(sheet, /<div class="dwg-bh">Indications<\/div><table class="dwg-kv sm-ind"><tr><th>No\.<\/th><th>X<\/th><th>Y<\/th><th>TS\/BS<\/th><th>T-act<\/th><\/tr>/);
+  assert.match(sheet, /<td>003<\/td><td>[\d.]+<\/td><td>[\d.]+<\/td><td>BS<\/td><td>0\.080<\/td>/);
+  assert.match(sheet, /Floor internal — MFL indications and UT prove-up/);
+  // many indications: the list stays in the table before the sheet, not on the sheet
+  const k = small(); for (let i = 0; i < 30; i++) k.indications.push({ ...k.indications[0], id: 'x' + i, no: String(100 + i) });
+  const h2 = build(k), s2 = h2.slice(h2.indexOf('class="rp-draw dwg', h2.indexOf('id="app-mfl"')));
+  assert.doesNotMatch(s2, /sm-ind/);
+});
+
+test('S4: calculation appendix shows the working with the calculation’s values', () => {
+  const j = small(), L = buildLayout(j), R = smallCalc(j, L, api653(j, L)), T = text(build(j));
+  const c = T.slice(T.lastIndexOf('C Calculations — thickness'), T.lastIndexOf('D Calculation — floor'));
+  assert.match(c, /Shell course 1 — CR \(T-nom − T-act\) \/ years = \(0\.250 − 0\.231\) \/ 30 = 0\.0006 in\/yr/);
+  assert.match(c, /UT thickness lesser of 15 and RCA \/ 2N/); assert.ok(c.includes(`= ${R.intervals.ut.done.years} years`));
+  assert.match(c, /Twist \[\(N \+ S\) − \(E \+ W\)\] \/ 4/);
+  assert.match(c, /Edge settlement Exceeds/);
+});
+
+test('S4: a metric job prints in mm', () => {
+  const j = small(); j.units = 'metric';
+  const T = text(build(j));
+  assert.match(T, /T-nom \(mm\)/); assert.match(T, /CR \(mm\/yr\)/); assert.doesNotMatch(T, /in\/yr/);
 });
 
 test('S3: full-report jobs are not affected', () => {
