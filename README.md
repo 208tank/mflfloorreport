@@ -7,6 +7,43 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Report improvements — R2: front chapters and schema 5 (v3.24.0)
+
+**Schema 5** (job migration step 4 → 5; a revision of each job is kept before it is updated):
+
+| Group | Fields | Entered on |
+|---|---|---|
+| Personnel | per person: role, name, company, certification scheme, number, method, level, expiry. Replaces the MFL operator, UT technician and API 653 inspector name fields, which the migration turns into entries | Tank setup → Personnel |
+| Calibration | per equipment item: certificate number, reference standard / block, on-site checks (time, check, result) | Equipment → Calibration records |
+| Design sources | per design value: nameplate, drawing, previous report, measured or assumed; shell height; previous inspection report | Tank setup |
+| Identification | owner / operator, location / area, service | Tank setup → Inspection |
+| Scope and limitations | per component: access, cleaning, conditions, areas not inspected and why | each component's NDE page |
+| Engineering assessment | overall (the existing condition field) with assessor and date; per component: text, engineer, date | Executive summary; each Analysis page |
+| Document control | prepared / reviewed / approved names and dates, distribution list (the peer reviewer stays in the job stage) | Report → Document control |
+| Repair status | slot only (`job.repairs`); entry screens come with R3 | — |
+
+`js/personnel.js` holds the personnel model; `personName(job, role)` reads a name from the list, falling back to the
+old fields for a job not yet updated. `js/sources.js` lists the design-source options. The validator checks ids in
+the new lists; revision comparison and the audit trail label the new parts.
+
+**Report chapters** (`js/report/front.js`):
+
+1. **Executive summary** — a factual scope line; the overall condition as entered, marked as an engineering
+   assessment (A), or *No engineering assessment entered*; the component table separates the evaluation result
+   (from the calculations and observations, C / O) from the engineer's assessment (A, or *Not entered*); priority
+   items; next inspections as entered, beside the floor Oᵣ used in the calculation and the longest Oᵣ it allows (C).
+2. **Tank identification and design** — identification, and a design-data table with each value's source
+   (*Not stated* when none was recorded).
+3. **Inspection scope and limitations** (new chapter) — methods and extent by component, MFL coverage of the floor
+   area (C), components not in scope, and access / cleaning / conditions / areas not inspected.
+4. **Personnel, equipment and calibration** — personnel with certificate expiry checked against the inspection
+   date; equipment; calibration status on the inspection date with certificate and reference standard; on-site
+   verification checks; signature lines for the people listed.
+
+Document control prints the prepared / reviewed / approved names and dates and the distribution list. Value-type
+marks (M / C / E / O / A) appear in these chapters; R6 applies them to the rest of the report. No calculation
+changed (engineering golden results identical apart from the stored job's new empty fields and schema number).
+
 ## Report — company page header and footer (v3.23.0)
 
 Jobs page → **Report page header and footer** lets each company make the running header and footer its own:
@@ -1025,6 +1062,10 @@ every limit is editable.
 | `js/calc.js` | Indication analysis and API 653 MRT |
 | `js/map.js` | SVG floor map and pan/zoom |
 | `js/report.js` | Printable report: the content of each chapter |
+| `js/report/front.js` | Report front chapters (R2): executive summary, tank identification and design, scope and limitations, personnel / equipment / calibration |
+| `js/personnel.js` | Inspection personnel (schema 5) and the name helpers |
+| `js/sources.js` | Sources of design data (schema 5) |
+| `js/views/r2fields.js` | Entry cards for the schema 5 fields and their list handlers |
 | `js/report/frame.js` | Report frame: chapter order and switches, numbering, cover, document control, contents, value key, page set-up, running header and footer |
 | `js/export.js` | CSV, SVG/PNG export |
 | `js/db.js` | IndexedDB storage (jobs, photos and the photo bin, light job cards, registry, settings, revisions, audit, imports); job + photo writes are one transaction |

@@ -1,6 +1,7 @@
 // UT loader sheet: an Excel workbook built from the job for the UT technician to fill in, and the
 // matching import that writes the readings back into the job.
 import { utKit } from './equipment.js';
+import { personName, setPersonName } from './personnel.js';
 import { writeXlsx, readXlsx, ref, ST } from './xlsx.js';
 import { u, fromMm, toMm } from './units.js';
 import { buildLayout } from './geometry.js';
@@ -55,7 +56,7 @@ export async function buildLoader(job) {
     [K('gen'), LB('Generated'), L(new Date().toLocaleString())],
     [],
     [null, { v: 'Completed by the UT technician', s: ST.sub }],
-    [K('tech'), LB('UT technician'), { v: job.info.utTech || '', s: ST.inTxt }],
+    [K('tech'), LB('UT technician'), { v: personName(job, 'ut'), s: ST.inTxt }],
     [K('instr'), LB('UT instrument'), { v: [kit.ut?.make, kit.ut?.model].filter(Boolean).join(' '), s: ST.inTxt }],
     [K('serial'), LB('Serial no.'), { v: kit.ut?.serial || '', s: ST.inTxt }],
     [K('probe'), LB('Probe'), { v: [kit.probe?.make, kit.probe?.model, kit.probe?.details].filter(Boolean).join(' ') || '', s: ST.inTxt }],
@@ -291,7 +292,7 @@ export async function readLoader(job, buf, { verified = () => false } = {}) {
   const txt = (v) => (v === null || v === undefined ? '' : String(v).trim());
   const AREA = 'UT technician and instrument';
   const text = (id, where, raw, get, set) => { const t = txt(raw); if (t) push({ id, area: AREA, where, value: t, kind: 'text', get: (j) => get(j) || '' }, set); };
-  text('info:tech', 'UT technician', info.tech, (j) => j.info?.utTech, (v) => { job.info.utTech = v; });
+  text('info:tech', 'UT technician', info.tech, (j) => personName(j, 'ut'), (v) => { setPersonName(job, 'ut', v); });
   text('info:date', 'UT date', info.date, (j) => j.info?.utDate, (v) => { job.info.utDate = v; });
   text('info:serial', 'Instrument serial', info.serial, (j) => utKit(j).ut?.serial, (v) => { utKit(job, true).ut.serial = v; });
   text('info:probe', 'Probe', info.probe, (j) => { const k = utKit(j).probe; return [k?.make, k?.model, k?.details].filter(Boolean).join(' '); }, (v) => { const p = utKit(job, true).probe; p.make = ''; p.model = v; p.details = ''; });

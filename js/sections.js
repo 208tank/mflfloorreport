@@ -43,10 +43,16 @@ export const childView = (sec, child) => (child === 'an' ? SEC.get(sec).an : `${
 export function defaultSecs() { return Object.fromEntries(SECTIONS.map((s) => [s.key, { nde: [], obs: [], recs: [] }])); }
 export function migrateSecs(secs) {
   const out = defaultSecs();
-  for (const k of Object.keys(out)) { const s = secs?.[k] || {}; out[k] = { nde: s.nde || [], obs: s.obs || [], recs: s.recs || [] }; }
+  for (const k of Object.keys(out)) {
+    const s = secs?.[k] || {};
+    out[k] = { nde: s.nde || [], obs: s.obs || [], recs: s.recs || [] };
+    // schema 5: scope and limitations, and the engineering assessment, per component (kept only when entered)
+    if (s.scope && typeof s.scope === 'object') out[k].scope = s.scope;
+    if (s.assess && typeof s.assess === 'object') out[k].assess = s.assess;
+  }
   return out;
 }
-export function defaultSummary() { return { scope: '', condition: '', narrative: '', nextExt: '', nextInt: '', nextUT: '', rts: '', issued: '', defRev: 0 }; }
+export function defaultSummary() { return { scope: '', condition: '', narrative: '', nextExt: '', nextInt: '', nextUT: '', rts: '', issued: '', defRev: 0, assessBy: '', assessDate: '' }; }
 
 export const NDE_METHODS = ['Visual (VT)', 'UT thickness', 'UT scanning (B / C-scan)', 'MFL floor scan', 'MT', 'PT', 'Vacuum box', 'Tracer gas / helium', 'RT', 'Hardness', 'Level / settlement survey', 'Seal gap survey', 'Holiday / coating test', 'Other'];
 export const NDE_RESULTS = ['', 'Satisfactory', 'Indications found', 'Repairs required', 'Not performed', 'In progress'];

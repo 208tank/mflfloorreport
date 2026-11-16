@@ -1,4 +1,5 @@
 // Printable report (browser print → Save as PDF).
+import { personName } from './personnel.js';
 import { EQ_LABEL, EQ_TYPES, equipLine, calState, equipUse, useByMethod } from './equipment.js';
 import { fmt, fmtRate, u } from './units.js';
 import { RESULTS, RESULT_SHORT, nozzleUT, nozzleWall, NZ_CONN_SHORT, UT_CLOCK, CORRECTIONS, statusText } from './calc.js';
@@ -15,6 +16,7 @@ import { itemFloor, angleOf, refCornerName, datumName, orientName } from './geom
 import { inScope } from './registry.js';
 import { escText as h } from './util.js';
 import { assembleReport, layoutOf, legendList, numbering, sheetHTML, swatch } from './report/frame.js';
+import { execCh, personnelCh, scopeCh, tankCh } from './report/front.js';
 
 const yn = (b) => (b ? 'Yes' : 'No');
 const or = (v, d = '—') => (v === null || v === undefined || v === '' ? d : v);
@@ -85,29 +87,9 @@ export function buildReport(job, layout, calc, company, photos, opts) {
   }).join('')}</tbody></table><p class="note"><sup>m</sup> measured size entered for that plate; others use the standard plate size.</p></section>`;
 
   // ---- report improvements R1: numbered chapters in the chosen order, inside the report frame
-  const SI = { company, client: I.client, site: I.site, tankId: I.tankId, reportNo: I.reportNo, rev: job.rev ? 'Rev ' + job.rev : 'Draft', revDate: job.savedAt ? new Date(job.savedAt).toISOString().slice(0, 10) : '', status: job.status?.stage === 'complete' ? 'ISSUED' : 'DRAFT', drawnBy: I.inspector || job.status?.inspector, checkedBy: job.status?.reviewer };
+  const SI = { company, client: I.client, site: I.site, tankId: I.tankId, reportNo: I.reportNo, rev: job.rev ? 'Rev ' + job.rev : 'Draft', revDate: job.savedAt ? new Date(job.savedAt).toISOString().slice(0, 10) : '', status: job.status?.stage === 'complete' ? 'ISSUED' : 'DRAFT', drawnBy: personName(job, 'insp653') || job.status?.inspector, checkedBy: job.status?.reviewer };
   const N = numbering(), LY = layoutOf(opts), drawCls = LY.drawOrient === 'portrait' ? 'port' : 'land', drawBig = drawCls + (LY.drawPaper === 'tabloid' ? ' lg' : ''); // floor, shell and roof drawings may go on 11 × 17
-    const tankCh = () => `<section>
-    ${N.sub('Identification and design data')}
-    <div class="cols">
-      ${kv([['Client', h(I.client)], ['Facility / site', h(I.site)], ['Tank ID', h(I.tankId)], ['Product', h(I.product)], ['Work order', h(I.workOrder)], ['Inspection date', h(I.inspDate)], ['Construction code', h([T.code, T.edition, T.supp].filter(Boolean).join(', ') || '—')], ['Product SG / max. fill', `${T.sg ?? '—'} / ${T.fillH ? fmt(T.fillH, 'big', job) : 'shell height'}`]])}
-      ${kv([['Diameter', fmt(T.diameter, 'big', job)], ['Bottom type', h(T.bottomType)], ['Bottom nominal t', t(T.tBottom)], ['Annular nominal t', job.layout?.annular ? t(T.tAnnular) : 'No annular ring'], ['Product-side coating', h(T.coating || 'None')], ['Cathodic protection / RPB', `${yn(T.cp)} / ${yn(T.rpb)}`]])}
-    </div>
-  </section>`;
-    const equipCh = () => `<section class="pb-avoid">
-    ${N.sub('Equipment and personnel')}
-    ${(() => {
-      const use = equipUse(job, SECTIONS, inScope), all = job.equipment || [];
-      // only what the NDE methods used; if nothing has been picked yet, list everything on the job
-      const picked = all.filter((e) => use.has(e.id));
-      const list = (picked.length ? picked : all).slice().sort((a, b) => EQ_TYPES.findIndex(([k]) => k === a.type) - EQ_TYPES.findIndex(([k]) => k === b.type));
-      if (!list.length) return '<p class="muted">No equipment listed.</p>';
-      return `${N.table('Equipment used and calibration')}<table class="grid small eq-rt"><thead><tr><th>Equipment</th><th>Make / model</th><th>Serial no.</th><th>Calibrated</th><th>Cal. due</th><th>Settings / details</th><th>Used for</th></tr></thead><tbody>${list.map((e) => `<tr class="${calState(e, I.inspDate) === 'expired' ? 'is-bad' : ''}"><td>${h(EQ_LABEL[e.type] || e.type)}</td><td>${h([e.make, e.model].filter(Boolean).join(' '))}</td><td>${h(e.serial)}</td><td>${h(e.calDate)}</td><td>${h(e.calDue)}${calState(e, I.inspDate) === 'expired' ? ' <b>(expired)</b>' : ''}</td><td>${h([e.details, e.type === 'mfl' && e.threshold ? 'reporting threshold ' + e.threshold + ' %' : ''].filter(Boolean).join(' · '))}</td><td>${useByMethod(use.get(e.id)).map(h).join('<br>')}</td></tr>`).join('')}</tbody></table>`;
-    })()}
-    ${I.utDate ? `<p class="small">Date of UT readings: ${h(I.utDate)}</p>` : ''}
-    ${I.notes ? `<p><b>Notes:</b> ${h(I.notes).replace(/\n/g, '<br>')}</p>` : ''}
-    <table class="sig"><tr>${[['MFL operator', I.mflTech], ['UT technician', I.utTech], ['API 653 inspector', I.inspector]].map(([r, n]) => `<td><div class="line"></div><b>${h(n || '')}</b><br>${r} · Date</td>`).join('')}</tr></table>
-  </section>`;
+
     const floorCh = () => (inScope(job, 'floor') ? `<section>
     ${N.sub('Floor summary')}
     <div class="kpis">
@@ -290,9 +272,9 @@ ${patches.some((pp) => pp.checks.length) ? `${N.table('Critical zone patch plate
     return out.join('');
   })() : '');
 
+  const ctx = { job, layout, calc, N, opts };
   const chapterBody = {
-    exec: () => execSummaryHTML(job, layout, calc, N),
-    tank: tankCh, personnel: equipCh, floor: floorCh, shell: shellCh, roof: roofCh,
+    exec: () => execCh(ctx), tank: () => tankCh(ctx), scope: () => scopeCh(ctx), personnel: () => personnelCh(ctx), floor: floorCh, shell: shellCh, roof: roofCh,
     nozzles: () => (inScope(job, 'nozzles') && (job.nozzles || []).length ? nozCh() : ''),
     settle: settleCh,
     findings: () => sectionChaptersHTML(job, photos, opts, N),
@@ -323,22 +305,6 @@ export function annoOverlay(p) {
 }
 const fig = (p, cap = true) => `<figure class="phr"><span class="phfig"><img src="${p.dataUrl}" alt="">${annoOverlay(p)}</span>${cap ? `<figcaption><b>${photoNo(p)}</b>${p.caption ? ' · ' + h(p.caption) : ''}${p.comment ? `<br><small>${h(p.comment)}</small>` : ''}</figcaption>` : ''}</figure>`;
 const condText = (c) => (CONDITIONS.find(([k]) => k === c) || [])[1] || '';
-
-export function execSummaryHTML(job, layout, calc, N = null) {
-  const F = findings(job, layout, calc), S2 = job.summary || {};
-  const defs = allDefs(job), open = defs.filter((d) => d.status !== 'Closed');
-  const pri = open.filter((d) => ['P1', 'P2'].includes(d.priority));
-  return `${N ? '<section class="exec">' : '<section class="pb exec"><h2>Executive summary</h2>'}
-    ${S2.condition ? `<p class="verdict ${/Not fit|Further/.test(S2.condition) ? 'bad' : /repairs/.test(S2.condition) ? 'warn' : 'ok'}">${h(S2.condition)}</p>` : ''}
-    ${S2.scope ? `<h3 class="rp-h3">Scope</h3><p>${h(S2.scope).replace(/\n/g, '<br>')}</p>` : ''}
-    ${S2.narrative ? `<h3 class="rp-h3">Summary of findings</h3><p>${h(S2.narrative).replace(/\n/g, '<br>')}</p>` : ''}
-    ${N ? N.table('Condition by component') : ''}<table class="grid small"><thead><tr><th>Component</th><th>Condition</th><th>Key results</th><th class="n">Open deficiencies</th></tr></thead><tbody>
-    ${SECTIONS.filter((s) => inScope(job, s.key)).map((s) => { const f = F[s.key], n = open.filter((d) => d.sec === s.key).length; return `<tr class="${f.status === 'bad' ? 'is-bad' : ''}"><td><b>${h(s.label)}</b></td><td>${STATUS_TEXT[f.status]}</td><td>${f.lines.slice(0, 3).join('<br>') || '—'}</td><td class="n">${n || '—'}</td></tr>`; }).join('')}
-    </tbody></table>
-    ${pri.length ? `<h3 class="rp-h3">Priority items (P1 / P2)</h3><ul>${pri.map((d) => `<li><b>${h(d.no || '')}</b> ${h(d.secLabel)}: ${h(d.finding)}${d.action ? ` — <i>${h(d.action)}</i>` : ''}</li>`).join('')}</ul>` : ''}
-    ${S2.rts || S2.nextExt || S2.nextInt || S2.nextUT ? `<table class="kv">${[['Return to service', S2.rts], ['Next external inspection', S2.nextExt], ['Next internal inspection', S2.nextInt], ['Next UT thickness inspection', S2.nextUT]].filter(([, v]) => v).map(([k, v]) => `<tr><th>${k}</th><td>${h(v)}</td></tr>`).join('')}</table>` : ''}
-  </section>`;
-}
 
 export function defTableHTML(job, photos, title, opts = {}) {
   let defs = allDefs(job); if (opts.openOnly) defs = defs.filter((d) => d.status !== 'Closed');
@@ -378,7 +344,7 @@ export function buildDefReport(job, company, photos) {
     <div class="rp-title"><h1>Deficiency Report</h1><div>${h(I.tankId ? 'Tank ' + I.tankId : '')}${I.site ? ' · ' + h(I.site) : ''}</div>
     <div class="meta">${I.reportNo ? 'Report ' + h(I.reportNo) + ' · ' : ''}Issued ${h(S2.issued || new Date().toISOString().slice(0, 10))}${S2.defRev ? ' · Update ' + S2.defRev : ''}</div></div>
   </header>
-  <section><table class="kv">${[['Client', I.client], ['Facility / site', I.site], ['Tank ID', I.tankId], ['Inspection date', I.inspDate], ['API 653 inspector', I.inspector], ['Overall condition', S2.condition]].filter(([, v]) => v).map(([k, v]) => `<tr><th>${k}</th><td>${h(v)}</td></tr>`).join('')}</table></section>
+  <section><table class="kv">${[['Client', I.client], ['Facility / site', I.site], ['Tank ID', I.tankId], ['Inspection date', I.inspDate], ['API 653 inspector', personName(job, 'insp653')], ['Overall condition', S2.condition]].filter(([, v]) => v).map(([k, v]) => `<tr><th>${k}</th><td>${h(v)}</td></tr>`).join('')}</table></section>
   ${defTableHTML(job, photos, 'Deficiencies', { always: true, client: true })}
   <footer class="rp-foot">${h(company.footer || '')} Status as of ${h(new Date().toLocaleDateString())}.</footer>
 </article>`;

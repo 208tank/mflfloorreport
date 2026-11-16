@@ -1,5 +1,6 @@
 // Tank setup: job and tank details, scope, shell courses and nozzles (their tables come from the shell and
 // nozzle modules), and the floor builders — grid, row by row and plate by plate (refactoring step 10).
+import { personnelCardHTML, sourcesCardHTML } from './r2fields.js';
 import { S } from '../app/state.js';
 import { field, focusSel, readInput } from '../app/fields.js';
 import { defineView, redraw, renderNav } from '../app/nav.js';
@@ -42,15 +43,16 @@ function viewSetup() {
   <div class="setup-grid">
     <div class="setup-forms">
       ${scopeCard}${reg ? idCard : `<section class="card"><h2>Inspection</h2><div class="fgrid">
-        ${field('Client', 'info.client')}${field('Facility / site', 'info.site')}
+        ${field('Client', 'info.client')}${field('Owner / operator', 'info.owner', 'text', { ph: 'if not the client' })}
+        ${field('Facility / site', 'info.site')}${field('Location / area', 'info.location', 'text', { ph: 'e.g. north tank farm, unit 3' })}
         ${field('Tank ID', 'info.tankId')}${field('Product', 'info.product')}
-        ${field('Report no.', 'info.reportNo')}${field('Work order', 'info.workOrder')}
-        ${field('Inspection date', 'info.inspDate', 'date')}${field('0° reference label', 'info.zeroRef', 'text', { ph: 'e.g. N, manway, inlet' })}
-        ${field('MFL operator', 'info.mflTech')}${field('UT technician', 'info.utTech')}
-        ${field('API 653 inspector', 'info.inspector')}${field('Date of UT readings', 'info.utDate', 'text', { ph: 'from the UT loader sheet' })}
+        ${field('Service', 'info.service', 'text', { ph: 'e.g. storage, day tank, heated' })}${field('Work order', 'info.workOrder')}
+        ${field('Report no.', 'info.reportNo')}${field('Inspection date', 'info.inspDate', 'date')}
+        ${field('0° reference label', 'info.zeroRef', 'text', { ph: 'e.g. N, manway, inlet' })}${field('Date of UT readings', 'info.utDate', 'text', { ph: 'from the UT loader sheet' })}
         ${field('Job stage', 'status.stage', 'sel', { options: STAGES })}${field('Peer reviewer', 'status.reviewer')}
         ${field('Planned inspection date', 'status.planned', 'date')}${field('Report due', 'status.due', 'date')}
-      </div></section>`}
+      </div></section>
+      <section class="card" id="personnelCard">${personnelCardHTML()}</section>`}
 
       <section class="card"><h2>Tank</h2><div class="fgrid">
         ${field('Units', 'units', 'sel', { options: Object.entries(UNITS).map(([k, v]) => [k, v.label]) })}
@@ -59,7 +61,8 @@ function viewSetup() {
         ${field('Annular plate nominal t', 'tank.tAnnular', 't', { ph: 'same as bottom' })}
         ${field('Bottom construction', 'tank.bottomType', 'sel', { options: ['Lap welded', 'Butt welded', 'Lap welded with annular ring', 'Other'] })}
         ${field('Product-side coating', 'tank.coating', 'sel', { options: ['None', 'Thin film', 'Thick film (reinforced > 0.05 in)', 'Unknown'] })}
-        ${field('Year built', 'tank.yearBuilt')}${field('Last internal inspection', 'tank.lastInternal')}
+        ${field('Shell height', 'tank.height', 'big', { ph: shellHeight(S.job) ? fmt(shellHeight(S.job), 'big', S.job, false) + ' (sum of courses)' : '' })}${field('Year built', 'tank.yearBuilt')}
+        ${field('Last internal inspection', 'tank.lastInternal')}${field('Previous inspection report', 'tank.prevReport', 'text', { ph: 'report no., date' })}
         ${field('Cathodic protection', 'tank.cp', 'bool')}${field('Leak detection / release prevention barrier', 'tank.rpb', 'bool')}
       </div></section>
 
@@ -72,6 +75,8 @@ function viewSetup() {
         ${field('Maximum fill height', 'tank.fillH', 'big', { ph: shellHeight(S.job) ? fmt(shellHeight(S.job), 'big', S.job, false) + ' (shell height)' : '' })}`}
         <p class="muted small span2">The code and edition set the joint efficiencies offered for the shell courses (API 653 Table 4.2: ${h(jointOptions(S.job.tank.code, S.job.tank.edition).group)}). Materials, stresses and Young's modulus come from the reference tables (<button class="linkbtn" data-go="ref">Code tables</button>).</p>
       </div></section>
+
+      ${reg ? '' : sourcesCardHTML()}
 
       <section class="card"><h2>Plate layout</h2>
         ${hasInd ? '<p class="callout warn">This job has indications. They are stored as plate + X/Y, so changing the layout or numbering moves them on the map. Check them afterwards.</p>' : ''}

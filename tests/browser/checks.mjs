@@ -896,17 +896,17 @@ export default {
     await page.evaluate(async () => { const { db } = await import('./js/db.js'); for (let i = 0; i < 150 && !(await db.getMeta('baseline:v4')); i++) await new Promise((r) => setTimeout(r, 100)); });
     await page.evaluate(() => window.tfi.go('jobs'));
     await page.click('[data-act="job-open"][data-id="demo-a"]');
-    await page.waitForFunction(() => window.tfi.job()?.id === 'demo-a' && window.tfi.job().schema === 4);
+    await page.waitForFunction(() => window.tfi.job()?.id === 'demo-a' && window.tfi.job().schema === 5);
     await page.waitForTimeout(800); // let the migrated job save
     const r = await page.evaluate(async () => {
       const { db } = await import('./js/db.js');
       const revs = await db.jobRevisions('demo-a'), log = await db.migrationLog(), stored = await db.getJob('demo-a');
       return { revs: revs.map((x) => [x.n, x.reason, x.note, x.schema, x.job]), jobLog: log.filter((m) => m.kind === 'job' && m.jobId === 'demo-a').map((m) => [m.from, m.to]), storedSchema: stored.schema };
     });
-    assert.deepEqual(r.revs.map((x) => x.slice(0, 4)), [[1, 'migration', 'Baseline at upgrade to the data integrity version', 1], [2, 'migration', 'Before migration from schema 1 to 4', 1]]);
+    assert.deepEqual(r.revs.map((x) => x.slice(0, 4)), [[1, 'migration', 'Baseline at upgrade to the data integrity version', 1], [2, 'migration', 'Before migration from schema 1 to 5', 1]]);
     assert.deepEqual(r.revs[1][4], before.jobs.find((j) => j.id === 'demo-a'), 'the revision holds the job exactly as stored before the migration');
-    assert.deepEqual(r.jobLog, [[1, 2], [2, 3], [3, 4]]);
-    assert.equal(r.storedSchema, 4);
+    assert.deepEqual(r.jobLog, [[1, 2], [2, 3], [3, 4], [4, 5]]);
+    assert.equal(r.storedSchema, 5);
     // opening it again adds no revision and no log entry
     const openVia = (id) => page.evaluate((i) => { window.tfi.go('jobs'); document.querySelector(`[data-act="job-open"][data-id="${i}"]`).click(); }, id);
     await openVia('demo-b');
@@ -1533,7 +1533,7 @@ export default {
       const { buildLoader, defaultDecisions, readLoader } = await import('./js/loader.js');
       const job = structuredClone(window.tfi.job()), sheet = structuredClone(job), ids = job.indications.slice(0, 4).map((i) => i.id);
       const ut = (k) => job.indications[k].utMin;
-      sheet.indications[0].utMin = 3.5; sheet.indications[1].utMin = 5; sheet.indications[2].utMin = 2.9; sheet.info.utTech = 'J. Smith';
+      sheet.indications[0].utMin = 3.5; sheet.indications[1].utMin = 5; sheet.indications[2].utMin = 2.9; sheet.personnel.find((p) => p.role === 'ut').name = 'J. Smith';
       const buf = await (await buildLoader(sheet)).arrayBuffer();
       job.nozzles.splice(0, 1);
       const res = await readLoader(job, buf, { verified: (it) => it.id === `ind:${ids[2]}:utMin` });
@@ -1549,7 +1549,7 @@ export default {
       };
       d.set(`ind:${ids[0]}:utMin`, 'keep'); d.set(`ind:${ids[2]}:utMin`, 'keep');
       res.apply(d);
-      out.after = [job.indications[0].utMin, job.indications[1].utMin, job.indications[2].utMin, job.info.utTech];
+      out.after = [job.indications[0].utMin, job.indications[1].utMin, job.indications[2].utMin, (job.personnel || []).find((p) => p.role === 'ut')?.name];
       const again = await readLoader(job, buf);
       out.again = [again.items.find((it) => it.id === `ind:${ids[1]}:utMin`).status, again.items.find((it) => it.id === `ind:${ids[0]}:utMin`).status];
       return out;
@@ -1751,10 +1751,10 @@ export default {
     await page.waitForSelector('#reportRoot .report h2.rp-ch');
     const chapters = () => page.$$eval('#reportRoot h2.rp-ch', (hs) => hs.map((x) => x.textContent.trim()));
     let ch = await chapters();
-    assert.deepEqual(ch.slice(0, 4), ['1Executive summary', '2Tank identification and design', '3Personnel, equipment and calibration', '4Floor — MFL inspection']);
+    assert.deepEqual(ch.slice(0, 5), ['1Executive summary', '2Tank identification and design', '3Inspection scope and limitations', '4Personnel, equipment and calibration', '5Floor — MFL inspection']);
     assert.ok(await page.$('#reportRoot .rp-cover'), 'cover'); assert.ok(await page.$('#reportRoot .rp-toc'), 'contents');
-    assert.match(await page.textContent('#reportRoot'), /Table 4-1 API 653 bottom evaluation by area/);
-    assert.match(await page.textContent('#reportRoot'), /Figure 4-1\s*Floor plan/);
+    assert.match(await page.textContent('#reportRoot'), /Table 5-1 API 653 bottom evaluation by area/);
+    assert.match(await page.textContent('#reportRoot'), /Figure 5-1\s*Floor plan/);
     // contents lists each numbered section with a link to it
     const toc = await page.$$eval('#reportRoot .rp-toc a', (as) => as.map((a) => [a.textContent, document.querySelector(a.getAttribute('href')) ? 'ok' : 'missing']));
     assert.ok(toc.length > 20 && toc.every(([, ok]) => ok === 'ok'), 'every contents entry links to its heading');
@@ -1763,16 +1763,67 @@ export default {
     await page.uncheck('[data-act="rsec"][data-id="exec"]');
     await page.waitForFunction(() => !/Executive summary/.test(document.querySelector('#reportRoot h2.rp-ch')?.textContent));
     await page.click('[data-act="rsec-up"][data-id="floor"]');
-    await page.waitForFunction(() => document.querySelectorAll('#reportRoot h2.rp-ch')[1]?.textContent.includes('Floor'));
+    await page.waitForFunction(() => document.querySelectorAll('#reportRoot h2.rp-ch')[2]?.textContent.includes('Floor'));
     ch = await chapters();
-    assert.deepEqual(ch.slice(0, 3), ['1Tank identification and design', '2Floor — MFL inspection', '3Personnel, equipment and calibration']);
-    assert.match(await page.textContent('#reportRoot'), /Table 2-1 API 653 bottom evaluation by area/, 'tables renumber with their chapter');
+    assert.deepEqual(ch.slice(0, 4), ['1Tank identification and design', '2Inspection scope and limitations', '3Floor — MFL inspection', '4Personnel, equipment and calibration']);
+    assert.match(await page.textContent('#reportRoot'), /Table 3-1 API 653 bottom evaluation by area/, 'tables renumber with their chapter');
     // kept on the device (it is read back at start-up)
     const saved = await page.evaluate(async () => (await (await import('./js/db.js')).db.getMeta('report:opts')).layout);
     assert.ok(saved.off.includes('exec') && saved.order.indexOf('floor') < saved.order.indexOf('personnel'), JSON.stringify(saved));
     // back to the default
     await page.click('[data-act="rsec-reset"]');
     await page.waitForFunction(() => document.querySelector('#reportRoot h2.rp-ch')?.textContent.includes('Executive summary'));
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+
+  async 'report R2: personnel, calibration, design sources, scope, assessments and document control are entered and printed'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const go = async (v) => { await page.evaluate((x) => window.tfi.go(x), v); await page.waitForTimeout(150); };
+    // personnel: add a visual inspector with an expired certificate
+    await go('setup');
+    const before = await page.$$eval('.pe-row', (r) => r.length);
+    await page.click('[data-act="pe-add"][data-role="other"]');
+    await page.waitForFunction((n) => document.querySelectorAll('.pe-row').length === n + 1, before);
+    const id = await page.$eval('.pe-row:last-child [data-pe="name"]', (el) => el.dataset.id);
+    await page.selectOption(`[data-pe="role"][data-id="${id}"]`, 'vt');
+    await page.fill(`[data-pe="name"][data-id="${id}"]`, 'V. Isual'); await page.press(`[data-pe="name"][data-id="${id}"]`, 'Tab');
+    await page.fill(`[data-pe="expiry"][data-id="${id}"]`, '2020-01-01'); await page.dispatchEvent(`[data-pe="expiry"][data-id="${id}"]`, 'change');
+    // design source
+    await page.selectOption('[data-bind="tank.src.opTemp"]', 'assumed');
+    // calibration: an on-site check on the UT instrument
+    await go('equip');
+    const eid = await page.evaluate(() => window.tfi.job().equipment.find((e) => e.type === 'ut').id);
+    await page.click(`[data-act="ck-add"][data-eid="${eid}"]`);
+    await page.waitForSelector(`[data-ck="check"][data-eid="${eid}"]:not([value])`, { timeout: 5000 }).catch(() => {});
+    const ck = await page.evaluate((e) => window.tfi.job().equipment.find((x) => x.id === e).checks.at(-1).id, eid);
+    await page.fill(`[data-ck="check"][data-id="${ck}"]`, 'Zero check on probe'); await page.press(`[data-ck="check"][data-id="${ck}"]`, 'Tab');
+    await page.fill(`[data-ck="result"][data-id="${ck}"]`, 'Within 0.001 in'); await page.press(`[data-ck="result"][data-id="${ck}"]`, 'Tab');
+    // scope and limitations on the nozzle NDE page; engineering assessment on the shell analysis page
+    await go('nde:nozzles');
+    await page.fill('[data-bind="secs.nozzles.scope.notInspected"]', 'N7 behind insulation'); await page.press('[data-bind="secs.nozzles.scope.notInspected"]', 'Tab');
+    await go('an:shell');
+    await page.fill('[data-bind="secs.shell.assess.text"]', 'Shell acceptable for continued service.'); await page.press('[data-bind="secs.shell.assess.text"]', 'Tab');
+    await page.fill('[data-bind="secs.shell.assess.by"]', 'E. Engineer'); await page.press('[data-bind="secs.shell.assess.by"]', 'Tab');
+    // report: no overall assessment entered; document control
+    await go('report');
+    await page.waitForSelector('#reportRoot .report h2.rp-ch');
+    await page.click('[data-act="rdoc-toggle"]');
+    await page.fill('[data-bind="docctl.approvedBy"]', 'P. Approver'); await page.press('[data-bind="docctl.approvedBy"]', 'Tab');
+    await page.waitForFunction(() => /P\. Approver/.test(document.querySelector('#reportRoot .rp-front')?.parentElement?.textContent || ''));
+    const txt = await page.textContent('#reportRoot');
+    assert.match(txt, /No engineering assessment entered\./);
+    assert.match(txt, /Shell acceptable for continued service\./);
+    assert.match(txt, /Visual inspector\s*V\. Isual/);
+    assert.match(txt, /2020-01-01 \(expired at the inspection date\)/);
+    assert.match(txt, /Zero check on probe\s*Within 0\.001 in/);
+    assert.match(txt, /N7 behind insulation/);
+    assert.match(txt, /Maximum operating temperature[^]*?Assumed/);
+    assert.match(txt, /Approved by · Signature and date|P\. Approver/);
+    // saved in the job
+    const j = await page.evaluate(() => window.tfi.job());
+    assert.equal(j.schema, 5); assert.equal(j.docctl.approvedBy, 'P. Approver'); assert.equal(j.tank.src.opTemp, 'assumed');
+    assert.equal(j.secs.shell.assess.by, 'E. Engineer'); assert.ok(!('inspector' in j.info));
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },

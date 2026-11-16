@@ -2,11 +2,13 @@
 // figures, the cover, document control, contents, value-type key, running header and footer, page set-up and the
 // draft mark. Content is supplied by report.js; the frame only numbers and assembles it. No browser APIs.
 import { escText as h } from '../util.js';
+import { personName } from '../personnel.js';
 
 /** Chapters in their default order (decided 15 Nov 2026: the plan's order; the user can reorder them). */
 export const CHAPTERS = [
   ['exec', 'Executive summary'],
   ['tank', 'Tank identification and design'],
+  ['scope', 'Inspection scope and limitations'],
   ['personnel', 'Personnel, equipment and calibration'],
   ['floor', 'Floor — MFL inspection'],
   ['shell', 'Shell'],
@@ -285,14 +287,15 @@ const dateOf = (t) => (t ? new Date(t).toISOString().slice(0, 10) : '');
 /** Who prepared, reviewed and approved the report, and the revisions it has been through. history: [{ rev, at, by, note }]
  *  (file saves and issues, newest last), given by the caller; without it, the current revision only. */
 function controlHTML(job, history) {
-  const I = job.info || {}, St = job.status || {};
+  const I = job.info || {}, St = job.status || {}, D = job.docctl || {};
   const revs = (history && history.length ? history : job.rev ? [{ rev: job.rev, at: job.savedAt, note: 'Saved to a job file' }] : []);
   const kv = (rows) => `<table class="kv">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table>`;
   return `${kv([['Report number', h(I.reportNo || '—')], ['Work order', h(I.workOrder || '—')], ['Job stage', h(STAGE_TXT[St.stage] || '—')], ['Current revision', job.rev ? `Rev ${job.rev}, saved ${h(dateOf(job.savedAt))}${(job.updated || 0) > (job.savedAt || 0) ? ' — <b>includes changes made after Rev ' + job.rev + '</b>' : ''}` : 'Not yet saved to a job file']])}
     <h3 class="rp-h3">Revision history</h3>
     <table class="grid small"><thead><tr><th>Rev</th><th>Date</th><th>By</th><th>Description</th></tr></thead><tbody>${revs.map((r) => `<tr><td>${h(r.rev ?? '')}</td><td>${h(dateOf(r.at))}</td><td>${h(r.by || '')}</td><td>${h(r.note || '')}</td></tr>`).join('') || '<tr><td colspan="4">No revisions saved to a job file yet.</td></tr>'}</tbody></table>
     <h3 class="rp-h3">Approval</h3>
-    <table class="sig"><tr>${[['Prepared by', I.inspector || St.inspector], ['Peer reviewed by', St.reviewer], ['Approved by', '']].map(([r, n]) => `<td><div class="line"></div><b>${h(n || '')}</b><br>${r} · Signature and date</td>`).join('')}</tr></table>`;
+    <table class="sig"><tr>${[['Prepared by', D.preparedBy || personName(job, 'insp653') || St.inspector, D.preparedDate], ['Peer reviewed by', St.reviewer, D.reviewedDate], ['Approved by', D.approvedBy, D.approvedDate]].map(([r, n, dt]) => `<td><div class="line"></div><b>${h(n || '')}</b>${dt ? ` · ${h(dt)}` : ''}<br>${r} · Signature and date</td>`).join('')}</tr></table>
+    ${(D.dist || []).some((x) => x.name || x.org) ? `<h3 class="rp-h3">Distribution</h3><table class="grid small"><thead><tr><th>Name</th><th>Organisation</th><th>Copy / format</th></tr></thead><tbody>${D.dist.filter((x) => x.name || x.org).map((x) => `<tr><td>${h(x.name)}</td><td>${h(x.org)}</td><td>${h(x.copy)}</td></tr>`).join('')}</tbody></table>` : ''}`;
 }
 
 function coverHTML(job, company, scopeText, issued) {
@@ -359,7 +362,7 @@ export function hfVals(job, company) {
   const I = job?.info || {};
   return { company: company?.name || '', client: I.client || '', site: I.site || '', tank: I.tankId || '', report: I.reportNo || '',
     rev: job?.rev ? `Rev ${job.rev} · ${dateOf(job.savedAt)}` : 'Not saved to a job file', status: job?.status?.stage === 'complete' ? 'ISSUED' : 'DRAFT',
-    date: I.inspDate || '', inspector: I.inspector || job?.status?.inspector || '', title: 'Storage Tank Inspection Report' };
+    date: I.inspDate || '', inspector: personName(job, 'insp653') || job?.status?.inspector || '', title: 'Storage Tank Inspection Report' };
 }
 
 /* ------------------------------------------------------------------ drawing sheets ---
@@ -442,6 +445,11 @@ export const SHEET_CSS = `
 .report .dwg.port .dwg-side { border-left: 0; border-top: 1px solid #1d232b; display: grid; grid-template-columns: 1fr 1fr; }
 .report .dwg.port .dwg-side .dwg-tb { grid-column: 1 / -1; }
 .report .rp-anchor { display: block; height: 0; }
+.report sup.vm { font-size: 7px; font-weight: 700; color: #3a434e; border: 0.5px solid #8a939d; border-radius: 2px; padding: 0 1.5px; margin-left: 2px; vertical-align: super; line-height: 1; }
+.report .exec-scope { font-size: 11px; margin: 0 0 8px; }
+.report .verdict .vk { display: block; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; opacity: .8; margin-bottom: 2px; }
+.report .verdict small { display: block; font-weight: 400; font-size: 9.5px; margin-top: 2px; }
+.report .verdict.none { border: 1px dashed #8a939d; background: #fff; color: #3a434e; font-weight: 600; }
 .report .dwg-side .legend { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; margin: 0; font-size: 8px; } .report .dwg-side .legend .lg { display: flex; align-items: center; gap: 5px; }
 @media print {
   .report .rp-draw.dwg { display: block; }

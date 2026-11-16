@@ -78,6 +78,7 @@ onChange([
     else if (S.view === 'shell') refreshShell();
     else if (['roofF', 'roofL', 'seal'].includes(S.view)) refreshRoof();
     else if (S.view === 'settle') { if (path === 'settle.eu') renderView(); else refreshSettle(); }
+    else if (S.view === 'report' && (path.startsWith('docctl.') || path === 'status.reviewer')) renderView();
     if (path === 'units') renderAll();
     return;
   }

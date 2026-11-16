@@ -1,4 +1,5 @@
 // API 653 floor evaluation screen: MRT, corrosion rates and the inspection interval (refactoring step 11).
+import { assessCardHTML } from './r2fields.js';
 import { byNo, S } from '../app/state.js';
 import { field } from '../app/fields.js';
 import { defineView, renderView } from '../app/nav.js';
@@ -19,6 +20,7 @@ function viewApi() {
   return `<div class="page">
   <div class="page-head"><div><h1>API 653 bottom evaluation</h1><p class="muted">Minimum remaining thickness at the next internal inspection (API 653, 5th ed. Addendum 4 (2025), §4.4.5). Check the limits against the edition in force and the tank's design.</p></div></div>
   ${findingsBox('floor')}
+  ${assessCardHTML('floor')}
   <div class="api-grid">
     <section class="card"><h2>Inputs</h2><div class="fgrid">
       ${f('Oᵣ — years to next internal inspection', 'Or', 'num', { unit: 'yr', hint: `§6.4.2.2.1: at most ${S.job.tank.rpb ? 30 : 20} years${S.job.tank.rpb ? ' (with RPB)' : ' (30 with an RPB)'}` })}

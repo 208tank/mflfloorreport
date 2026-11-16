@@ -8,6 +8,7 @@
 //    copy, so a step that throws leaves the stored job untouched.
 // Every completed step is logged (meta key 'migrations') with the version, time and app version.
 import { buildLayout, toFloor, toLocal } from './geometry.js';
+import { LEGACY, personnelFromLegacy } from './personnel.js';
 
 /* ------------------------------------------------------------------------------ database --- */
 
@@ -97,7 +98,14 @@ export const JOB_STEPS = [
     run(out, src) { if (src.calc?.mrtAnnular === 2.54) out.calc.mrtAnnular = null; } },
   { to: 4, name: 'Data integrity upgrade: revision history, audit trail and locking',
     notes: () => [],
-    run() { /* new fields (lock, issued, hash, tankVer) are optional: a job without them is valid */ } }
+    run() { /* new fields (lock, issued, hash, tankVer) are optional: a job without them is valid */ } },
+  { to: 5, name: 'Report improvements R2: personnel, calibration, design sources, scope, engineering assessment, document control',
+    notes: (src) => (LEGACY.some(([f]) => String(src.info?.[f] ?? '').trim()) ? ['The MFL operator, UT technician and API 653 inspector are now entries in the Personnel list (Tank setup), where certifications can be added.'] : []),
+    run(out, src) {
+      // the three name fields become personnel entries; everything else new is optional and starts blank
+      if (!Array.isArray(src.personnel) || !src.personnel.length) out.personnel = personnelFromLegacy(src.info);
+      for (const [f] of LEGACY) delete out.info[f];
+    } }
 ];
 export const JOB_SCHEMA = JOB_STEPS.at(-1).to;
 

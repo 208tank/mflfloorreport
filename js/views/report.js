@@ -1,4 +1,5 @@
 // Report screen: report options and the printable preview (refactoring step 2).
+import { docCtlHTML } from './r2fields.js';
 import { S } from '../app/state.js';
 import { defineView, renderView } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
@@ -41,7 +42,7 @@ function viewReport() {
     <div><h1>Report</h1><p class="muted small">Print or save as PDF from the browser dialog (choose “Save as PDF” and margins Default, and turn off the browser’s “Headers and footers”: the report prints its own).</p></div>
     <div class="acts">${issuedOf(S.job) ? '<span class="muted small">The issued report is shown with the options it was issued with.</span>' : ''}
       <button class="btn primary" data-act="print">Print / Save PDF</button></div>
-    ${issuedOf(S.job) ? '' : sectionsPanel()}</div>
+    ${issuedOf(S.job) ? '' : sectionsPanel() + `<details class="rsec" ${S.reportDocOpen ? 'open' : ''}><summary data-act="rdoc-toggle">Document control</summary><div class="rdoc">${docCtlHTML()}</div></details>`}</div>
     <div class="report-preview" id="reportRoot"></div>`;
 }
 let cmp = null; // { issued, live } while the side-by-side comparison is open
@@ -96,6 +97,7 @@ onAction({
   'rsec-down': async (el) => move(el, 1),
   'rsec-reset': async () => { delete S.reportOpts.layout; Object.assign(S.reportOpts, { exec: true, defs: true, sections: true, plates: false }); await saveOpts(); renderView(); },
   'rsec-toggle': async () => { S.reportSecOpen = !S.reportSecOpen; },
+  'rdoc-toggle': async () => { S.reportDocOpen = !S.reportDocOpen; },
 });
 
 onChange([

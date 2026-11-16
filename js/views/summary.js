@@ -16,7 +16,8 @@ function viewSummary() {
   return `<div class="page wide"><div class="page-head"><div><h1>Executive summary</h1><p class="muted">The first page of the report: overall condition, scope, summary of findings and priority items. The component table updates from the inspection data.</p></div>
     <div class="acts"><button class="btn" data-go="defs">Deficiencies</button><button class="btn primary" data-go="report">Report</button></div></div>
     <section class="card"><div class="fgrid">
-      ${field('Overall condition', 'summary.condition', 'sel', { options: CONDITION_OPTS.map((x) => [x, x || '—']), cls: 'span2' })}
+      ${field('Overall condition — engineering assessment', 'summary.condition', 'sel', { options: CONDITION_OPTS.map((x) => [x, x || '—']), cls: 'span2', hint: 'Printed as the engineer’s assessment. Left blank, the report says no engineering assessment was entered.' })}
+      ${field('Assessed by', 'summary.assessBy')}${field('Date of assessment', 'summary.assessDate', 'date')}
       ${field('Return to service', 'summary.rts', 'text', { ph: 'e.g. after P1 / P2 repairs are complete' })}${field('Next external inspection', 'summary.nextExt', 'text', { ph: 'date or interval' })}
       ${field('Next internal inspection', 'summary.nextInt', 'text', { ph: S.calc?.Or ? `e.g. ${S.calc.Or} years (bottom MRT)` : '' })}${field('Next UT thickness inspection', 'summary.nextUT', 'text')}
     </div></section>

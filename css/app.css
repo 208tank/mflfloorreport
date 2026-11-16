@@ -868,3 +868,18 @@ dialog.wide-dlg { max-width: 96vw; }
 .hf-pv-band img { height: 22px; vertical-align: middle; margin-right: 6px; }
 .hf-pv-body { color: #9aa3ad; font-size: 11px; text-align: center; padding: 26px 0; }
 @media (max-width: 720px) { .hf-row { grid-template-columns: 1fr; } }
+/* report improvements R2: personnel, calibration, sources, document control */
+.pe-list { display: grid; gap: 8px; margin: 8px 0; }
+.pe-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)) auto; gap: 6px 8px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; align-items: end; }
+.pe-row.is-bad { border-color: var(--bad); }
+.pe-f { display: flex; flex-direction: column; gap: 2px; min-width: 0; } .pe-f > span { font-size: 11px; color: var(--muted); }
+.pe-f.w2 { grid-column: span 2; } .pe-f input, .pe-f select { width: 100%; min-width: 0; }
+.pe-row .pe-del { grid-column: 7; grid-row: 1; align-self: start; }
+.cal-t td { vertical-align: top; } .cal-t input { width: 100%; }
+.cal-t td:nth-child(3) { width: 10em; }
+.cal-t tr:has(+ .ck-tr) td { border-bottom: 0; } .cal-t .ck-tr td { padding-top: 0; }
+.cal-t .ck-cell > span { display: block; margin-bottom: 4px; }
+.ck-row { display: grid; grid-template-columns: 14em minmax(0, 1fr) 14em auto; max-width: 900px; gap: 4px; margin-bottom: 4px; align-items: center; }
+.src-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.rdoc { padding: 8px 4px; } .rdoc h3 { font-size: 13px; margin: 12px 0 6px; }
+.dist-t input { width: 100%; }

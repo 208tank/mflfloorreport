@@ -1,6 +1,6 @@
 {
  "migrated": {
-  "schema": 4,
+  "schema": 5,
   "calc": {
    "years": 25,
    "stprYears": null,
@@ -35,6 +35,9 @@
     "serial": "SN-0000",
     "calDate": "",
     "calDue": "",
+    "certNo": "",
+    "refStd": "",
+    "checks": [],
     "details": "",
     "threshold": "20",
     "notes": ""
@@ -47,6 +50,9 @@
     "serial": "",
     "calDate": "",
     "calDue": "",
+    "certNo": "",
+    "refStd": "",
+    "checks": [],
     "details": "",
     "threshold": "",
     "notes": ""
@@ -59,6 +65,9 @@
     "serial": "",
     "calDate": "",
     "calDue": "",
+    "certNo": "",
+    "refStd": "",
+    "checks": [],
     "details": "",
     "threshold": "",
     "notes": ""
@@ -71,6 +80,9 @@
     "serial": "",
     "calDate": "",
     "calDue": "",
+    "certNo": "",
+    "refStd": "",
+    "checks": [],
     "details": "",
     "threshold": "",
     "notes": ""
@@ -83,6 +95,9 @@
     "serial": "",
     "calDate": "",
     "calDue": "",
+    "certNo": "",
+    "refStd": "",
+    "checks": [],
     "details": "",
     "threshold": "",
     "notes": ""
@@ -95,6 +110,9 @@
     "serial": "",
     "calDate": "",
     "calDue": "",
+    "certNo": "",
+    "refStd": "",
+    "checks": [],
     "details": "",
     "threshold": "",
     "notes": ""

@@ -1,5 +1,6 @@
 // Tank section screens — NDE scope, observations, photos (with the annotation editor), analysis and
 // recommendations — and the equipment list they pick from (refactoring step 9).
+import { assessCardHTML, calibrationCardHTML, scopeCardHTML } from './r2fields.js';
 import { S, secData, secPhotos } from '../app/state.js';
 import { sxIn, sxSel } from '../app/fields.js';
 import { after, childViews, defineView, go, renderNav, renderView } from '../app/nav.js';
@@ -42,6 +43,7 @@ function viewNDE() {
       <div class="acts row-acts"><button class="btn sm" data-act="sx-add" data-kind="nde" data-sec="${k}">+ Method</button><button class="btn sm" data-act="sx-typ" data-kind="nde" data-sec="${k}">Add typical methods</button></div></section>
     ${sec.nde.length ? `<section class="card"><h2>Data entry</h2><div class="nde-links">${sec.nde.map(([v, l]) => `<button class="btn" data-go="${v}">${l} →</button>`).join('')}</div>
       ${F.lines.length ? `<h3>Results so far</h3><ul class="flist">${F.lines.map((x) => `<li>${x}</li>`).join('')}</ul>` : '<p class="muted small">No results entered yet.</p>'}</section>` : `<section class="card"><p class="muted">No instrument data pages for this section — record the inspection under NDE methods, Observations and Photos.</p></section>`}
+    ${scopeCardHTML(k)}
   </div>`;
 }
 
@@ -84,6 +86,7 @@ function viewEquip() {
       <tbody>${rows || '<tr><td colspan="9" class="empty">No equipment yet — add it with the buttons below.</td></tr>'}</tbody></table></div>
       <div class="eq-add"><span class="muted small">Add:</span>${EQ_TYPES.filter(([k]) => k !== 'other').slice(0, 10).map(([k, l]) => `<button class="btn sm" data-act="eq-add" data-type="${k}">+ ${h(l.replace(/ \\(.*\\)$/, ''))}</button>`).join('')}<button class="btn sm" data-act="eq-add" data-type="other">+ Other</button></div>
     </section>
+    <section class="card" id="calCard">${calibrationCardHTML()}</section>
     <section class="card"><h2>Picked by section</h2>
       ${SECTIONS.filter((s) => inScope(j, s.key)).map((s) => { const nde = secData(s.key).nde; return `<div class="eq-sec"><b>${h(s.label)}</b> ${nde.length ? nde.map((n) => `<span class="eq-m">${h(n.method)}: ${(n.equip || []).length ? (n.equip || []).map((id) => list.find((e) => e.id === id)).filter(Boolean).map((e) => h(equipName(e))).join(', ') : '<span class="muted">none picked</span>'}</span>`).join('') : '<span class="muted small">no NDE methods yet</span>'} <button class="btn sm ghost" data-go="nde:${s.key}">NDE →</button></div>`; }).join('')}
       <p class="muted small">When you choose a method on an NDE page, matching equipment from this list is picked automatically (e.g. MFL floor scan → MFL scanner and reference plate; UT thickness → gauge, probe and block). Adjust it there.</p></section>
@@ -201,7 +204,7 @@ function viewAnalysis() {
   else if (k === 'nozzles') body = nozzleAnalysisHTML();
   else if (k === 'settle') body = `<section class="card"><p class="muted small">The full calculations, charts and tables are on the <button class="linkbtn" data-go="settle">Settlement survey</button> page.</p></section>`;
   else if (k === 'found') body = `<section class="card"><h2>Foundation condition</h2>${(() => { const obs = secData('found').obs; return obs.length ? `<table class="grid small"><thead><tr><th>Item</th><th>Location</th><th>Condition</th><th>Observation</th></tr></thead><tbody>${obs.map((o) => `<tr><td>${h(o.item)}</td><td>${h(o.loc)}</td><td>${condChip(o.cond)}</td><td>${h(o.text)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No foundation observations yet.</p>'; })()}<p class="muted small">Foundation evaluation per API 653 4.5 (and Annex B for settlement). There are no thickness calculations for the foundation.</p></section>`;
-  return `<div class="page wide">${secHead(k, 'Analysis', 'Calculated results and the findings that need action.')}${findingsBox(k)}${body}</div>`;
+  return `<div class="page wide">${secHead(k, 'Analysis', 'Calculated results and the findings that need action.')}${findingsBox(k)}${body}${assessCardHTML(k)}</div>`;
 }
 after['sec:an'] = () => {};
 function roofAnalysisHTML(k) {

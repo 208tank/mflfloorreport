@@ -1,4 +1,5 @@
 // Demo job so the app can be tried without field data.
+import { newPerson } from './personnel.js';
 import { newJob, uid } from './model.js';
 import { equipFromLegacy, suggestEquip } from './equipment.js';
 import { defaultZones, utLocations } from './shell.js';
@@ -12,8 +13,13 @@ export function makeDemo() {
   const job = newJob('imperial');
   Object.assign(job.info, {
     client: 'Demo Energy Ltd.', site: 'Example Terminal', tankId: 'TK-101', product: 'Diesel', reportNo: 'DEMO-001', workOrder: 'WO-2026-114',
-    zeroRef: 'N', mflTech: 'A. Operator', utTech: 'B. Technician', inspector: 'C. Inspector', notes: 'Demonstration data only.'
+    zeroRef: 'N', notes: 'Demonstration data only.'
   });
+  job.personnel = [
+    newPerson('insp653', { name: 'C. Inspector', company: 'Demo Inspection Co.', cert: 'API 653', certNo: '00000', expiry: '2028-06-30' }),
+    newPerson('mfl', { name: 'A. Operator', company: 'Demo Inspection Co.', cert: 'CGSB (CAN/CGSB-48.9712)', certNo: 'MFL-0000', method: 'MFL', level: '2', expiry: '2027-12-31' }),
+    newPerson('ut', { name: 'B. Technician', company: 'Demo Inspection Co.', cert: 'CGSB (CAN/CGSB-48.9712)', certNo: 'UT-0000', method: 'UT', level: '2', expiry: '2027-03-31' }),
+  ];
   Object.assign(job.tank, { code: 'API 650', edition: 'Tenth, November 1998', supp: 'Addendum 1, Mar. 2000', sg: 0.85, fillH: 38 * FT, diameter: 120 * FT, tBottom: 0.25 * IN, tAnnular: 0.3125 * IN, coating: 'None', cp: false, rpb: false, yearBuilt: '2001' });
   Object.assign(job.layout, { plateW: 8 * FT, plateL: 30 * FT, annular: true, annW: 24 * IN, annN: 32, annStart: 0, stagger: 0.5, refCorner: 'BL' });
   Object.assign(job.equip, { mflMake: 'MFL', mflModel: 'Floor scanner', mflSerial: 'SN-0000', mflThreshold: '20', mflRef: 'Reference plate 0.25 in', utMake: 'UT', utModel: 'Flaw detector', utProbe: '5 MHz dual 10 mm', utBlock: 'Step wedge 0.1–0.5 in', vtTools: 'Pit gauge, light, mirror' });
@@ -141,5 +147,16 @@ export function makeDemo() {
     job.secs.found.obs = [o('found', 'Ringwall / foundation cracking or spalling', 'fair', 'Hairline cracks in the concrete ringwall, no spalling.', '90°–150°'), o('found', 'Drainage away from the tank', 'poor', 'Ponding against the chime on the low side; grade slopes toward the tank.', '200°–240°'), o('found', 'Grout / sealant at the chime', 'fair', 'Chime sealant cracked and debonded in places.')];
     job.secs.shell.obs = [o('shell', 'Coating / insulation', 'fair', 'Coating chalking with spot rust on course 1.', 'Course 1'), o('shell', 'Stairway, platforms and handrails', 'good', 'Sound; toe boards in place.')];
   }
+  // report improvements R2: sources, scope and limitations, calibration records, document control (demonstration values)
+  job.personnel.push(newPerson('survey', { name: 'D. Surveyor', company: 'Demo Survey Ltd.', method: 'Level survey' }));
+  Object.assign(job.tank, { prevReport: 'DEMO-000, 2016-05-10', src: { code: 'nameplate', yearBuilt: 'nameplate', diameter: 'drawing', height: 'drawing', courses: 'drawing', materials: 'assumed', tBottom: 'drawing', tAnnular: 'drawing', bottomType: 'drawing', sg: 'measured' } });
+  Object.assign(job.info, { owner: 'Demo Energy Ltd.', location: 'North tank farm', service: 'Product storage' });
+  job.secs.floor.scope = { access: 'Through the two shell manways', cleaning: 'Water-washed and squeegeed; light sludge left in the sump', conditions: 'Out of service, gas-free, dry floor', notInspected: 'MFL dead zone along the shell (about 2 in) and under the roof support pads; covered by UT where accessible' };
+  job.secs.shell.scope = { access: 'From the ground and the stairway', conditions: 'Dry, 12 °C' };
+  for (const e of job.equipment) {
+    if (e.type === 'ut') Object.assign(e, { certNo: 'CAL-1234', refStd: 'Step block, carbon steel, S/N SB-01', checks: [{ id: uid(), at: job.info.inspDate + 'T08:15', check: 'Verification on step block 0.250 in', result: '0.251 in — OK' }] });
+    if (e.type === 'mfl') Object.assign(e, { certNo: 'CAL-5678', refStd: 'Reference plate 0.25 in', checks: [{ id: uid(), at: job.info.inspDate + 'T07:50', check: 'Reference plate run, 20 % and 40 % defects', result: 'Both detected — OK' }] });
+  }
+  job.docctl = { ...job.docctl, preparedBy: 'C. Inspector', dist: [{ id: uid(), name: 'Tank owner', org: 'Demo Energy Ltd.', copy: 'PDF' }] };
   return job;
 }

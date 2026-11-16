@@ -1,7 +1,7 @@
 // Shared application state and constants (refactoring step 1, moved unchanged from app.js).
 import { RESULTS } from '../calc.js';
 
-export const APP_VERSION = '3.23.0';
+export const APP_VERSION = '3.24.0';
 
 export const S = {
   jobs: [], tanks: [], reg: { q: '', open: new Set() }, job: null, layout: null, calc: null, photos: [], company: {},

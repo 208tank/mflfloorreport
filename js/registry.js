@@ -1,6 +1,7 @@
 // Tank registry: the static data of a tank (identity, construction, floor layout, nozzles, shell
 // courses, roof and settlement set-up), entered once and copied into each new inspection.
 // An inspection keeps its own copy, so a finished report always shows the tank as inspected.
+import { setPersonName } from './personnel.js';
 import { newJob, migrate, uid } from './model.js';
 import { UT_CLOCK } from './calc.js';
 import { SECTIONS } from './sections.js';
@@ -100,7 +101,10 @@ export function jobFromTank(t, { scope, floorSrc = 'registry', last = null, copy
     for (const k of TANK_PER_INSP) if (last.tank?.[k] != null) j.tank[k] = last.tank[k];
     j.tank.lastInternal = last.info?.inspDate || j.tank.lastInternal;
   }
-  Object.assign(j.info, info);
+  const { inspector = '', ...rest } = info;
+  Object.assign(j.info, rest);
+  if (String(inspector).trim()) setPersonName(j, 'insp653', String(inspector).trim());
+  if (last?.info?.reportNo && !j.tank.prevReport) j.tank.prevReport = [last.info.reportNo, last.info.inspDate].filter(Boolean).join(', ');
   j.tankRef = t.id;
   j.scope = scope && scope.length ? [...scope] : SECTIONS.map((s) => s.key);
   j.summary.scope = scopeText(j.scope);

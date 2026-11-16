@@ -18,7 +18,7 @@ test('steps are numbered in order with no gaps', () => {
 test('a schema 1 job runs every step in order and is logged', () => {
   const raw = fixture('legacy-schema1'), before = JSON.stringify(raw), log = [];
   const out = migrate(raw, { log, appVersion: 'test' });
-  assert.deepEqual(log.map((l) => [l.from, l.to]), [[1, 2], [2, 3], [3, 4]]);
+  assert.deepEqual(log.map((l) => [l.from, l.to]), [[1, 2], [2, 3], [3, 4], [4, 5]]);
   assert.ok(log.every((l) => l.kind === 'job' && l.jobId === raw.id && l.app === 'test' && l.at > 0));
   assert.equal(out.schema, SCHEMA);
   assert.equal(JSON.stringify(raw), before, 'the stored job must not be changed by migrating it');
@@ -36,10 +36,49 @@ test('a current job needs no steps; migrating again changes nothing', () => {
 test('each step only applies to jobs below its schema', () => {
   const j3 = { ...fixture('demo'), schema: 3 }, log = [];
   migrate(j3, { log });
-  assert.deepEqual(log.map((l) => l.to), [4]);
+  assert.deepEqual(log.map((l) => l.to), [4, 5]);
   const j2 = { ...fixture('demo'), schema: 2, calc: { ...fixture('demo').calc, mrtAnnular: 2.54 } };
   assert.equal(migrate(j2).calc.mrtAnnular, null, 'step 3: old 0.10 in annular default becomes auto');
   assert.equal(migrate({ ...j2, schema: 3 }).calc.mrtAnnular, 2.54, 'step 3 does not run on schema 3 jobs');
+});
+
+test('schema 5: the three name fields become personnel entries, and nothing else changes', () => {
+  const raw = { ...fixture('demo'), schema: 4 };
+  raw.info = { ...raw.info, inspector: 'C. Inspector', mflTech: 'A. Operator', utTech: 'B. Technician' };
+  delete raw.personnel;
+  const before = JSON.stringify(raw), log = [];
+  const out = migrate(raw, { log });
+  assert.equal(JSON.stringify(raw), before, 'the stored job is not changed');
+  assert.deepEqual(log.map((l) => l.to), [5]);
+  assert.deepEqual(out.personnel.map((p) => [p.role, p.name, p.method]), [['insp653', 'C. Inspector', ''], ['mfl', 'A. Operator', 'MFL'], ['ut', 'B. Technician', 'UT']]);
+  assert.ok(out.personnel.every((p) => typeof p.id === 'string' && p.id) && new Set(out.personnel.map((p) => p.id)).size === 3);
+  assert.equal(out.personnel[0].cert, 'API 653');
+  for (const f of ['inspector', 'mflTech', 'utTech']) assert.ok(!(f in out.info), f + ' removed');
+  // everything the calculations use is untouched; new groups start blank
+  // compared with the same job filled in without step 5 (filling in defaults is not versioned)
+  const without = migrate({ ...structuredClone(raw), schema: 5 });
+  for (const k of Object.keys(without)) if (!['personnel', 'info', 'schema'].includes(k)) assert.equal(canonicalJSON(out[k]), canonicalJSON(without[k]), k + ' unchanged');
+  const { inspector, mflTech, utTech, ...rest } = without.info; void inspector; void mflTech; void utTech;
+  assert.equal(canonicalJSON(out.info), canonicalJSON(rest), 'info: only the three name fields removed');
+  assert.deepEqual(out.repairs, {}); assert.equal(out.docctl.approvedBy, ''); assert.deepEqual(out.docctl.dist, []);
+  assert.ok(migrationNotes(raw).some((n) => /Personnel list/.test(n)));
+  // a job with no names gets an empty list and no note
+  const blank = { ...fixture('demo'), schema: 4, info: { ...fixture('demo').info, inspector: '', mflTech: '', utTech: '' } }; delete blank.personnel;
+  assert.deepEqual(migrate(blank).personnel, []);
+  assert.ok(!migrationNotes(blank).some((n) => /Personnel/.test(n)));
+});
+
+test('schema 5: per-component scope and assessment survive normalising; an existing personnel list is kept', () => {
+  const j = migrate(fixture('demo'));
+  j.secs.floor.scope = { access: 'Manway', cleaning: 'Water-washed', conditions: 'Dry', notInspected: 'Under sump' };
+  j.secs.shell.assess = { text: 'Acceptable', by: 'E. Engineer', date: '2026-11-01' };
+  j.personnel = [{ id: 'p1', role: 'vt', name: 'V. Isual' }];
+  const again = migrate(j);
+  assert.deepEqual(again.secs.floor.scope, j.secs.floor.scope);
+  assert.deepEqual(again.secs.shell.assess, j.secs.shell.assess);
+  assert.deepEqual(again.personnel, j.personnel);
+  const four = { ...structuredClone(j), schema: 4 }; four.info.inspector = 'Someone';
+  assert.deepEqual(migrate(four).personnel, j.personnel, 'a list already present is not replaced');
 });
 
 test('a step that throws leaves the stored job untouched', () => {

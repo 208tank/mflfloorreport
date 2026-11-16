@@ -49,7 +49,8 @@ export async function validateJobFile(data, { schema = Infinity, fileVersion = I
   if (data.photos !== undefined && !Array.isArray(data.photos)) err('The photos part of the file is not a list.');
   if (data.hash !== undefined && (typeof data.hash !== 'string' || data.hash !== (await sha256(data.job)))) err('The job’s checksum does not match: the file has been changed or damaged since it was saved.');
   for (const k of ['info', 'tank', 'layout', 'plates']) if (data.job[k] !== undefined && !isObj(data.job[k])) err(`The job’s ${k} part has the wrong type.`);
-  for (const k of ['indications', 'features', 'nozzles', 'equipment']) if (data.job[k] !== undefined && !Array.isArray(data.job[k])) err(`The job’s ${k} part is not a list.`);
+  for (const k of ['indications', 'features', 'nozzles', 'equipment', 'personnel']) if (data.job[k] !== undefined && !Array.isArray(data.job[k])) err(`The job’s ${k} part is not a list.`);
+  for (const k of ['repairs', 'docctl']) if (data.job[k] !== undefined && !isObj(data.job[k])) err(`The job’s ${k} part has the wrong type.`);
   if (errors.length) return { errors, warnings, job: null };
   // ---- update a copy to this version
   let job;
@@ -64,13 +65,15 @@ export async function validateJobFile(data, { schema = Infinity, fileVersion = I
     ['Indication', job.indications, (x) => x.no], ['Floor feature', job.features, (x) => x.label || x.type], ['Nozzle', job.nozzles, (x) => x.mark],
     ['Equipment item', job.equipment, (x) => [x.make, x.model, x.serial].filter(Boolean).join(' ')], ['Shell course', job.shell?.courses, null],
     ['Settlement edge area', job.settle?.edge, null], ['Bottom depression', job.settle?.dep, null], ['Fixed roof UT point', job.roof?.fixed?.pts, (x) => x.label],
+    ['Person', job.personnel, (x) => x.name], ['Distribution entry', job.docctl?.dist, (x) => x.name],
+    ...(job.equipment || []).filter(isObj).map((e) => ['On-site check', e.checks, (x) => x.check, null, [e.make, e.model, e.serial].filter(Boolean).join(' ')]),
     ['Primary seal gap', job.roof?.seal?.primary?.gaps, null], ['Secondary seal gap', job.roof?.seal?.secondary?.gaps, null],
     ...Object.entries(job.secs || {}).flatMap(([k, s]) => [['NDE method', s?.nde, (x) => x.method, k], ['Observation', s?.obs, (x) => x.item, k], ['Recommendation', s?.recs, (x) => x.no || x.finding, k]]),
   ];
-  for (const [what, list, name, sec] of lists) {
+  for (const [what, list, name, sec, owner] of lists) {
     if (list === undefined || list === null) continue;
     if (!Array.isArray(list)) { err(`${what}s: not a list.`); continue; }
-    const seen = new Map(), where = sec ? ` (${SEC.get(sec)?.label || sec})` : '';
+    const seen = new Map(), where = sec ? ` (${SEC.get(sec)?.label || sec})` : owner ? ` (${owner})` : '';
     list.forEach((x, i) => {
       if (!isObj(x)) { err(`${what} ${i + 1}${where} is not a valid entry.`); return; }
       if (typeof x.id !== 'string' || !x.id) { err(`${what} ${name?.(x) || i + 1}${where} has no id.`); return; }

@@ -9,7 +9,7 @@ const FIX = new URL('./fixtures/', import.meta.url);
 const asFile = (job, photos = []) => ({ format: 'tank-floor-inspector', version: 1, saved: '2026-11-14T00:00:00.000Z', rev: 1, job, photos });
 const demoJob = () => JSON.parse(readFileSync(new URL('demo.json', FIX), 'utf8'));
 const PHOTO = (o) => ({ id: 'ph1', dataUrl: 'data:image/png;base64,AAAA', caption: '', ...o });
-const opts = { schema: 4, fileVersion: 1 };
+const opts = { schema: 5, fileVersion: 1 };
 const run = (data) => validateJobFile(data, opts);
 
 /** Each fixture: a change to a good file and the message it must produce. */
@@ -96,5 +96,19 @@ test('validate: checking a file never changes it, and returns the job as this ve
   const f = asFile(legacy), before = JSON.stringify(f);
   const r = await run(f);
   assert.equal(JSON.stringify(f), before);
-  assert.equal(r.job.schema, 4);
+  assert.equal(r.job.schema, 5);
+});
+
+test('validate (schema 5): personnel, calibration checks and distribution entries need ids; wrong types are errors', async () => {
+  const demo = JSON.parse(readFileSync(new URL('demo.json', FIX), 'utf8'));
+  const j = structuredClone(demo); j.schema = 5;
+  j.personnel = [{ id: 'p1', role: 'ut', name: 'A' }, { id: 'p1', role: 'mfl', name: 'B' }];
+  j.equipment = [{ id: 'e1', type: 'ut', serial: 'S1', checks: [{ check: 'Step block' }] }];
+  j.docctl = { dist: [{ id: 'd1', name: 'Client' }] };
+  const r = await run(asFile(j));
+  assert.ok(r.errors.some((e) => /Persons A and B share the id p1/.test(e)), r.errors.join('\n'));
+  assert.ok(r.errors.some((e) => /On-site check Step block \(S1\) has no id/.test(e)), r.errors.join('\n'));
+  const k = structuredClone(demo); k.schema = 5; k.personnel = { a: 1 }; k.repairs = [];
+  const r2 = await run(asFile(k));
+  assert.ok(r2.errors.some((e) => /personnel part is not a list/.test(e)) && r2.errors.some((e) => /repairs part has the wrong type/.test(e)), r2.errors.join('\n'));
 });

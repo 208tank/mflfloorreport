@@ -1,5 +1,6 @@
 // Tank registry: the tanks themselves (static data that carries from one inspection to the next) and
 // their inspections (refactoring step 8).
+import { personName } from '../personnel.js';
 import { S, todayISO } from '../app/state.js';
 import { defineView, go, renderView } from '../app/nav.js';
 import { onAction } from '../app/actions.js';
@@ -116,7 +117,7 @@ async function newInspectionDlg(tid) {
       <label class="fld"><span class="lbl">Report due</span><span class="ctl"><input type="date" name="due"></span></label>
       <label class="fld"><span class="lbl">Report no.</span><span class="ctl"><input name="reportNo" autocomplete="off"></span></label>
       <label class="fld"><span class="lbl">Work order</span><span class="ctl"><input name="workOrder" autocomplete="off"></span></label>
-      <label class="fld"><span class="lbl">API 653 inspector</span><span class="ctl"><input name="inspector" value="${h(last?.info?.inspector || '')}" autocomplete="off"></span></label>
+      <label class="fld"><span class="lbl">API 653 inspector</span><span class="ctl"><input name="inspector" value="${h(personName(last, 'insp653'))}" autocomplete="off"></span></label>
       <label class="fld"><span class="lbl">Product</span><span class="ctl"><input name="product" value="${h(last?.info?.product || '')}" autocomplete="off"></span></label>
     </div>
     ${last ? `<label class="chk"><input type="checkbox" name="equip" checked><span>Copy MFL / UT equipment from the last inspection (check serials and calibration dates)</span></label>` : ''}

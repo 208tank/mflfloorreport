@@ -45,7 +45,7 @@ let seq = 0;
 const eid = () => 'eq' + Date.now().toString(36) + (seq++).toString(36) + Math.random().toString(36).slice(2, 5);
 
 export function newEquip(type = 'other', fields = {}) {
-  return { id: eid(), type, make: '', model: '', serial: '', calDate: '', calDue: '', details: '', threshold: '', notes: '', ...fields };
+  return { id: eid(), type, make: '', model: '', serial: '', calDate: '', calDue: '', certNo: '', refStd: '', checks: [], details: '', threshold: '', notes: '', ...fields };
 }
 
 /** v3.4 and earlier kept a fixed MFL / UT form in job.equip — turn it into list items. */
