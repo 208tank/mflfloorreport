@@ -1861,6 +1861,7 @@ export default {
     const page = await appPage(browser, url);
     const n = () => page.$$eval('#mapbox g.ind', (x) => x.length);
     const all = await n(); assert.ok(all > 0);
+    await page.click('#mapLayers > summary');
     await page.uncheck('[data-act="toggle"][data-k="showInds"]');
     assert.equal(await n(), 0);
     await page.check('[data-act="toggle"][data-k="showInds"]');
@@ -1868,6 +1869,32 @@ export default {
     await page.uncheck('[data-act="toggle"][data-k="showInds"]');
     await page.click('[data-act="mode"][data-mode="add"]');
     assert.equal(await n(), all); assert.ok(await page.isChecked('[data-act="toggle"][data-k="showInds"]'));
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+  async 'floor map layers: nozzles, floor features, seams and the rest switch off on the map, in the export and in the report'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const has = (sel) => page.$$eval(`#mapbox ${sel}`, (x) => x.length);
+    assert.ok((await has('g.nozzle')) > 0 && (await has('[data-feature]')) > 0 && (await has('.shseams line')) > 0);
+    await page.click('#mapLayers > summary');
+    for (const k of ['showNozzles', 'showFeatures', 'shellSeams', 'showScan']) await page.uncheck(`[data-act="toggle"][data-k="${k}"]`);
+    assert.equal(await has('g.nozzle'), 0); assert.equal(await has('[data-feature]'), 0); assert.equal(await has('.shseams'), 0); assert.equal(await has('.plate.scan-not'), 0);
+    assert.match(await page.$eval('#layersOff', (e) => e.textContent), /4 hidden/);
+    // + Nozzle shows the nozzles while placing one
+    await page.click('[data-act="mode"][data-mode="nozzle"]'); assert.ok((await has('g.nozzle')) > 0);
+    await page.keyboard.press('Escape'); await page.click('[data-act="mode"][data-mode="select"]');
+    // plates and indications only, then show all
+    await page.click('#mapLayers > summary'); await page.click('[data-act="layers-all"][data-v="0"]');
+    assert.equal(await has('.plabels'), 0); assert.ok((await has('g.ind')) > 0); assert.equal(await has('.patches'), 0);
+    await page.click('[data-act="layers-all"][data-v="1"]'); assert.ok((await has('g.nozzle')) > 0); assert.equal(await page.$eval('#layersOff', (e) => e.textContent), '');
+    // report: floor plan layers
+    await page.evaluate(() => window.tfi.go('report')); await page.waitForSelector('.report .floormap');
+    assert.ok((await page.$$eval('.report .floormap g.nozzle', (x) => x.length)) > 0);
+    await page.click('summary[data-act="rsec-toggle"]');
+    await page.uncheck('[data-act="ropt"][data-k="mapNozzles"]'); await page.uncheck('[data-act="ropt"][data-k="mapFeatures"]');
+    await page.waitForFunction(() => document.querySelector('.report .floormap') && !document.querySelector('.report .floormap g.nozzle') && !document.querySelector('.report .floormap [data-feature]'));
+    await page.check('[data-act="ropt"][data-k="mapNozzles"]'); await page.check('[data-act="ropt"][data-k="mapFeatures"]');
+    await page.waitForFunction(() => document.querySelector('.report .floormap g.nozzle'));
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },

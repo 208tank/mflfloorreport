@@ -25,6 +25,12 @@ import { isSmall } from './small.js';
 const yn = (b) => (b ? 'Yes' : 'No');
 const or = (v, d = '—') => (v === null || v === undefined || v === '' ? d : v);
 
+/** Report options → floor plan layers (Report sections and layout → Floor plan layers); unset means shown. */
+export const REPORT_MAP_LAYERS = [['mapInds', 'Indications', 'showInds'], ['mapIndLabels', 'Indication numbers', 'indLabels'], ['plateLabels', 'Plate labels', 'plateLabels'], ['datums', 'Datum marks', 'showDatums'],
+  ['mapNozzles', 'Shell nozzles', 'showNozzles'], ['mapFeatures', 'Floor features', 'showFeatures'], ['mapSeams', 'Shell seams', 'shellSeams'], ['mapCZ', 'Critical zone line', 'showCZ'],
+  ['mapPatches', 'Repair patches', 'showPatches'], ['mapUT', 'UT readings', 'showUT'], ['mapScan', 'MFL scan coverage', 'showScan']];
+export function mapLayersOf(opts) { const o = opts || {}; return Object.fromEntries(REPORT_MAP_LAYERS.map(([k, , m]) => [m, o[k] !== false])); }
+
 export function legendHTML() {
   const item = (cls, label, svg) => `<span class="lg"><svg viewBox="-6 -6 12 12" width="14" height="14">${svg}</svg>${label}</span>`;
   return `<div class="legend">
@@ -43,7 +49,7 @@ export function legendHTML() {
 export function buildReport(job, layout, calc, company, photos, opts) {
   // S3 / S4: the small tank template; the photo and floor-drawing helpers of this module are passed in
   if (isSmall(job)) return buildSmallReport(job, layout, calc, company, photos, opts || {}, { legendHTML, fig, photoNo, indPhotoNo, phBox,
-    floorMap: () => renderMapSVG(job, layout, { calc, print: true, plateLabels: (opts || {}).plateLabels !== false, indLabels: true, showDatums: (opts || {}).datums !== false, floorOf: (ft) => itemFloor(layout, ft) }) });
+    floorMap: () => renderMapSVG(job, layout, { calc, print: true, ...mapLayersOf(opts), floorOf: (ft) => itemFloor(layout, ft) }) });
   const U = u(job), I = job.info || {}, T = job.tank || {}, C = calc.C;
   const t = (mm) => fmt(mm, 't', job);
   const inds = (job.indications || []).slice().sort((a, b) => String(a.no).localeCompare(String(b.no), undefined, { numeric: true }));
@@ -64,7 +70,7 @@ export function buildReport(job, layout, calc, company, photos, opts) {
 
   const kv = (rows) => `<table class="kv">${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table>`;
 
-  const map = renderMapSVG(job, layout, { calc, print: true, plateLabels: opts.plateLabels !== false, indLabels: true, showDatums: opts.datums !== false, floorOf: (ft) => itemFloor(layout, ft) });
+  const map = renderMapSVG(job, layout, { calc, print: true, ...mapLayersOf(opts), floorOf: (ft) => itemFloor(layout, ft) });
 
   const indRows = listed.map((i) => {
     const a = per.get(i.id) || {};

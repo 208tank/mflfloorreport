@@ -7,10 +7,23 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Floor map and floor plan — drawing layers (v3.36.0)
+
+Anything that clutters the floor drawing can be switched off:
+
+- **Floor map → Layers** (the toolbar menu, which shows how many layers are hidden): indications, indication numbers,
+  plate labels, datum marks, **shell nozzles**, **floor features** (sumps, roof columns, existing patches, other),
+  **shell seams**, the critical zone line, repair patches, UT readings and the MFL scan coverage hatching. *Show all*
+  puts everything back; *Plates and indications only* hides the rest. While placing a nozzle, feature or indication
+  its layer is shown. With nozzles hidden the drawing closes in to the shell. The SVG / PNG map export follows the
+  layers shown on the Floor map.
+- **Report → Report sections and layout → Floor plan layers**: the same switches for the floor plan drawing sheet in
+  the full report and the small tank report (kept on this device; *Plate labels on map* and *Datum marks* moved
+  here). Everything is on by default, so reports print as before.
+
 ## Floor map — Indications toggle (v3.35.1)
 
-The floor map toolbar has an **Indications** tick box beside *Plate labels*, *Datums*, *Critical zone*, *Patches* and
-*UT*: untick it to hide every MFL indication on the map (for example to look at the plates, UT readings or patches
+The floor map has an **Indications** switch (now in the *Layers* menu, v3.36.0): untick it to hide every MFL indication on the map (for example to look at the plates, UT readings or patches
 underneath), tick it to show them again. Starting *+ Indication* (or *N*) or moving an indication turns them back on,
 so a new one is never placed out of sight. The result chips still filter by prove-up result when indications are
 shown. The printed report is unchanged.

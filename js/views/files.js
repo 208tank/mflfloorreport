@@ -13,7 +13,7 @@ import { download, fileBase, indicationsCSV, nozzlesCSV, platesCSV, roofCSV, set
 import { itemFloor } from '../geometry.js';
 import { buildLoader, loaderAreas } from '../loader.js';
 import { previewLoader } from './loaderpreview.js';
-import { renderMapSVG } from '../map.js';
+import { MAP_LAYERS, renderMapSVG } from '../map.js';
 import { copyPhotos, FILE_VERSION, migrate, migrationNotes, SCHEMA, uid } from '../model.js';
 import { packPhoto } from '../issuedfile.js';
 import { saveErrorText } from '../saver.js';
@@ -265,7 +265,8 @@ export async function importJobFile(file) {
   } catch (err) { toast('Could not open the file: ' + err.message); return null; }
 }
 
-function printMap() { return renderMapSVG(S.job, S.layout, { calc: S.calc, print: true, floorOf: (ft) => itemFloor(S.layout, ft) }); }
+/** The exported map shows the layers switched on on the Floor map. */
+function printMap() { return renderMapSVG(S.job, S.layout, { calc: S.calc, print: true, ...Object.fromEntries(MAP_LAYERS.map(([k]) => [k, S[k] !== false])), filter: S.filter, floorOf: (ft) => itemFloor(S.layout, ft) }); }
 
 /** A returned UT loader sheet: preview and decide before anything changes (stage 10, loaderpreview.js). */
 const uploadLoader = (file) => previewLoader(file);

@@ -920,3 +920,10 @@ dialog.wide-dlg { max-width: 96vw; }
 .flut-areas .mt4 { margin-top: 4px; }
 .flut-cz td input { width: 84px; } .flut-cz td input[data-f$="ote"] { width: 140px; }
 .flut-pl td input { width: 84px; }
+
+/* ---------------------------------------------------------------- floor map layers menu */
+.maptools details.layers { position: relative; }
+.maptools details.layers > summary { list-style: none; cursor: pointer; }
+.maptools details.layers > summary::-webkit-details-marker { display: none; }
+.layers-pop { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 230px; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px rgb(0 0 0 / .14); }
+.layers-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line2); }

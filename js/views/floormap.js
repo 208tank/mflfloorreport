@@ -10,7 +10,7 @@ import { resizeImage } from '../app/images.js';
 import { nozzleWall, NZ_CONN, plateNominal, RESULT_SHORT, statusText, UT_CLOCK } from '../calc.js';
 import { db } from '../db.js';
 import { angleOf, datumName, itemFloor, orientName, plateAt, refCornerName, toLocal } from '../geometry.js';
-import { MapController, renderMapSVG } from '../map.js';
+import { MAP_LAYERS, MapController, renderMapSVG } from '../map.js';
 import { nextNo, uid } from '../model.js';
 import { patchList, patchOf } from '../patches.js';
 import { legendHTML } from '../report.js';
@@ -37,15 +37,7 @@ function viewMap() {
         <select id="ftType" class="sm" title="Feature type">${FT_TYPES.map(([k, v]) => `<option value="${k}" ${S.ftType === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
       </div>
       <div class="seg chips">${chips}</div>
-      <div class="seg">
-        <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="showInds" ${S.showInds ? 'checked' : ''}><span>Indications</span></label>
-        <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="plateLabels" ${S.plateLabels ? 'checked' : ''}><span>Plate labels</span></label>
-        <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="indLabels" ${S.indLabels ? 'checked' : ''}><span>Ind. no.</span></label>
-        <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="showDatums" ${S.showDatums ? 'checked' : ''}><span>Datums</span></label>
-        <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="showCZ" ${S.showCZ ? 'checked' : ''}><span>Critical zone</span></label>
-        <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="showPatches" ${S.showPatches ? 'checked' : ''}><span>Patches</span></label>
-        <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="showUT" ${S.showUT ? 'checked' : ''}><span>UT</span></label>
-      </div>
+      <div class="seg">${layersHTML()}</div>
       <div class="seg zoom"><button aria-label="Zoom out" class="btn sm icon" data-act="zoom-out" title="Zoom out">−</button><button aria-label="Zoom in" class="btn sm icon" data-act="zoom-in" title="Zoom in">+</button><button class="btn sm" data-act="zoom-fit" title="Fit (F)">Fit</button></div>
     </div>
     <div class="mapbox" id="mapbox" data-mode="${S.mode}"></div>
@@ -53,6 +45,19 @@ function viewMap() {
   </div>
   <aside class="side" id="side"></aside>`;
 }
+/** The Layers menu: every drawing layer can be switched off to unclutter the map. */
+const layerOn = (k) => S[k] !== false;
+function layersHTML() {
+  const off = MAP_LAYERS.filter(([k]) => !layerOn(k)).length;
+  return `<details class="layers" id="mapLayers"><summary class="btn sm" title="Show or hide what is drawn on the map">Layers <span id="layersOff" class="muted">${off ? `· ${off} hidden` : ''}</span></summary>
+    <div class="layers-pop">${MAP_LAYERS.map(([k, l, hint]) => `<label class="chk sm"${hint ? ` title="${h(hint)}"` : ''}><input type="checkbox" data-act="toggle" data-k="${k}" ${layerOn(k) ? 'checked' : ''}><span>${h(l)}</span></label>`).join('')}
+      <div class="layers-acts"><button class="btn sm" data-act="layers-all" data-v="1">Show all</button><button class="btn sm ghost" data-act="layers-all" data-v="0" title="Keep the plates, shell and indications only">Plates and indications only</button></div></div></details>`;
+}
+function refreshLayers() {
+  const off = MAP_LAYERS.filter(([k]) => !layerOn(k)).length, el = $('#layersOff'); if (el) el.textContent = off ? `· ${off} hidden` : '';
+  for (const [k] of MAP_LAYERS) { const cb = $(`#mapLayers [data-k="${k}"]`); if (cb) cb.checked = layerOn(k); }
+}
+
 const afterMap = () => {
   S.mapCtl = new MapController($('#mapbox'), { onClick: mapClick, onHover: mapHover, rerender: drawMap });
   if (S.vb && S.vbR === S.layout.R) { S.mapCtl.vb = S.vb; S.mapCtl.r = S.layout.R; }
@@ -68,8 +73,10 @@ export function drawMap() {
   const box = $('#mapbox'); if (!box) return;
   box.innerHTML = renderMapSVG(S.job, S.layout, {
     calc: S.calc, selected: S.sel, selPlate: S.selPlate, selFeature: S.selFeature, selNozzle: S.selNozzle,
-    plateLabels: S.plateLabels, indLabels: S.indLabels, filter: S.filter, showCZ: S.showCZ, showPatches: S.showPatches, showUT: S.showUT, showInds: S.showInds,
+    ...Object.fromEntries(MAP_LAYERS.map(([k]) => [k, layerOn(k)])), filter: S.filter,
     showDatums: S.showDatums || S.mode === 'datum', datumFocus: focusPlate(),
+    showNozzles: layerOn('showNozzles') || S.mode === 'nozzle', showFeatures: layerOn('showFeatures') || S.mode === 'feature', // adding one shows its layer
+    showInds: layerOn('showInds') || S.mode === 'add' || S.mode === 'place',
     floorOf: (ft) => itemFloor(S.layout, ft)
   });
   box.dataset.mode = S.mode;
@@ -409,7 +416,7 @@ export function setMode(m) {
   if (m === 'place' && !S.sel) m = 'select';
   if (lockedNow()) m = 'select'; // a Complete job: look and select only
   S.mode = m;
-  if ((m === 'add' || m === 'place') && !S.showInds) { S.showInds = true; const cb = $('[data-act="toggle"][data-k="showInds"]'); if (cb) cb.checked = true; } // don't add an indication you can't see
+  if ((m === 'add' || m === 'place') && !S.showInds) { S.showInds = true; refreshLayers(); } // don't add an indication you can't see
   $$('[data-act="mode"]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m || (m === 'place' && b.dataset.mode === 'add')));
   drawMap();
 }
@@ -456,6 +463,11 @@ defineView('map', viewMap, afterMap);
 Object.assign(redraw, { map: drawMap, side: renderSide, mapMode: setMode });
 
 onAction({
+  'layers-all': async (el) => {
+    const all = el.dataset.v === '1';
+    for (const [k] of MAP_LAYERS) S[k] = all || k === 'showInds';
+    refreshLayers(); drawMap(); return;
+  },
   'mode': async (el, id, e, act) => {
     setMode(el.dataset.mode); return;
   },
@@ -595,7 +607,7 @@ onChange([
     { const p = S.photos.find((x) => x.id === el.dataset.photoCap); if (p) { p.caption = el.value; await db.putPhoto(p); } return; }
   } },
   { order: 350, when: (el, act) => act === 'toggle', run: async (el, e, act) => {
-    { S[el.dataset.k] = el.checked; drawMap(); return; }
+    { S[el.dataset.k] = el.checked; refreshLayers(); drawMap(); return; }
   } },
   { order: 370, when: (el, act) => act === 'datum-sel', run: async (el, e, act) => {
     { applyDatum(el.dataset.key, el.value); return; }
@@ -639,3 +651,6 @@ document.addEventListener('keydown', (e) => {
 });
 
 $('#dlg').addEventListener('close', () => { if (S.view === 'inds') refreshIndTable(); });
+
+/* the Layers menu closes when you click elsewhere */
+document.addEventListener('click', (e) => { const d = document.getElementById('mapLayers'); if (d?.open && !d.contains(e.target)) d.open = false; });

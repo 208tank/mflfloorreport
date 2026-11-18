@@ -32,6 +32,15 @@ export function featureShape(ft, x, y, s) {
   }
 }
 
+/** The drawing layers the user can switch off: [option, label, hint]. Used by the floor map and the report. */
+export const MAP_LAYERS = [
+  ['showInds', 'Indications', 'MFL indications'], ['indLabels', 'Indication numbers', ''], ['plateLabels', 'Plate labels', ''],
+  ['showDatums', 'Datum marks', 'plate X / Y origins'], ['showNozzles', 'Shell nozzles', 'nozzles and manways outside the shell'],
+  ['showFeatures', 'Floor features', 'sumps, roof columns, existing patches, other'], ['shellSeams', 'Shell seams', 'bottom course vertical seams'],
+  ['showCZ', 'Critical zone line', ''], ['showPatches', 'Repair patches', 'patch plates from the repairs'], ['showUT', 'UT readings', 'areas, CZ scans, plate readings'],
+  ['showScan', 'MFL scan coverage', 'hatching on partly / not scanned plates']
+];
+
 /**
  * Build the SVG markup.
  * opts: { calc, selected, selPlate, plateLabels, indLabels, filter:Set, print, preview:{x,y} }
@@ -40,7 +49,10 @@ export function renderMapSVG(job, layout, opts = {}) {
   const R = layout.R;
   if (!(R > 0)) return `<svg class="floormap" viewBox="0 0 100 60"><text x="50" y="30" text-anchor="middle" class="empty-msg" font-size="4">Enter the tank diameter and plate size in Setup</text></svg>`;
   const s = R / 100;
-  const M = R * ((job.nozzles || []).length ? 0.19 : 0.16);
+  // layers (all on unless switched off): showInds, indLabels, plateLabels, showDatums, showCZ, showPatches, showUT,
+  // showNozzles, showFeatures, shellSeams, showScan (MFL scan coverage hatching)
+  const showNoz = opts.showNozzles !== false && (job.nozzles || []).length > 0;
+  const M = R * (showNoz ? 0.19 : 0.16);
   const vb = `${f(-R - M)} ${f(-R - M)} ${f(2 * (R + M))} ${f(2 * (R + M))}`;
   const calc = opts.calc;
   const out = [];
@@ -53,7 +65,7 @@ export function renderMapSVG(job, layout, opts = {}) {
   // plates
   out.push('<g class="plates">');
   for (const p of [...layout.plates.filter((q) => !q.resized), ...layout.plates.filter((q) => q.resized)]) {
-    const scan = job.plates?.[p.key]?.scan || 'scanned';
+    const scan = opts.showScan === false ? 'scanned' : job.plates?.[p.key]?.scan || 'scanned';
     const cls = `plate ${p.kind} scan-${scan}${p.resized ? ' measured' : ''}${opts.selPlate === p.key ? ' sel' : ''}`;
     out.push(`<path d="${pathOf(p.poly)}" class="${cls}" data-plate="${esc(p.key)}" stroke-width="${f(s * 0.22)}"/>`);
   }
@@ -82,7 +94,7 @@ export function renderMapSVG(job, layout, opts = {}) {
     const [x1, y1] = polar(R + s * 1.2, a), [x2, y2] = polar(R + s * (big ? 4.5 : 2.8), a);
     out.push(`<line x1="${f(x1)}" y1="${f(-y1)}" x2="${f(x2)}" y2="${f(-y2)}" stroke-width="${f(s * (big ? 0.45 : 0.25))}"/>`);
     if (big) {
-      const [tx, ty] = polar(R + s * ((job.nozzles || []).length ? 13.5 : 9), a);
+      const [tx, ty] = polar(R + s * (showNoz ? 13.5 : 9), a);
       const lab = a === 0 && job.info?.zeroRef ? `${a}° ${job.info.zeroRef}` : `${a}°`;
       out.push(`<text x="${f(tx)}" y="${f(-ty)}" font-size="${f(s * 3.6)}" text-anchor="middle" dominant-baseline="central" class="${a === 0 ? 'zero' : ''}">${esc(lab)}</text>`);
     }
@@ -104,7 +116,7 @@ export function renderMapSVG(job, layout, opts = {}) {
   }
 
   // shell nozzles (outside the shell, by angle)
-  if ((job.nozzles || []).length) {
+  if (showNoz) {
     out.push(`<g class="nozzles" stroke-width="${f(s * 0.35)}">`);
     for (const nz of job.nozzles) {
       const a = +nz.angle; if (!Number.isFinite(a)) continue;
@@ -126,7 +138,7 @@ export function renderMapSVG(job, layout, opts = {}) {
 
   // features
   out.push('<g class="features">');
-  for (const ft of job.features || []) {
+  for (const ft of opts.showFeatures === false ? [] : job.features || []) {
     const p = layout.byKey.get(ft.plate);
     if (!p) continue;
     const pos = opts.floorOf ? opts.floorOf(ft) : null;

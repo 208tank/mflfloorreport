@@ -1,14 +1,14 @@
 // Shared application state and constants (refactoring step 1, moved unchanged from app.js).
 import { RESULTS } from '../calc.js';
 
-export const APP_VERSION = '3.35.1';
+export const APP_VERSION = '3.36.0';
 
 export const S = {
   jobs: [], tanks: [], reg: { q: '', open: new Set() }, job: null, layout: null, calc: null, photos: [], company: {},
   view: 'jobs', sel: null, selPlate: null, selFeature: null, selNozzle: null, mode: 'select', ftType: 'column',
-  plateLabels: true, indLabels: true, showCZ: true, showPatches: true, showUT: true, showInds: true, showDatums: true, filter: new Set(Object.keys(RESULTS)),
+  plateLabels: true, indLabels: true, showCZ: true, showPatches: true, showUT: true, showInds: true, showNozzles: true, showFeatures: true, shellSeams: true, showScan: true, showDatums: true, filter: new Set(Object.keys(RESULTS)),
   search: '', resFilter: 'all', sort: { key: 'no', dir: 1 }, plateSearch: '',
-  reportOpts: { exec: true, defs: true, sections: true, indSize: true, photos: true, plates: false, provenOnly: false, plateLabels: true, datums: true },
+  reportOpts: { exec: true, defs: true, sections: true, indSize: true, photos: true, plates: false, provenOnly: false, plateLabels: true, datums: true, mapInds: true, mapIndLabels: true, mapNozzles: true, mapFeatures: true, mapSeams: true, mapCZ: true, mapPatches: true, mapUT: true, mapScan: true },
   mapCtl: null, vb: null, roofSel: null, roofPt: null, roofAdd: false, roofVB: { fixed: null, floating: null }, installEvt: null, saving: false,
   navOpen: new Set(), ndeTab: {}, dash: { dir: null, perm: null, files: new Map(), scanned: false, scanning: false, mode: 'board', q: '', stage: '' }, roofPart: 'fixed', photoSel: null
 };
