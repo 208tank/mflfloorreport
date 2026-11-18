@@ -167,7 +167,7 @@ export function renderMapSVG(job, layout, opts = {}) {
   // indications
   const mr = s * 1.35;
   out.push(`<g class="inds" stroke-width="${f(s * 0.3)}">`);
-  for (const ind of job.indications || []) {
+  for (const ind of opts.showInds === false ? [] : job.indications || []) {
     const res = ind.result || 'pending';
     if (opts.filter && !opts.filter.has(res)) continue;
     const a = calc?.per.get(ind.id);

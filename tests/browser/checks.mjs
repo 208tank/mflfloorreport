@@ -1857,6 +1857,20 @@ export default {
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },
+  async 'floor map: the Indications toggle hides and shows the indications; adding one turns them back on'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const n = () => page.$$eval('#mapbox g.ind', (x) => x.length);
+    const all = await n(); assert.ok(all > 0);
+    await page.uncheck('[data-act="toggle"][data-k="showInds"]');
+    assert.equal(await n(), 0);
+    await page.check('[data-act="toggle"][data-k="showInds"]');
+    assert.equal(await n(), all);
+    await page.uncheck('[data-act="toggle"][data-k="showInds"]');
+    await page.click('[data-act="mode"][data-mode="add"]');
+    assert.equal(await n(), all); assert.ok(await page.isChecked('[data-act="toggle"][data-k="showInds"]'));
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
   async 'floor UT: areas, critical zone and lower shell scans, five readings per plate — screen, map, API 653 and the loader sheet'({ browser, url, appPage }) {
     const page = await appPage(browser, url);
     await page.evaluate(() => window.tfi.go('flut')); await page.waitForSelector('.flut-page');

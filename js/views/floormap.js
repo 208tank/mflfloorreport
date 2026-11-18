@@ -38,6 +38,7 @@ function viewMap() {
       </div>
       <div class="seg chips">${chips}</div>
       <div class="seg">
+        <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="showInds" ${S.showInds ? 'checked' : ''}><span>Indications</span></label>
         <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="plateLabels" ${S.plateLabels ? 'checked' : ''}><span>Plate labels</span></label>
         <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="indLabels" ${S.indLabels ? 'checked' : ''}><span>Ind. no.</span></label>
         <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="showDatums" ${S.showDatums ? 'checked' : ''}><span>Datums</span></label>
@@ -67,7 +68,7 @@ export function drawMap() {
   const box = $('#mapbox'); if (!box) return;
   box.innerHTML = renderMapSVG(S.job, S.layout, {
     calc: S.calc, selected: S.sel, selPlate: S.selPlate, selFeature: S.selFeature, selNozzle: S.selNozzle,
-    plateLabels: S.plateLabels, indLabels: S.indLabels, filter: S.filter, showCZ: S.showCZ, showPatches: S.showPatches, showUT: S.showUT,
+    plateLabels: S.plateLabels, indLabels: S.indLabels, filter: S.filter, showCZ: S.showCZ, showPatches: S.showPatches, showUT: S.showUT, showInds: S.showInds,
     showDatums: S.showDatums || S.mode === 'datum', datumFocus: focusPlate(),
     floorOf: (ft) => itemFloor(S.layout, ft)
   });
@@ -408,6 +409,7 @@ export function setMode(m) {
   if (m === 'place' && !S.sel) m = 'select';
   if (lockedNow()) m = 'select'; // a Complete job: look and select only
   S.mode = m;
+  if ((m === 'add' || m === 'place') && !S.showInds) { S.showInds = true; const cb = $('[data-act="toggle"][data-k="showInds"]'); if (cb) cb.checked = true; } // don't add an indication you can't see
   $$('[data-act="mode"]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m || (m === 'place' && b.dataset.mode === 'add')));
   drawMap();
 }

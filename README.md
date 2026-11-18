@@ -7,6 +7,14 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Floor map — Indications toggle (v3.35.1)
+
+The floor map toolbar has an **Indications** tick box beside *Plate labels*, *Datums*, *Critical zone*, *Patches* and
+*UT*: untick it to hide every MFL indication on the map (for example to look at the plates, UT readings or patches
+underneath), tick it to show them again. Starting *+ Indication* (or *N*) or moving an indication turns them back on,
+so a new one is never placed out of sight. The result chips still filter by prove-up result when indications are
+shown. The printed report is unchanged.
+
 ## Floor UT readings — areas, critical zone and lower shell scans, five readings per plate (v3.35.0, schema 7)
 
 **Floor → UT readings** (beside Floor map, Indications and Plates) records UT thickness on the floor in three ways:
