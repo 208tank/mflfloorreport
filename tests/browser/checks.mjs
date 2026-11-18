@@ -1,7 +1,7 @@
 // Browser checks run by tests/browser/run.mjs. Each takes { browser, url, serve, appPage }.
 import assert from 'node:assert/strict';
 
-const VIEWS = ['dash', 'reg', 'jobs', 'equip', 'setup', 'summary', 'small', 'defs', 'map', 'inds', 'plates', 'flut', 'api', 'shell', 'roofF', 'roofL', 'seal', 'nozzles', 'settle', 'ref', 'report'];
+const VIEWS = ['dash', 'reg', 'jobs', 'guide', 'equip', 'setup', 'summary', 'small', 'defs', 'map', 'inds', 'plates', 'flut', 'api', 'shell', 'roofF', 'roofL', 'seal', 'nozzles', 'settle', 'ref', 'report'];
 const SECS = ['floor', 'shell', 'froof', 'flroof', 'nozzles', 'found', 'settle'];
 const CHILD = ['nde', 'obs', 'photos', 'recs'];
 
@@ -1854,6 +1854,24 @@ export default {
     await page.fill('[data-smallmax]', '12 m'); await page.dispatchEvent('[data-smallmax]', 'change');
     await page.waitForFunction(() => window.__app.company.smallMaxD === 12000);
     assert.equal(await page.inputValue('[data-smallmax]'), '39.37 ft');
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
+  async 'user guide: in the side menu with or without a job; contents, search and its buttons open the pages'({ browser, url, appPage }) {
+    const page = await appPage(browser, url, { demo: false });
+    const btn = page.locator('#nav [data-go="guide"]');
+    assert.equal(await btn.isDisabled(), false, 'open with no job');
+    await btn.click(); await page.waitForSelector('.guide-page');
+    assert.ok((await page.$$eval('.gd-sec', (x) => x.length)) >= 10);
+    await page.fill('[data-act="guide-search"]', 'critical zone scans');
+    assert.match(await page.$eval('#guideCount', (e) => e.textContent), /of \d+ sections/);
+    assert.ok((await page.$$eval('.gd-sec:not([hidden])', (x) => x.length)) < (await page.$$eval('.gd-sec', (x) => x.length)));
+    await page.fill('[data-act="guide-search"]', '');
+    await page.evaluate(() => window.tfi.go('jobs')); await page.click('[data-act="job-demo"]');
+    await page.waitForFunction(() => window.tfi.job()?.info?.tankId === 'TK-101');
+    await page.waitForFunction(() => window.__app.view === 'map');
+    await page.click('#nav [data-go="guide"]'); await page.waitForSelector('.guide-page');
+    await page.click('#gd-ut .gd-go[data-go="flut"]'); await page.waitForSelector('.flut-page');
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },

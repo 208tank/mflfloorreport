@@ -23,7 +23,7 @@ const hooks = { header: () => {}, leaveRegistry: () => {}, crumb: () => '' };
 export function configureNav(h_) { Object.assign(hooks, h_); }
 
 export function go(view) {
-  if (!S.job && !['jobs', 'dash', 'reg'].includes(view)) view = 'jobs';
+  if (!S.job && !['jobs', 'dash', 'reg', 'guide'].includes(view)) view = 'jobs';
   if (S.job?.regEdit && !REG_VIEWS.includes(view)) hooks.leaveRegistry();
   if (view === 'roof') view = 'roofF';
   S.view = view;
@@ -45,7 +45,7 @@ export function renderNav() {
       `<p class="nav-note">Readings entered here are not kept — the registry stores the tank, not inspection results.</p><div class="nav-foot">v${APP_VERSION}</div>`;
     return;
   }
-  const btn = ([id, label, d], count) => `<button class="nav-btn${S.view === id ? ' active' : ''}" data-go="${id}" ${!job && !['jobs', 'dash', 'reg'].includes(id) ? 'disabled' : ''}>${icon(d)}<span>${label}</span>${count ? `<em>${count}</em>` : ''}</button>`;
+  const btn = ([id, label, d], count) => `<button class="nav-btn${S.view === id ? ' active' : ''}" data-go="${id}" ${!job && !['jobs', 'dash', 'reg', 'guide'].includes(id) ? 'disabled' : ''}>${icon(d)}<span>${label}</span>${count ? `<em>${count}</em>` : ''}</button>`;
   let F = null; try { F = job && S.layout ? findings(job, S.layout, S.calc) : null; } catch { F = null; }
   const openDefs = job ? allDefs(job).filter((d) => d.status !== 'Closed').length : 0;
   const secs = SECTIONS.filter((sec) => !job || inScope(job, sec.key)).map((sec) => {

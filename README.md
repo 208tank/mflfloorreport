@@ -7,6 +7,17 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## User guide in the app (v3.37.0)
+
+**User guide** (last item in the side menu, open with or without a job) is the step-by-step guide for crews: the
+flow at a glance, eight steps from setting up the device to a Complete job, the rest of the tank, and tips, shortcuts
+and common mistakes. It has a contents list, a search box, **Print** (the guide alone, to hand out) and buttons that
+open the page each step talks about. Works offline like the rest of the app.
+
+The text is in `js/guide.js`. It is kept current with the app: `tests/guide.test.mjs` fails when `GUIDE_VERSION` is
+behind `APP_VERSION`, when a side-menu or data page isn't mentioned, or when a floor map layer isn't. `CLAUDE.md`
+records the release checklist (guide, README, the shared copy of the guide).
+
 ## Floor map and floor plan — drawing layers (v3.36.0)
 
 Anything that clutters the floor drawing can be switched off:
@@ -1407,6 +1418,7 @@ every limit is editable.
 | `js/report/small.js` | The small tank report: chapters in the template order (S3) |
 | `js/floorut.js` | Floor UT survey (schema 7): areas, critical zone and lower shell scans, five readings per plate; the readings as locations for the API 653 evaluation |
 | `js/views/floorut.js` | Floor → UT readings screen |
+| `js/guide.js`, `js/views/guide.js` | The user guide's text (kept current every release) and its screen |
 | `js/smallcalc.js` | Small tank calculations: thickness and rates, intervals, planar tilt, edge settlement (S2) |
 | `js/report/frame.js` | Report frame: chapter order and switches, numbering, cover, document control, contents, value key, page set-up, running header and footer |
 | `js/export.js` | CSV, SVG/PNG export |

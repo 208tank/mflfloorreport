@@ -927,3 +927,14 @@ dialog.wide-dlg { max-width: 96vw; }
 .maptools details.layers > summary::-webkit-details-marker { display: none; }
 .layers-pop { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 230px; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px rgb(0 0 0 / .14); }
 .layers-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line2); }
+
+/* ---------------------------------------------------------------- user guide */
+.guide-page { max-width: 900px; }
+.guide-page .gd-toc ol { margin: 6px 0 0; padding-left: 22px; columns: 2; column-gap: 28px; }
+.guide-page .gd-toc a { color: inherit; }
+.guide-page .gd-sec h2 { margin-top: 0; }
+.guide-page .gd-sec li { margin: 4px 0; }
+.guide-page .gd-sec p, .guide-page .gd-sec li { line-height: 1.55; }
+.guide-page .tip { padding: 8px 12px; border-left: 3px solid var(--accent, #0f766e); background: var(--panel2); border-radius: 4px; }
+.guide-page .gd-go { font-weight: 600; }
+@media (max-width: 700px) { .guide-page .gd-toc ol { columns: 1; } }

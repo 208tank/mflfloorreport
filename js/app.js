@@ -40,6 +40,7 @@ import './views/summary.js';
 import './views/revisions.js';
 import './views/audit.js';
 import './views/loaderpreview.js';
+import './views/guide.js';
 
 /* Test hooks (window.tfi is used by the automated tests; window.__app is handy in the console). */
 window.tfi = { go: (v) => go(v), zoom: (x, y, r) => { S.mapCtl?.focus(x, y, r); drawMap(); }, job: () => S.job, commit: () => { commit(); renderView(); } }; // used by the automated tests
