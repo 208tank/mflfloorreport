@@ -3,6 +3,8 @@
 // holds; nothing is recalculated here, and the marks say which kind of value each is. No browser APIs.
 import { RESULTS, RESULT_SHORT, statusText } from '../calc.js';
 import { equipLine } from '../equipment.js';
+import { AREA_SIDES, czLastGap, czStations, hasFloorUT, PT5_KEYS, shellScanTmin } from '../floorut.js';
+import { PT5 } from '../roof.js';
 import { fmt, fmtRate } from '../units.js';
 import { escText as h } from '../util.js';
 import { remMark, vm } from './front.js';
@@ -121,5 +123,31 @@ export function floorParts({ job, layout, calc, N, patches, opts = {} }) {
 
   /* ---- full register (appendix) */
   void opts; void I;
-  return { mfl, prove, corr, status };
+  /* ---- floor UT survey (schema 7): areas, critical zone scans, lower shell scans, five readings per plate */
+  const ut = () => {
+    if (!hasFloorUT(job)) return '';
+    const F = job.floorUT, pts = calc.ut?.pts || [], byId = new Map(pts.map((q) => [q.id, q])), side = Object.fromEntries(AREA_SIDES);
+    const sm = (mm) => fmt(mm, 'small', job, false), tn = (mm) => (has(mm) ? fmt(mm, 't', job, false) : '—');
+    const stx = (q) => (!q?.status ? '—' : q.status === 'below MRT' ? '<b>Below MRT</b>' : q.status === 'not evaluated' ? 'Not evaluated' : 'OK');
+    const below = pts.filter((q) => q.status === 'below MRT'), thin = pts.length ? pts.reduce((m, q) => (q.t < m.t ? q : m)) : null;
+    const st = F.cz?.on ? czStations(job) : [], gap = czLastGap(job), T1 = shellScanTmin(job), sh = new Map((calc.ut?.shell || []).map((x) => [x.key, x]));
+    const kv = [
+      ['Selected areas', `${(F.areas || []).length}`],
+      F.cz?.on ? ['Critical zone scans', `${st.length} scans ${sm(F.cz.size)} × ${fmt(F.cz.size, 'small', job)} at the shell, every ${fmt(F.cz.spacing, 'big', job)} from ${(+F.cz.start || 0).toFixed(1)}°${gap !== null && Math.abs(gap - F.cz.spacing) > 1 ? ` (last gap ${fmt(gap, 'big', job)})` : ''}; ${st.filter((s) => has(F.cz.rd?.[s.key]?.tMin)).length} read`] : null,
+      F.cz?.on && F.cz.shell ? ['Lower shell scans', `same locations and size, course 1 above the shell-to-bottom weld; compared with ${tn(T1.tMin)} (${h(T1.src)})`] : null,
+      F.plates?.on ? ['Five readings per plate', `${(layout.plates || []).filter((p) => PT5_KEYS.every((k) => has(F.plates.rd?.[p.key]?.[k]))).length} of ${(layout.plates || []).length} plates fully read (four corners and the centre)`] : null,
+      ['Thinnest floor reading', thin ? `${t(thin.t)}${vm('M')} — ${h(thin.label)}${thin.plate ? ' (' + h(thin.plate.label) + ')' : ''}` : '—'],
+      ['Below the minimum at Oᵣ', pts.length ? (below.length ? `<b>${below.length}</b>: ${h(below.slice(0, 20).map((q) => q.label).join(', '))}${below.length > 20 ? ', …' : ''}${vm('C')}` : `None${vm('C')}`) : '—'],
+    ].filter(Boolean);
+    const areas = (F.areas || []).map((a) => { const q = byId.get(a.id), p = layout.byKey?.get(a.plate); return `<tr><td style="white-space:nowrap">${h(a.no || '')}</td><td>${h(p?.label ?? a.plate ?? '?')}</td><td class="n" style="white-space:nowrap">${sm(a.x)}, ${sm(a.y)}</td><td class="n" style="white-space:nowrap">${has(a.len) ? sm(a.len) : '—'} × ${has(a.wid) ? sm(a.wid) : '—'}</td><td class="n" style="white-space:nowrap">${tn(a.tMin)} / ${tn(a.tAvg)}</td><td>${h(q?.type ?? (a.type === 'custom' ? a.typeText : '') ?? '')}</td><td>${side[a.side || '']}</td><td class="n">${q?.lossPct != null ? q.lossPct.toFixed(0) + ' %' : '—'}</td><td class="n">${tn(q?.projected)}</td><td class="n">${tn(q?.limit)}</td><td>${stx(q)}${q?.critical ? ' (CZ)' : ''}</td><td>${h(a.notes || '')}</td></tr>`; }).join('');
+    const czRows = st.filter((s) => Object.values(F.cz.rd?.[s.key] || {}).some(has)).map((s) => { const r = F.cz.rd[s.key], q = byId.get('cz:' + s.key), x = sh.get(s.key); return `<tr><td style="white-space:nowrap">${s.no}</td><td class="n">${s.angle.toFixed(1)}°</td><td>${h(q?.plate?.label ?? '')}</td><td class="n" style="white-space:nowrap">${tn(r.tMin)} / ${tn(r.tAvg)}</td><td class="n">${tn(q?.projected)}</td><td class="n">${tn(q?.limit)}</td><td>${stx(q)}</td>${F.cz.shell ? `<td class="n" style="white-space:nowrap">${tn(r.sMin)} / ${tn(r.sAvg)}</td><td>${x?.status ? (x.status === 'OK' ? 'OK' : '<b>' + h(x.status) + '</b>') : '—'}</td>` : ''}<td>${h([r.note, r.sNote].filter(Boolean).join('; '))}</td></tr>`; }).join('');
+    const plRows = F.plates?.on ? (layout.plates || []).filter((p) => F.plates.rd?.[p.key]).map((p) => { const r = F.plates.rd[p.key], mine = pts.filter((q) => q.kind === 'plate' && q.plate === p), w = mine.length ? mine.reduce((m, q) => (q.projected < m.projected ? q : m)) : null, vals = PT5_KEYS.map((k) => r[k]).filter(has).map(Number); return `<tr><td>${h(p.label)}</td>${PT5_KEYS.map((k) => `<td class="n">${tn(r[k])}</td>`).join('')}<td class="n">${vals.length ? tn(Math.min(...vals)) : '—'}</td><td class="n">${tn(w?.projected)}</td><td>${stx(w)}</td></tr>`; }).join('') : '';
+    return `${N.sub('UT thickness survey')}
+    ${N.table('Floor UT survey — scope and results')}<table class="kv">${kv.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</table>
+    ${areas ? `${N.table('Selected UT areas — centre located from the plate datum')}<table class="grid small wrap"><thead><tr><th>No.</th><th>Plate</th><th class="n">Centre X, Y</th><th class="n">Size L × W</th><th class="n">Min / avg${vm('M')}</th><th>Condition</th><th>Side</th><th class="n">Loss${vm('C')}</th><th class="n">t at Oᵣ${vm('C')}</th><th class="n">Limit</th><th>Status${vm('C')}</th><th>Notes</th></tr></thead><tbody>${areas}</tbody></table>` : ''}
+    ${czRows ? `${N.table(F.cz.shell ? 'Critical zone and lower shell scans' : 'Critical zone scans')}<table class="grid small wrap"><thead><tr><th>Scan</th><th class="n">Angle</th><th>Plate</th><th class="n">Floor min / avg${vm('M')}</th><th class="n">t at Oᵣ${vm('C')}</th><th class="n">Limit</th><th>Status${vm('C')}</th>${F.cz.shell ? `<th class="n">Shell min / avg${vm('M')}</th><th>Shell status${vm('C')}</th>` : ''}<th>Notes</th></tr></thead><tbody>${czRows}</tbody></table>` : ''}
+    ${plRows ? `${N.table('Plate UT readings — four corners and the centre')}<table class="grid small wrap"><thead><tr><th>Plate</th>${PT5.map(([, l]) => `<th class="n">${l}${vm('M')}</th>`).join('')}<th class="n">Min${vm('M')}</th><th class="n">t at Oᵣ${vm('C')}</th><th>Status${vm('C')}</th></tr></thead><tbody>${plRows}</tbody></table>` : ''}
+    <p class="note">UT readings are remaining thickness. Readings without a known side of loss set RT<sub>UT</sub> in the API 653 evaluation; an area with a known side also sets StP<sub>r</sub> / UP<sub>r</sub>. Each reading is compared with its area's limit (critical zone limit within ${fmt(C.czDist ?? 76.2, 'small', job)} of the shell) at O<sub>r</sub> = ${h(calc.Or)} years. Lower shell scans are compared with the course 1 t-min (single readings below 60 % of t-min fail API 653 §4.3.2.1; others below t-min are evaluated per §4.3.2).</p>`;
+  };
+  return { mfl, prove, corr, status, ut };
 }

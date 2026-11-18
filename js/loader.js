@@ -8,6 +8,7 @@ import { buildLayout } from './geometry.js';
 import { UT_CLOCK, plateNominal } from './calc.js';
 import { utLocations, readingElevations, coursesWithElev, courseAt, fmtElev, getReading, zKey } from './shell.js';
 import { floatingLayout, hasFixed, hasFloating, PT5 } from './roof.js';
+import { czStations, PT5_KEYS } from './floorut.js';
 
 export const LOADER_VER = 'UTL1';
 const UT_METHODS = ['A-scan', 'B-scan', 'C-scan / mapping', 'Thickness gauge', 'Other'];
@@ -26,6 +27,9 @@ export function loaderAreas(job) {
   if (hasFixed(job) && (job.roof.fixed.pts || []).length) a.push('Fixed roof');
   if (hasFloating(job) && floatingLayout(job).plates.some((p) => p.kind !== 'annular')) a.push('Floating roof');
   if ((job.indications || []).length) a.push('Floor prove-up');
+  if ((job.floorUT?.areas || []).length) a.push('Floor UT areas');
+  if (job.floorUT?.cz?.on && czStations(job).length) a.push('Floor CZ scans');
+  if (job.floorUT?.plates?.on && +job.tank?.diameter > 0) a.push('Floor plates');
   return a;
 }
 
@@ -141,6 +145,36 @@ export async function buildLoader(job) {
     const r0 = 4, last = r0 + inds.length - 1;
     sheets.push({ name: 'Floor prove-up', rows, freeze: { r: r0, c: 2 }, cols: [{ w: 8, hidden: true }, { w: 11 }, { w: 9 }, { w: 9 }, { w: 9 }, { w: 11 }, { w: 12 }, { w: 15 }, { w: 16 }],
       dv: [dvT(`${ref(r0, 7)}:${ref(last, 7)}`), { sqref: `${ref(r0, 8)}:${ref(last, 8)}`, list: UT_METHODS }] });
+  }
+
+  /* Floor UT (schema 7) */
+  if (areas.includes('Floor UT areas')) {
+    const lay = buildLayout(job), list = job.floorUT.areas;
+    const rows = title('Floor UT — selected areas', `Thickness in ${U.small}. Each area is centred at X / Y from the plate's datum corner (${U.small}), length along X and width along Y. Record the minimum and the average over the area.`);
+    rows.push({ hidden: true, cells: [K('#KEY'), null, null, null, null, null, null, null, K('tMin'), K('tAvg')] });
+    rows.push({ ht: 32, cells: [null, H('Area'), H('Plate'), H(`X (${U.small})`), H(`Y (${U.small})`), H(`Length (${U.small})`), H(`Width (${U.small})`), H(`Nominal (${U.small})`), H(`Minimum (${U.small})`), H(`Average (${U.small})`)] });
+    const sm = (mm) => N(mm != null && mm !== '' ? +fromMm(mm, 'small', job).toFixed(2) : null);
+    for (const a of list) { const p = lay.byKey.get(a.plate); rows.push([K('fua:' + a.id), LB(a.no || ''), L(p?.label || ''), sm(a.x), sm(a.y), sm(a.len), sm(a.wid), RO(plateNominal(job, p)), IN(a.tMin), IN(a.tAvg)]); }
+    const r0 = 4, last = r0 + list.length - 1, rng = `${ref(r0, 8)}:${ref(last, 9)}`;
+    sheets.push({ name: 'Floor UT areas', rows, freeze: { r: r0, c: 2 }, cols: [{ w: 8, hidden: true }, { w: 9 }, { w: 9 }, { w: 9 }, { w: 9 }, { w: 10 }, { w: 10 }, { w: 11 }, { w: 12 }, { w: 12 }], dv: [dvT(rng)] });
+  }
+  if (areas.includes('Floor CZ scans')) {
+    const C = job.floorUT.cz, st = czStations(job), sz = +fromMm(C.size, 'small', job).toFixed(2), sh = !!C.shell;
+    const rows = title('Floor UT — critical zone scans', `Thickness in ${U.small}. Each scan is ${sz} × ${sz} ${U.small} inside the shell with its outer edge at the shell, at the angle shown (clockwise from 0°).${sh ? ' Lower shell scans: the same size on course 1 just above the shell-to-bottom weld.' : ''}`);
+    rows.push({ hidden: true, cells: [K('#KEY'), null, null, null, K('tMin'), K('tAvg'), ...(sh ? [K('sMin'), K('sAvg')] : [])] });
+    rows.push({ ht: 32, cells: [null, H('Scan'), H('Angle (°)'), H(`From start (${U.big})`), H(`Floor min (${U.small})`), H(`Floor avg (${U.small})`), ...(sh ? [H(`Shell min (${U.small})`), H(`Shell avg (${U.small})`)] : [])] });
+    for (const x of st) { const r = C.rd?.[x.key] || {}; rows.push([K('fcz:' + x.key), LB(x.no), N(x.angle), N(+fromMm(x.s, 'big', job).toFixed(2)), IN(r.tMin), IN(r.tAvg), ...(sh ? [IN(r.sMin), IN(r.sAvg)] : [])]); }
+    const r0 = 4, last = r0 + st.length - 1, rng = `${ref(r0, 4)}:${ref(last, sh ? 7 : 5)}`;
+    sheets.push({ name: 'Floor CZ scans', rows, freeze: { r: r0, c: 2 }, cols: [{ w: 8, hidden: true }, { w: 9 }, { w: 10 }, { w: 12 }, { w: 12 }, { w: 12 }, { w: 12 }, { w: 12 }], dv: [dvT(rng)] });
+  }
+  if (areas.includes('Floor plates')) {
+    const lay = buildLayout(job), P = job.floorUT.plates;
+    const rows = title('Floor UT — five readings per plate', `Thickness in ${U.small}. Five readings per plate: top-left, top-right, centre, bottom-left, bottom-right as the plate is drawn on the floor plan.`);
+    rows.push({ hidden: true, cells: [K('#KEY'), null, ...PT5.map(([k]) => K(k))] });
+    rows.push({ ht: 32, cells: [null, H('Plate'), ...PT5.map(([, l]) => H(l)), H(`Nominal (${U.small})`)] });
+    for (const p of lay.plates) rows.push([K('fpl:' + p.key), LB(p.label + (p.kind === 'annular' ? ' (annular)' : p.cut ? ' (cut)' : '')), ...PT5.map(([k]) => IN(P.rd?.[p.key]?.[k])), RO(plateNominal(job, p))]);
+    const r0 = 4, last = r0 + lay.plates.length - 1, rng = `${ref(r0, 2)}:${ref(last, 6)}`;
+    sheets.push({ name: 'Floor plates', rows, freeze: { r: r0, c: 2 }, cols: [{ w: 8, hidden: true }, { w: 14 }, { w: 11 }, { w: 11 }, { w: 11 }, { w: 11 }, { w: 11 }, { w: 12 }], dv: [dvT(rng)] });
   }
 
   return writeXlsx(sheets, { tFmt: job.units === 'metric' ? '0.00' : '0.000', title: `UT loader — ${tankName}` });
@@ -284,6 +318,49 @@ export async function readLoader(job, buf, { verified = () => false } = {}) {
           const t = String(raw).trim();
           if (t) push({ id: `ind:${iid}:utMethod`, area: 'Floor prove-up', where: `Indication ${ind.no} method`, value: t, kind: 'text', get: (j) => getI(j)?.utMethod || '' }, (v) => { ind.utMethod = v; });
         } else stage(`ind:${iid}:utMin`, 'Floor prove-up', `Indication ${ind.no}`, (j) => getI(j)?.utMin, raw, (v) => { ind.utMin = v; });
+      }
+    }
+  }
+
+  /* Floor UT (schema 7) */
+  const fua = keyed(by.get('Floor UT areas'));
+  if (fua) {
+    for (const row of fua.rows) {
+      if (!row.key.startsWith('fua:')) continue;
+      const aid = row.key.slice(4), a = (job.floorUT?.areas || []).find((x) => x.id === aid);
+      if (!a) { unmatched('Floor UT areas', row); continue; }
+      const getA = (j) => (j.floorUT?.areas || []).find((x) => x.id === aid);
+      for (const [c, k] of fua.colKeys) {
+        const raw = row.cells.get(c); if (raw === undefined) continue;
+        stage(`fua:${aid}:${k}`, 'Floor UT areas', `Area ${a.no || ''} ${k === 'tMin' ? 'minimum' : 'average'}`, (j) => getA(j)?.[k], raw, (v) => { a[k] = v; });
+      }
+    }
+  }
+  const fcz = keyed(by.get('Floor CZ scans'));
+  if (fcz) {
+    const st = new Map(czStations(job).map((x) => [x.key, x]));
+    const lbl = { tMin: 'floor minimum', tAvg: 'floor average', sMin: 'lower shell minimum', sAvg: 'lower shell average' };
+    for (const row of fcz.rows) {
+      if (!row.key.startsWith('fcz:')) continue;
+      const key = row.key.slice(4), x = st.get(key);
+      if (!x || !job.floorUT?.cz?.on) { unmatched('Floor CZ scans', row); continue; }
+      for (const [c, k] of fcz.colKeys) {
+        const raw = row.cells.get(c); if (raw === undefined) continue;
+        stage(`fcz:${key}:${k}`, 'Floor CZ scans', `${x.no} at ${x.angle}° ${lbl[k] || k}`, (j) => j.floorUT?.cz?.rd?.[key]?.[k], raw, (v) => { const rd = (job.floorUT.cz.rd = job.floorUT.cz.rd || {}); (rd[key] = rd[key] || {})[k] = v; });
+      }
+    }
+  }
+  const fpl = keyed(by.get('Floor plates'));
+  if (fpl) {
+    const lay = buildLayout(job);
+    for (const row of fpl.rows) {
+      if (!row.key.startsWith('fpl:')) continue;
+      const key = row.key.slice(4), p = lay.byKey.get(key);
+      if (!p || !job.floorUT?.plates?.on) { unmatched('Floor plates', row); continue; }
+      for (const [c, k] of fpl.colKeys) {
+        if (!PT5_KEYS.includes(k)) continue;
+        const raw = row.cells.get(c); if (raw === undefined) continue;
+        stage(`fpl:${key}:${k}`, 'Floor plates', `Plate ${p.label} ${k.toUpperCase()}`, (j) => j.floorUT?.plates?.rd?.[key]?.[k], raw, (v) => { const rd = (job.floorUT.plates.rd = job.floorUT.plates.rd || {}); (rd[key] = rd[key] || {})[k] = v; });
       }
     }
   }

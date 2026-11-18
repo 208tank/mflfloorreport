@@ -4,6 +4,7 @@ import { nozzleNeck } from './tables.js';
 // MRT = min(RTbc, RTip) − Or × (StPr + UPr)
 // All thickness values in mm, rates in mm/yr.
 import { itemFloor } from './geometry.js';
+import { floorUTPoints, shellScans } from './floorut.js';
 
 export const RESULTS = {
   pending: 'Pending prove-up',
@@ -166,7 +167,10 @@ export function api653(job, layout) {
     const noms = [n(job.tank?.tBottom), layout.Ri < layout.R ? n(job.tank?.tAnnular) ?? n(job.tank?.tBottom) : null].filter((v) => v !== null);
     return noms.length ? Math.max(...noms.map((t) => (t * thr) / 100 / years)) : 0;
   })();
-  const coatConflict = C.coated && !C.coatConfirmed && use.some((it) => it.a.top > 0);
+  // Floor UT survey (schema 7): every reading is a remaining thickness; areas with a known side of loss also set the rates
+  const utPts = floorUTPoints(job, layout, (p) => plateNominal(job, p));
+  const utRate = utPts.filter((q) => q.top > 0 || q.bot > 0);
+  const coatConflict = C.coated && !C.coatConfirmed && (use.some((it) => it.a.top > 0) || utRate.some((q) => q.top > 0));
 
   const ratesFrom = (repaired) => {
     let st = 0, up = 0, stSrc = null, upSrc = null;
@@ -174,6 +178,10 @@ export function api653(job, layout) {
       const rep = repaired.has(it.ind.id);
       if (stYears && stYears > 0 && !rep && it.a.top / stYears > st) { st = it.a.top / stYears; stSrc = it.ind; }
       if (years && years > 0 && (!rep || !it.ind.causeRemoved) && it.a.bot / years > up) { up = it.a.bot / years; upSrc = it.ind; }
+    }
+    for (const q of utRate) {
+      if (stYears && stYears > 0 && q.top / stYears > st) { st = q.top / stYears; stSrc = { id: q.id, no: q.label, ut: true }; }
+      if (years && years > 0 && q.bot / years > up) { up = q.bot / years; upSrc = { id: q.id, no: q.label, ut: true }; }
     }
     if (thrRate > up) { up = thrRate; upSrc = 'threshold'; }
     if (C.coated && !coatConflict) { st = 0; stSrc = null; }
@@ -252,20 +260,29 @@ export function api653(job, layout) {
     const base = regionNom(name === 'critical' ? (layout.Ri < layout.R ? 'annular' : 'bottom') : name);
     const ip = un.filter((it) => it.a.top > 0).map((it) => it.a.rem);
     const bc = un.filter((it) => it.a.bot > 0).map((it) => it.a.rem);
-    const RTip = ip.length ? Math.min(...ip) : base;
-    const RTbc = bc.length ? Math.min(...bc) : base;
+    let RTip = ip.length ? Math.min(...ip) : base;
+    let RTbc = bc.length ? Math.min(...bc) : base;
     const gov = (side) => { const xs = un.filter((it) => (side === 'ip' ? it.a.top : it.a.bot) > 0); if (!xs.length) return null; const g = xs.reduce((m, it) => (it.a.rem < m.a.rem ? it : m)); return { id: g.ind.id, no: g.ind.no }; };
     trace.regions[name] = { ipFrom: gov('ip'), bcFrom: gov('bc'), base, ipCount: ip.length, bcCount: bc.length };
-    const RT = RTip === null ? RTbc : RTbc === null ? RTip : Math.min(RTip, RTbc);
+    // floor UT readings in this area: a known side joins RTip / RTbc, an unknown side is general thickness (RTut)
+    const ut = utPts.filter((q) => (name === 'critical' ? q.critical : q.region === name));
+    const utMin = (xs) => (xs.length ? xs.reduce((m, q) => (q.t < m.t ? q : m)) : null);
+    const uIp = utMin(ut.filter((q) => q.side === 'ps')), uBc = utMin(ut.filter((q) => q.side === 'ss')), uG = utMin(ut.filter((q) => q.side !== 'ps' && q.side !== 'ss'));
+    if (uIp && (!ip.length || uIp.t < RTip)) { RTip = uIp.t; trace.regions[name].ipFrom = { id: uIp.id, no: uIp.label, ut: true }; }
+    if (uBc && (!bc.length || uBc.t < RTbc)) { RTbc = uBc.t; trace.regions[name].bcFrom = { id: uBc.id, no: uBc.label, ut: true }; }
+    const RTut = uG ? uG.t : null;
+    if (ut.length) Object.assign(trace.regions[name], { utCount: ut.length, utFrom: uG ? { id: uG.id, no: uG.label, t: uG.t } : null });
+    let RT = RTip === null ? RTbc : RTbc === null ? RTip : Math.min(RTip, RTbc);
+    if (RTut !== null && (RT === null || RTut < RT)) RT = RTut;
     const MRT = RT === null ? null : RT - Or * K;
     const OrMax = RT === null || noBasis ? null : K > 0 ? (RT - limit) / K : Infinity;
     const provisional = un.filter((it) => it.a.est).length;
-    return { name, label, RTip, RTbc, RT, MRT, limit, ok: MRT === null || noBasis ? null : MRT >= limit - 1e-9, OrMax, tReq: limit + Or * K, provisional, notEvaluated: noBasis };
+    return { name, label, RTip, RTbc, ...(ut.length ? { RTut } : {}), RT, MRT, limit, ok: MRT === null || noBasis ? null : MRT >= limit - 1e-9, OrMax, tReq: limit + Or * K, provisional, notEvaluated: noBasis };
   };
   trace.regions = {};
   const regions = [summarize('bottom', 'Bottom plates', (a) => a.region === 'bottom', mBot)];
   if (layout.Ri < layout.R) regions.push(summarize('annular', 'Annular plates', (a) => a.region === 'annular', mAnn));
-  if (use.some((it) => it.a.critical)) regions.push(summarize('critical', 'Critical zone', (a) => a.critical, Math.max(czLim, layout.Ri < layout.R ? mAnn : mBot)));
+  if (use.some((it) => it.a.critical) || utPts.some((q) => q.critical)) regions.push(summarize('critical', 'Critical zone', (a) => a.critical, Math.max(czLim, layout.Ri < layout.R ? mAnn : mBot)));
 
   const pl = (k, one, many) => (k > 1 ? many : one);
   const pend = all.filter((it) => it.a.res === 'pending').length;
@@ -311,8 +328,20 @@ export function api653(job, layout) {
   const projection = pT === null && pW === null ? null : { t: pT, w: pW, tMin: pTmin, wMin: pWmin, tOk: pT === null ? null : pT >= pTmin - 1e-9, wOk: pW === null ? null : pW >= pWmin - 1e-9 };
   if (projection) { projection.ok = projection.tOk === false || projection.wOk === false ? false : projection.tOk && projection.wOk ? true : null; if (projection.ok === false) warnings.push(`Bottom projection beyond the shell does not meet API 653 §4.4.5.7 (at least ${met ? '2.5 mm' : '0.10 in'} thick at the outside weld toe and ${met ? '10 mm' : '3/8 in'} wide).`); }
 
+  // each UT reading against its limit at the next inspection (they are not repaired automatically)
+  for (const q of utPts) {
+    q.limit = Math.max(q.region === 'annular' ? mAnn : mBot, q.critical ? czLim : 0);
+    q.projected = q.t - Or * K;
+    q.status = noBasis ? 'not evaluated' : q.projected < q.limit - 1e-9 ? 'below MRT' : 'OK';
+  }
+  const utBelow = utPts.filter((q) => q.status === 'below MRT');
+  if (utBelow.length) warnings.push(`Floor UT: ${utBelow.length} reading${pl(utBelow.length, ' is', 's are')} below the minimum at the next inspection (${utBelow.slice(0, 8).map((q) => q.label).join(', ')}${utBelow.length > 8 ? ', …' : ''}). UT readings are not repaired automatically: record the repair as an indication, or shorten Oᵣ.`);
+  const sh = shellScans(job), shBad = sh.filter((x) => x.status && x.status !== 'OK');
+  if (shBad.length) warnings.push(`Lower shell scans: ${shBad.length} below the course 1 t-min (${shBad.slice(0, 8).map((x) => x.no + ' ' + x.angle + '°').join(', ')}); evaluate per API 653 §4.3.2.`);
   const result = { C, years, stYears, Or, czLim, ann, mBot, mAnn, noBasis, thrRate, projection, ...rates, K, per, regions, warnings, repairs: [...repaired], autoRepairs: [...autoSet] };
   Object.defineProperty(result, 'trace', { value: trace, enumerable: false });
+  // floor UT locations and lower shell scans (schema 7): not enumerable, so stored results of jobs without UT don't change
+  Object.defineProperty(result, 'ut', { value: { pts: utPts, shell: sh }, enumerable: false });
   return result;
 }
 

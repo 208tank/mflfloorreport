@@ -14,7 +14,7 @@ import { patchList } from './patches.js';
 const uidS = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 export const SECTIONS = [
-  { key: 'floor', label: 'Floor', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3v18', nde: [['map', 'Floor map'], ['inds', 'Indications'], ['plates', 'Plates']], an: 'api' },
+  { key: 'floor', label: 'Floor', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3v18', nde: [['map', 'Floor map'], ['inds', 'Indications'], ['plates', 'Plates'], ['flut', 'UT readings']], an: 'api' },
   { key: 'shell', label: 'Shell', icon: 'M4 5h16v14H4zM4 10h16M4 15h16M9 5v14M15 5v14', nde: [['shell', 'Shell UT']], an: 'an:shell' },
   { key: 'froof', label: 'Fixed roof', icon: 'M3 11l9-7 9 7M5 10v9h14v-9', nde: [['roofF', 'Fixed roof UT']], an: 'an:froof' },
   { key: 'flroof', label: 'Floating roof', icon: 'M3 14h18M5 14v4h14v-4M8 10h8', nde: [['roofL', 'Deck & pontoons'], ['seal', 'Rim seal']], an: 'an:flroof' },

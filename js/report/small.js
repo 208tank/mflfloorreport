@@ -19,6 +19,8 @@ import { fmt, fmtRate, unitLabel } from '../units.js';
 import { esc as h } from '../util.js';
 import { CORRECTIONS } from '../calc.js';
 import { patchList } from '../patches.js';
+import { floorParts } from './floor.js';
+import { hasFloorUT } from '../floorut.js';
 
 /** Chapters of the small report, in the template's order. */
 /** Appendices of the small report (each printed only when it has content). */
@@ -229,7 +231,8 @@ export function buildSmallReport(job, layout, calc, company, photos, opts = {}, 
   };
 
   const mflApp = () => {
-    if (!inds.length || !X.floorMap) return '';
+    const utPart = hasFloorUT(job) ? floorParts({ job, layout, calc, N, patches: [] }).ut() : ''; // schema 7: floor UT survey
+    if ((!inds.length && !utPart) || !X.floorMap) return '';
     const per = calc.per, side = (i) => ({ ps: 'TS', ss: 'BS', both: 'TS + BS' })[i.result] || (i.result === 'nri' ? 'NRI' : i.result === 'pending' || !i.result ? 'Pending' : 'Other');
     const list = inds.map((i) => { const a = per.get(i.id) || {}; return `<tr><td>${h(i.no)}</td><td>${fmt(i.x, 'small', job, false)}</td><td>${fmt(i.y, 'small', job, false)}</td><td>${side(i)}</td><td>${t(a.rem)}</td></tr>`; }).join('');
     const listTbl = `<table class="dwg-kv sm-ind"><tr><th>No.</th><th>X</th><th>Y</th><th>TS/BS</th><th>T-act</th></tr>${list}</table>`;
@@ -241,7 +244,7 @@ export function buildSmallReport(job, layout, calc, company, photos, opts = {}, 
       blocks: onSheet ? [['Indications', listTbl]] : [],
       legend: X.legendHTML ? X.legendHTML() : '',
       notes: [`X / Y in ${U.t} from each plate's datum corner. TS = top side (product side); BS = bottom side (soil side). T-act = remaining thickness used in the evaluation.`, `0° ${h(I.zeroRef || '')}; angles clockwise.`, ...(onSheet ? [] : ['The indication list is tabulated before this sheet.'])] });
-    return full + sheet;
+    return (inds.length ? full : '') + (utPart ? `<section>${utPart}</section>` : '') + sheet;
   };
 
   const calcApp = () => {

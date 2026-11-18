@@ -8,6 +8,7 @@ import { defaultRoof, migrateRoof } from './roof.js';
 import { defaultSettle, migrateSettle } from './settle.js';
 import { defaultSecs, migrateSecs, defaultSummary } from './sections.js';
 import { defaultSmall, migrateSmall } from './small.js';
+import { defaultFloorUT, migrateFloorUT } from './floorut.js';
 
 export const STAGES = [['upcoming', 'Upcoming'], ['inspection', 'Inspection ongoing'], ['reporting', 'Reporting'], ['review', 'Peer review'], ['complete', 'Complete']];
 export const STAGE_LABEL = Object.fromEntries(STAGES);
@@ -36,7 +37,7 @@ export function newJob(units = 'imperial') {
     layout: units === 'metric' ? { ...defaultLayout(), plateW: 2400, plateL: 9000, annW: 600 } : defaultLayout(),
     equip: {}, equipment: [],
     calc: units === 'metric' ? { ...defaultCalc(), czDist: 75, mrtBottom: 2.5, patchMargin: 50 } : defaultCalc(),
-    plates: {}, indications: [], features: [], nozzles: [], shell: defaultShell(units), roof: defaultRoof(units), settle: defaultSettle(units),
+    plates: {}, indications: [], features: [], nozzles: [], floorUT: defaultFloorUT(units), shell: defaultShell(units), roof: defaultRoof(units), settle: defaultSettle(units),
     secs: defaultSecs(), summary: defaultSummary(), defSeq: 0, status: { ...defaultStatus(), history: [{ stage: 'upcoming', at: Date.now() }] }
   };
 }
@@ -64,6 +65,7 @@ function normalise(job) {
     equip: { ...(job.equip || {}) },
     calc: { ...base.calc, ...(job.calc || {}) },
     plates: job.plates || {}, indications: job.indications || [], features: job.features || [], nozzles: job.nozzles || [],
+    floorUT: migrateFloorUT(job.floorUT, job.units || 'imperial'),
     shell: migrateShell(job.shell, job.units || 'imperial'),
     roof: migrateRoof(job.roof, job.units || 'imperial'),
     settle: migrateSettle(job.settle, job.units || 'imperial'),

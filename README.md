@@ -7,6 +7,53 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Floor UT readings — areas, critical zone and lower shell scans, five readings per plate (v3.35.0, schema 7)
+
+**Floor → UT readings** (beside Floor map, Indications and Plates) records UT thickness on the floor in three ways:
+
+1. **Selected areas** — each area is placed by its **plate** and the **centre of the area** measured X / Y from the
+   plate's datum corner (the same convention as an indication), with its **length** along X and **width** along Y.
+   Record the **minimum** and **average** thickness, a **condition** (general thinning, general pitting, widely
+   scattered pitting, isolated pitting, localized corrosion, lamination / inclusion, no significant loss, or a custom
+   description), the **side of the loss** if known, and notes. Areas can be typed in (*+ Area*) or placed by clicking
+   the Floor map (*+ UT area*, Shift-click for several).
+2. **Critical zone scans** — a square scan (6 × 6 in by default, 150 mm metric) inside the shell with its outer edge
+   at the shell, every **spacing** set by the inspector (arc length along the shell, default 10 ft / 3 m) from a
+   **first scan angle**, clockwise, numbered CZ-1, CZ-2 …. The last gap back to CZ-1 is shown when the spacing doesn't
+   divide the circumference. Each scan records a minimum, average and note. Readings are kept by angle, so changing
+   the spacing keeps any reading still on a scan and reports the others.
+3. **Lower shell scans** (option under the critical zone scans) — the same locations and size on course 1 just above
+   the shell-to-bottom weld: minimum, average and note, compared with the course 1 t-min (entered, else calculated
+   per §4.3.3), with the shell rules: below 60 % of t-min fails §4.3.2.1, otherwise below t-min is evaluated per §4.3.2.
+4. **Five readings per plate** — the four corners and the centre of every bottom and annular plate, placed as on a
+   floating roof deck (corners inset 15 %, pulled inside cut plates).
+
+**In the API 653 evaluation** (`api653`, the floor chapter and the calculation appendix) every UT reading is a
+remaining thickness in its area (bottom, annular, critical zone — a CZ scan always, an area when its extent reaches
+the zone, a plate reading when it is within the critical zone distance of the shell):
+
+- A reading with no known side is **general thickness**: the least one is **RTᵤₜ**, and RT = min(RTᵢₚ, RTᵦc, RTᵤₜ).
+  It does not change StPᵣ / UPᵣ. An area marked product side or soil side joins RTᵢₚ or RTᵦc and its loss
+  (nominal − minimum) sets StPᵣ / UPᵣ like a proven-up indication.
+- A critical zone scan adds the critical zone area to the evaluation, with the critical zone limit.
+- Each reading is checked at Oᵣ (t − Oᵣ × (StPᵣ + UPᵣ) against its area's limit). UT readings are **not repaired
+  automatically**: readings below the minimum are listed in a warning and on the API 653 page; record the repair as
+  an indication, or shorten Oᵣ. Lower shell scans below t-min are a warning too.
+- With no UT readings, every result is exactly as before (the golden calculation and report files are unchanged apart
+  from the schema number).
+
+**Elsewhere:** the floor map draws areas (outlined at their size), CZ scans (squares at the shell), plate readings
+(dots) and lower shell scans (bars outside the shell) in green / red by status, with a *UT* toggle. The report's floor
+chapter gains **UT thickness survey** (scope and results, areas, critical zone and lower shell scans, plate readings)
+and an RTᵤₜ column in the area evaluation; the small tank report prints the same tables in its MFL appendix. *Export
+CSV* on the screen writes every reading. The **UT loader sheet** gains *Floor UT areas*, *Floor CZ scans* and *Floor
+plates* sheets, read back with the same preview and conflict rules.
+
+Data: `job.floorUT` = `{ areas: [{ id, no, plate, x, y, len, wid, tMin, tAvg, type, typeText, side, notes }],
+cz: { on, spacing, start, size, shell, rd: { [angle]: { tMin, tAvg, note, sMin, sAvg, sNote } } },
+plates: { on, rd: { [plate key]: { tl, tr, c, bl, br } } } }` (job step 7). The rules are in `js/floorut.js`, the
+screen in `js/views/floorut.js`. `tests/floorut.test.mjs` and the browser check "floor UT" cover them.
+
 ## Small tank report — layout reworked for flow (v3.34.0)
 
 The small tank report read as a long run of headings. It is now laid out like the small tank Word template:
@@ -1337,6 +1384,8 @@ every limit is editable.
 | `js/small.js` | Small tank report template: checklist items, defaults, suggestion (schema 6) |
 | `js/views/small.js` | Small tank checklist screen and the Report card on Tank setup |
 | `js/report/small.js` | The small tank report: chapters in the template order (S3) |
+| `js/floorut.js` | Floor UT survey (schema 7): areas, critical zone and lower shell scans, five readings per plate; the readings as locations for the API 653 evaluation |
+| `js/views/floorut.js` | Floor → UT readings screen |
 | `js/smallcalc.js` | Small tank calculations: thickness and rates, intervals, planar tilt, edge settlement (S2) |
 | `js/report/frame.js` | Report frame: chapter order and switches, numbering, cover, document control, contents, value key, page set-up, running header and footer |
 | `js/export.js` | CSV, SVG/PNG export |

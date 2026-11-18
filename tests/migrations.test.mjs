@@ -18,7 +18,7 @@ test('steps are numbered in order with no gaps', () => {
 test('a schema 1 job runs every step in order and is logged', () => {
   const raw = fixture('legacy-schema1'), before = JSON.stringify(raw), log = [];
   const out = migrate(raw, { log, appVersion: 'test' });
-  assert.deepEqual(log.map((l) => [l.from, l.to]), [[1, 2], [2, 3], [3, 4], [4, 5], [5, 6]]);
+  assert.deepEqual(log.map((l) => [l.from, l.to]), [[1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7]]);
   assert.ok(log.every((l) => l.kind === 'job' && l.jobId === raw.id && l.app === 'test' && l.at > 0));
   assert.equal(out.schema, SCHEMA);
   assert.equal(JSON.stringify(raw), before, 'the stored job must not be changed by migrating it');
@@ -36,7 +36,7 @@ test('a current job needs no steps; migrating again changes nothing', () => {
 test('each step only applies to jobs below its schema', () => {
   const j3 = { ...fixture('demo'), schema: 3 }, log = [];
   migrate(j3, { log });
-  assert.deepEqual(log.map((l) => l.to), [4, 5, 6]);
+  assert.deepEqual(log.map((l) => l.to), [4, 5, 6, 7]);
   const j2 = { ...fixture('demo'), schema: 2, calc: { ...fixture('demo').calc, mrtAnnular: 2.54 } };
   assert.equal(migrate(j2).calc.mrtAnnular, null, 'step 3: old 0.10 in annular default becomes auto');
   assert.equal(migrate({ ...j2, schema: 3 }).calc.mrtAnnular, 2.54, 'step 3 does not run on schema 3 jobs');
@@ -49,7 +49,7 @@ test('schema 5: the three name fields become personnel entries, and nothing else
   const before = JSON.stringify(raw), log = [];
   const out = migrate(raw, { log });
   assert.equal(JSON.stringify(raw), before, 'the stored job is not changed');
-  assert.deepEqual(log.map((l) => l.to), [5, 6]);
+  assert.deepEqual(log.map((l) => l.to), [5, 6, 7]);
   assert.deepEqual(out.personnel.map((p) => [p.role, p.name, p.method]), [['insp653', 'C. Inspector', ''], ['mfl', 'A. Operator', 'MFL'], ['ut', 'B. Technician', 'UT']]);
   assert.ok(out.personnel.every((p) => typeof p.id === 'string' && p.id) && new Set(out.personnel.map((p) => p.id)).size === 3);
   assert.equal(out.personnel[0].cert, 'API 653');

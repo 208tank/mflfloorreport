@@ -29,6 +29,7 @@ import { refreshSettle } from './views/settle.js';
 import { refreshBuilder, refreshSetupPreview, relocateOrphans } from './views/setup.js';
 import { refreshShell, shellBuildHTML } from './views/shell.js';
 import { refreshSmall, refreshTemplateCard } from './views/small.js';
+import { refreshFloorUT } from './views/floorut.js';
 import './app/menu.js';
 import './app/lock.js';
 import './views/codetables.js';
@@ -82,6 +83,7 @@ onChange([
     else if (['roofF', 'roofL', 'seal'].includes(S.view)) refreshRoof();
     else if (S.view === 'settle') { if (path === 'settle.eu') renderView(); else refreshSettle(); }
     else if (S.view === 'report' && (path.startsWith('docctl.') || path === 'status.reviewer')) renderView();
+    else if (S.view === 'flut') refreshFloorUT();
     else if (S.view === 'small') { if (el.tagName === 'SELECT') renderView(); else refreshSmall(); } // S2: results follow the readings
     if (path === 'units') renderAll();
     return;

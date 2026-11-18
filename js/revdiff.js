@@ -5,13 +5,13 @@ import { SEC } from './sections.js';
 /** Fields that record a job's file and save bookkeeping rather than its content. */
 export const BOOKKEEPING = ['rev', 'savedAt', 'revisions', 'updated', 'edits', 'editAreas', 'issued'];
 
-const AREA = { info: 'Job', tank: 'Tank', layout: 'Floor layout', calc: 'API 653 settings', status: 'Stage', summary: 'Executive summary', shell: 'Shell', roof: 'Roof', settle: 'Settlement', plates: 'Plate', indications: 'Indication', features: 'Floor feature', nozzles: 'Nozzle', equipment: 'Equipment', personnel: 'Personnel', repairs: 'Repair status', docctl: 'Document control', secs: 'Section', scope: 'Scope', units: 'Units', template: 'Report template', small: 'Small tank checklist' };
+const AREA = { info: 'Job', tank: 'Tank', layout: 'Floor layout', calc: 'API 653 settings', status: 'Stage', summary: 'Executive summary', shell: 'Shell', roof: 'Roof', settle: 'Settlement', plates: 'Plate', indications: 'Indication', features: 'Floor feature', nozzles: 'Nozzle', equipment: 'Equipment', personnel: 'Personnel', repairs: 'Repair status', docctl: 'Document control', secs: 'Section', scope: 'Scope', units: 'Units', template: 'Report template', small: 'Small tank checklist', floorUT: 'Floor UT' };
 const IGNORE = new Set([...BOOKKEEPING, 'status.history']);
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const keyed = (a) => Array.isArray(a) && a.length > 0 && a.every((x) => isObj(x) && typeof x.id === 'string');
 const itemName = (x, i, list) => x.no || x.mark || x.label || x.method || x.item || x.finding || x.make || x.name || x.check || (list ? `${list} ${i + 1}` : x.id);
-const LIST = { courses: 'Course', zones: 'Zone', edge: 'Edge area', dep: 'Depression', pts: 'Point', gaps: 'Gap', checks: 'Check', dist: 'Copy', nde: 'NDE', obs: 'Observation', recs: 'Recommendation', rows: 'Row', mrows: 'Row', proj: 'Projection', opp: 'Device', tilt: 'Station' };
-const SUB = { nde: 'NDE', obs: 'Observations', recs: 'Recommendations', courses: 'Courses', rd: 'UT readings (station › elevation)', items: 'Checklist items', lim: 'Entered limits', intOv: 'Interval overrides', basis: 'Basis', ut: 'UT readings', pont: 'Pontoons', el: 'Station elevations', src: 'Data sources', assess: 'Engineering assessment', scope: 'Scope and limitations' };
+const LIST = { areas: 'Area', courses: 'Course', zones: 'Zone', edge: 'Edge area', dep: 'Depression', pts: 'Point', gaps: 'Gap', checks: 'Check', dist: 'Copy', nde: 'NDE', obs: 'Observation', recs: 'Recommendation', rows: 'Row', mrows: 'Row', proj: 'Projection', opp: 'Device', tilt: 'Station' };
+const SUB = { cz: 'Critical zone scans', areas: 'Areas', nde: 'NDE', obs: 'Observations', recs: 'Recommendations', courses: 'Courses', rd: 'UT readings (station › elevation)', items: 'Checklist items', lim: 'Entered limits', intOv: 'Interval overrides', basis: 'Basis', ut: 'UT readings', pont: 'Pontoons', el: 'Station elevations', src: 'Data sources', assess: 'Engineering assessment', scope: 'Scope and limitations' };
 const show = (v) => (v === undefined || v === null || v === '' ? '—' : typeof v === 'object' ? JSON.stringify(v).slice(0, 80) + (JSON.stringify(v).length > 80 ? '…' : '') : String(v));
 
 /** Values as the audit trail keeps them: text and numbers as they are, anything else as its JSON. */

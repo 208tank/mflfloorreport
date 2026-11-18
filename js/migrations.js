@@ -109,7 +109,10 @@ export const JOB_STEPS = [
   { to: 6, name: 'Small tank report template: report template choice, small-tank checklist, code-required recommendations',
     notes: () => [],
     // jobs made before the small template keep the full report; the checklist starts blank
-    run(out, src) { if (!src.template) out.template = 'full'; } }
+    run(out, src) { if (!src.template) out.template = 'full'; } },
+  { to: 7, name: 'Floor UT thickness survey: selected areas, critical zone and lower shell scans, five readings per plate',
+    notes: () => [],
+    run() { /* job.floorUT starts empty (normalise fills it in); nothing existing changes */ } }
 ];
 export const JOB_SCHEMA = JOB_STEPS.at(-1).to;
 

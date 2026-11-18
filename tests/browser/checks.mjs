@@ -1,7 +1,7 @@
 // Browser checks run by tests/browser/run.mjs. Each takes { browser, url, serve, appPage }.
 import assert from 'node:assert/strict';
 
-const VIEWS = ['dash', 'reg', 'jobs', 'equip', 'setup', 'summary', 'small', 'defs', 'map', 'inds', 'plates', 'api', 'shell', 'roofF', 'roofL', 'seal', 'nozzles', 'settle', 'ref', 'report'];
+const VIEWS = ['dash', 'reg', 'jobs', 'equip', 'setup', 'summary', 'small', 'defs', 'map', 'inds', 'plates', 'flut', 'api', 'shell', 'roofF', 'roofL', 'seal', 'nozzles', 'settle', 'ref', 'report'];
 const SECS = ['floor', 'shell', 'froof', 'flroof', 'nozzles', 'found', 'settle'];
 const CHILD = ['nde', 'obs', 'photos', 'recs'];
 
@@ -906,17 +906,17 @@ export default {
     await page.evaluate(async () => { const { db } = await import('./js/db.js'); for (let i = 0; i < 150 && !(await db.getMeta('baseline:v4')); i++) await new Promise((r) => setTimeout(r, 100)); });
     await page.evaluate(() => window.tfi.go('jobs'));
     await page.click('[data-act="job-open"][data-id="demo-a"]');
-    await page.waitForFunction(() => window.tfi.job()?.id === 'demo-a' && window.tfi.job().schema === 6);
+    await page.waitForFunction(() => window.tfi.job()?.id === 'demo-a' && window.tfi.job().schema === 7);
     await page.waitForTimeout(800); // let the migrated job save
     const r = await page.evaluate(async () => {
       const { db } = await import('./js/db.js');
       const revs = await db.jobRevisions('demo-a'), log = await db.migrationLog(), stored = await db.getJob('demo-a');
       return { revs: revs.map((x) => [x.n, x.reason, x.note, x.schema, x.job]), jobLog: log.filter((m) => m.kind === 'job' && m.jobId === 'demo-a').map((m) => [m.from, m.to]), storedSchema: stored.schema };
     });
-    assert.deepEqual(r.revs.map((x) => x.slice(0, 4)), [[1, 'migration', 'Baseline at upgrade to the data integrity version', 1], [2, 'migration', 'Before migration from schema 1 to 6', 1]]);
+    assert.deepEqual(r.revs.map((x) => x.slice(0, 4)), [[1, 'migration', 'Baseline at upgrade to the data integrity version', 1], [2, 'migration', 'Before migration from schema 1 to 7', 1]]);
     assert.deepEqual(r.revs[1][4], before.jobs.find((j) => j.id === 'demo-a'), 'the revision holds the job exactly as stored before the migration');
-    assert.deepEqual(r.jobLog, [[1, 2], [2, 3], [3, 4], [4, 5], [5, 6]]);
-    assert.equal(r.storedSchema, 6);
+    assert.deepEqual(r.jobLog, [[1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7]]);
+    assert.equal(r.storedSchema, 7);
     // opening it again adds no revision and no log entry
     const openVia = (id) => page.evaluate((i) => { window.tfi.go('jobs'); document.querySelector(`[data-act="job-open"][data-id="${i}"]`).click(); }, id);
     await openVia('demo-b');
@@ -1857,6 +1857,67 @@ export default {
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },
+  async 'floor UT: areas, critical zone and lower shell scans, five readings per plate — screen, map, API 653 and the loader sheet'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    await page.evaluate(() => window.tfi.go('flut')); await page.waitForSelector('.flut-page');
+    // an area: plate, X / Y to its centre, size, readings and condition
+    await page.click('[data-act="flut-area-add"]'); await page.waitForSelector('.flut-areas [data-f="plate"]');
+    const plate = await page.evaluate(() => window.__app.layout.plates.find((p) => p.kind === 'floor' && !p.cut).label);
+    await page.fill('.flut-areas [data-f="plate"]', plate); await page.press('.flut-areas [data-f="plate"]', 'Tab');
+    await page.waitForFunction(() => window.tfi.job().floorUT.areas[0].plate); await page.waitForTimeout(30);
+    for (const [f, v] of [['x', '24'], ['y', '30'], ['tMin', '0.120'], ['tAvg', '0.180']]) {
+      await page.fill(`.flut-areas [data-f="${f}"]`, v); await page.press(`.flut-areas [data-f="${f}"]`, 'Tab');
+      await page.waitForFunction((k) => window.tfi.job().floorUT.areas[0][k] != null, f); await page.waitForTimeout(30);
+    }
+    await page.selectOption('.flut-areas select[data-f="type"]', 'custom');
+    await page.waitForSelector('.flut-areas [data-f="typeText"]');
+    await page.waitForFunction(() => /Below MRT/.test(document.querySelector('.flut-areas')?.innerText || ''));
+    const a = await page.evaluate(() => window.tfi.job().floorUT.areas[0]);
+    assert.equal(a.no, 'A-1'); assert.ok(Math.abs(a.x - 24 * 25.4) < 0.01 && Math.abs(a.tMin - 0.12 * 25.4) < 1e-6); assert.equal(a.type, 'custom');
+    // critical zone scans with lower shell scans
+    await page.check('[data-bind="floorUT.cz.on"]'); await page.waitForSelector('[data-bind="floorUT.cz.spacing"]');
+    await page.check('[data-bind="floorUT.cz.shell"]'); await page.waitForSelector('.flut-cz [data-f="sMin"]');
+    const n = await page.$$eval('.flut-cz tbody tr', (r) => r.length);
+    const D = await page.evaluate(() => window.tfi.job().tank.diameter);
+    assert.equal(n, Math.ceil((Math.PI * D) / (10 * 304.8) - 1e-6), 'one scan every 10 ft');
+    await page.fill('.flut-cz tbody tr:first-child [data-f="tMin"]', '0.200'); await page.press('.flut-cz tbody tr:first-child [data-f="tMin"]', 'Tab');
+    await page.waitForFunction(() => Object.values(window.tfi.job().floorUT.cz.rd)[0]?.tMin); await page.waitForTimeout(30);
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset?.f), 'tAvg', 'focus stays in the row');
+    await page.fill('.flut-cz tbody tr:first-child [data-f="sMin"]', '0.050'); await page.press('.flut-cz tbody tr:first-child [data-f="sMin"]', 'Tab');
+    await page.waitForFunction(() => /Below t-min/.test(document.querySelector('.flut-cz')?.innerText || ''));
+    // five readings per plate
+    await page.check('[data-bind="floorUT.plates.on"]'); await page.waitForSelector('.flut-pl [data-pt="c"]');
+    await page.fill('.flut-pl tbody tr:first-child [data-pt="c"]', '0.230'); await page.press('.flut-pl tbody tr:first-child [data-pt="c"]', 'Tab');
+    await page.waitForFunction(() => Object.keys(window.tfi.job().floorUT.plates.rd).length === 1);
+    // API 653 page and the floor map
+    await page.evaluate(() => window.tfi.go('api')); await page.waitForSelector('#apiResults');
+    assert.match(await page.$eval('#apiResults', (e) => e.innerText), /Floor UT readings \(3\)/i);
+    assert.match(await page.$eval('#apiResults', (e) => e.innerHTML), /RT<sub>UT<\/sub>/);
+    await page.evaluate(() => window.tfi.go('map')); await page.waitForSelector('#mapbox svg .flut');
+    assert.equal(await page.$$eval('#mapbox .ut-area', (x) => x.length), 1);
+    await page.click('[data-act="mode"][data-mode="utarea"]');
+    const box = await page.$('#mapbox svg'); const bb = await box.boundingBox();
+    await page.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2);
+    await page.waitForFunction(() => window.tfi.job().floorUT.areas.length === 2);
+    // loader sheet: floor UT sheets go out and come back
+    const r = await page.evaluate(async () => {
+      const { buildLoader, readLoader, defaultDecisions } = await import('./js/loader.js');
+      const job = window.tfi.job(), sheet = structuredClone(job), k = Object.keys(job.floorUT.cz.rd)[0], a2 = sheet.floorUT.areas[1];
+      a2.tMin = 5.5; sheet.floorUT.cz.rd[k].tAvg = 5.9;
+      const res = await readLoader(job, await (await buildLoader(sheet)).arrayBuffer());
+      const st = Object.fromEntries(res.items.filter((it) => /^f(ua|cz|pl):/.test(it.id)).map((it) => [it.id, it.status]));
+      res.apply(defaultDecisions(res.items));
+      return { st, a2: job.floorUT.areas[1].tMin, avg: job.floorUT.cz.rd[k].tAvg, id2: a2.id, k };
+    });
+    assert.equal(r.st[`fua:${r.id2}:tMin`], 'new'); assert.equal(r.st[`fcz:${r.k}:tAvg`], 'new'); assert.equal(r.st[`fcz:${r.k}:tMin`], 'same');
+    assert.ok(Math.abs(r.a2 - 5.5) < 1e-3 && Math.abs(r.avg - 5.9) < 1e-3);
+    // report
+    await page.evaluate(() => window.tfi.go('report')); await page.waitForSelector('.report');
+    const txt = await page.$eval('.report', (e) => e.innerText);
+    assert.match(txt, /UT thickness survey/); assert.match(txt, /Critical zone and lower shell scans/); assert.match(txt, /Plate UT readings/);
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
   async 'small tank S2: the checklist shows thickness, rates, intervals, tilt and edge results as readings are typed'({ browser, url, appPage }) {
     const page = await appPage(browser, url, { demo: false });
     const { readFileSync } = await import('node:fs');
@@ -1985,7 +2046,7 @@ export default {
     assert.match(txt, /Approved by · Signature and date|P\. Approver/);
     // saved in the job
     const j = await page.evaluate(() => window.tfi.job());
-    assert.equal(j.schema, 6); assert.equal(j.docctl.approvedBy, 'P. Approver'); assert.equal(j.tank.src.opTemp, 'assumed');
+    assert.equal(j.schema, 7); assert.equal(j.docctl.approvedBy, 'P. Approver'); assert.equal(j.tank.src.opTemp, 'assumed');
     assert.equal(j.secs.shell.assess.by, 'E. Engineer'); assert.ok(!('inspector' in j.info));
     assert.deepEqual(page.errors, []);
     await page.context().close();

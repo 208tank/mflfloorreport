@@ -89,8 +89,8 @@ export function calcFloor({ job, layout, calc, N }) {
     const g = tr.regions?.[r.name] || {}, from = (x, base) => (x ? `at ${h(x.no)}` : `no unrepaired location — plate minimum ${tn(base)}`);
     return `<div class="calc-reg"><b>${h(r.label)}</b>
       ${step('RTᵢₚ', `least product-side remaining, ${from(g.ipFrom, g.base)}`, '', T(r.RTip), r.name + '.RTip')}
-      ${step('RTᵦc', `least soil-side remaining, ${from(g.bcFrom, g.base)}`, '', T(r.RTbc), r.name + '.RTbc')}
-      ${step('MRT', 'min(RTᵦc, RTᵢₚ) − Oᵣ × (StPᵣ + UPᵣ)', r.RT == null ? '' : `${tn(r.RT)} − ${calc.Or} × ${fmtRate(calc.K, job, false)}`, T(r.MRT), r.name + '.MRT')}
+      ${step('RTᵦc', `least soil-side remaining, ${from(g.bcFrom, g.base)}`, '', T(r.RTbc), r.name + '.RTbc')}${r.RTut !== undefined ? '\n      ' + step('RTᵤₜ', g.utFrom ? `least floor UT reading with no known side of loss, at ${h(g.utFrom.no)}` : 'no floor UT reading without a known side', '', T(r.RTut), r.name + '.RTut') : ''}
+      ${step('MRT', r.RTut !== undefined ? 'min(RTᵦc, RTᵢₚ, RTᵤₜ) − Oᵣ × (StPᵣ + UPᵣ)' : 'min(RTᵦc, RTᵢₚ) − Oᵣ × (StPᵣ + UPᵣ)', r.RT == null ? '' : `${tn(r.RT)} − ${calc.Or} × ${fmtRate(calc.K, job, false)}`, T(r.MRT), r.name + '.MRT')}
       ${step('t required today', 'limit + Oᵣ × (StPᵣ + UPᵣ)', `${tn(r.limit)} + ${calc.Or} × ${fmtRate(calc.K, job, false)}`, T(r.tReq), r.name + '.tReq')}
       ${step('Maximum Oᵣ', '(min(RTᵦc, RTᵢₚ) − limit) / (StPᵣ + UPᵣ)', r.RT == null || !(calc.K > 0) ? '' : `(${tn(r.RT)} − ${tn(r.limit)}) / ${fmtRate(calc.K, job, false)}`, r.OrMax === null ? '—' : Number.isFinite(r.OrMax) ? Math.max(0, r.OrMax).toFixed(1) + ' yr' : 'not limited (no corrosion rate)', r.name + '.OrMax')}
     </div>`;

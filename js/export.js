@@ -6,6 +6,7 @@ import { sealEval, activeStds } from './seal.js';
 import { settleCalc, edgeEval, depEval, ELEV_UNITS, PSI_PER_MPA, hasEP, epOffsets, xKey, profileEval, stations as setStations } from './settle.js';
 import { utLocations, courseSummary, coursesWithElev, courseAt, readingElevations, getReading, fmtElev } from './shell.js';
 import { angleOf, toLocal, datumName, orientName } from './geometry.js';
+import { AREA_SIDES, areaTypeText, czStations, czLastGap } from './floorut.js';
 
 export function download(name, data, type) {
   const blob = data instanceof Blob ? data : new Blob([data], { type });
@@ -68,6 +69,43 @@ export function platesCSV(job, layout, calc) {
       r(fromMm(o.tNom ?? (p.kind === 'annular' ? job.tank.tAnnular ?? job.tank.tBottom : job.tank.tBottom), 't', job), d),
       r(fromMm(o.utMin, 't', job), d), o.scan || 'scanned', datumName(p),
       counts.get(p.key) || 0, o.notes ?? '']);
+  }
+  return toCSV(rows);
+}
+
+/** Floor UT survey (schema 7): every area, critical zone scan (with its lower shell scan) and plate reading, one row each. */
+export function floorUTCSV(job, layout, calc) {
+  const U = u(job), S = U.small, d = U.tDec + 1;
+  const sm = (mm) => r(fromMm(mm, 'small', job), U.smallDec + 2), t = (mm) => r(fromMm(mm, 't', job), d);
+  const F = job.floorUT || {}, pts = calc?.ut?.pts || [], byId = new Map(pts.map((q) => [q.id, q])), side = Object.fromEntries(AREA_SIDES);
+  const rows = [['Type', 'Ref.', 'Plate', `X (${S})`, `Y (${S})`, 'Angle (deg)', `Length (${S})`, `Width (${S})`, `Dist. to shell (${S})`, 'Critical zone', 'Condition', 'Side',
+    `Nominal t (${S})`, `Min (${S})`, `Average (${S})`, 'Loss (%)', `t at next insp. (${S})`, `Limit (${S})`, 'Status', `Lower shell min (${S})`, `Lower shell avg (${S})`, 'Lower shell status', 'Notes']];
+  const base = (q) => [t(q?.tNom), '', '', r(q?.lossPct, 1), t(q?.projected), t(q?.limit), q?.status ?? ''];
+  for (const a of F.areas || []) {
+    const q = byId.get(a.id), p = layout.byKey.get(a.plate);
+    const b = base(q); b[1] = t(a.tMin); b[2] = t(a.tAvg);
+    rows.push(['Area', a.no || '', p?.label ?? a.plate ?? '', sm(a.x), sm(a.y), q?.floor ? r(angleOf(q.floor.x, q.floor.y), 1) : '', sm(a.len), sm(a.wid), sm(q?.distShell), q?.critical ? 'Yes' : '', areaTypeText(a), side[a.side || ''], ...b, '', '', '', a.notes ?? '']);
+  }
+  if (F.cz?.on) {
+    const sh = new Map((calc?.ut?.shell || []).map((x) => [x.key, x])), size = sm(F.cz.size);
+    for (const s of czStations(job)) {
+      const rd = F.cz.rd?.[s.key] || {}, q = byId.get('cz:' + s.key), x = sh.get(s.key);
+      if (!Object.values(rd).some((v) => v !== null && v !== undefined && v !== '')) continue;
+      const b = base(q); b[1] = t(rd.tMin); b[2] = t(rd.tAvg);
+      rows.push(['Critical zone scan', s.no, q?.plate?.label ?? '', '', '', s.angle, size, size, '', 'Yes', '', '', ...b, x ? t(x.t) : '', x ? t(x.avg) : '', x?.status ?? '', [rd.note, rd.sNote].filter(Boolean).join('; ')]);
+    }
+    const gap = czLastGap(job);
+    if (gap !== null) rows.push(['Critical zone scans', `spacing ${r(fromMm(F.cz.spacing, 'big', job), U.bigDec + 1)} ${U.big}, last gap ${r(fromMm(gap, 'big', job), U.bigDec + 1)} ${U.big}`]);
+  }
+  if (F.plates?.on) {
+    for (const p of layout.plates) {
+      const rd = F.plates.rd?.[p.key]; if (!rd) continue;
+      for (const [k, l] of [['tl', 'Top-left'], ['tr', 'Top-right'], ['c', 'Centre'], ['bl', 'Bottom-left'], ['br', 'Bottom-right']]) {
+        if (rd[k] === null || rd[k] === undefined || rd[k] === '') continue;
+        const q = byId.get('pl:' + p.key + ':' + k), b = base(q); b[1] = t(rd[k]);
+        rows.push(['Plate reading', l, p.label, '', '', q?.floor ? r(angleOf(q.floor.x, q.floor.y), 1) : '', '', '', sm(q?.distShell), q?.critical ? 'Yes' : '', '', '', ...b, '', '', '', '']);
+      }
+    }
   }
   return toCSV(rows);
 }

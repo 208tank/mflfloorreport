@@ -19,6 +19,7 @@ import { fmt, inVal, toMm, u } from '../units.js';
 import { esc as h } from '../util.js';
 import { refreshApi } from './api.js';
 import { refreshIndTable, refreshPlateTable } from './floorlists.js';
+import { addArea } from './floorut.js';
 import { nozzleUTBox } from './nozzles.js';
 import { findSec, rowLetter } from './setup.js';
 
@@ -31,6 +32,7 @@ function viewMap() {
         <button class="btn sm${S.mode === 'add' ? ' on' : ''}" data-act="mode" data-mode="add" title="Click the map to add an indication (N). Hold Shift to add several.">+ Indication <kbd>N</kbd></button>
         <button class="btn sm${S.mode === 'feature' ? ' on' : ''}" data-act="mode" data-mode="feature" title="Click the map to add a floor feature">+ Feature</button>
         <button class="btn sm${S.mode === 'nozzle' ? ' on' : ''}" data-act="mode" data-mode="nozzle" title="Click at the shell to add a nozzle at that angle">+ Nozzle</button>
+        <button class="btn sm${S.mode === 'utarea' ? ' on' : ''}" data-act="mode" data-mode="utarea" title="Click the map to add a UT area centred there (readings on Floor → UT readings)">+ UT area</button>
         <button class="btn sm${S.mode === 'datum' ? ' on' : ''}" data-act="mode" data-mode="datum" title="Click inside a plate, in the corner the X/Y was measured from (D)">Set datum <kbd>D</kbd></button>
         <select id="ftType" class="sm" title="Feature type">${FT_TYPES.map(([k, v]) => `<option value="${k}" ${S.ftType === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
       </div>
@@ -41,6 +43,7 @@ function viewMap() {
         <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="showDatums" ${S.showDatums ? 'checked' : ''}><span>Datums</span></label>
         <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="showCZ" ${S.showCZ ? 'checked' : ''}><span>Critical zone</span></label>
         <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="showPatches" ${S.showPatches ? 'checked' : ''}><span>Patches</span></label>
+        <label class="chk sm"><input type="checkbox" data-act="toggle" data-k="showUT" ${S.showUT ? 'checked' : ''}><span>UT</span></label>
       </div>
       <div class="seg zoom"><button aria-label="Zoom out" class="btn sm icon" data-act="zoom-out" title="Zoom out">−</button><button aria-label="Zoom in" class="btn sm icon" data-act="zoom-in" title="Zoom in">+</button><button class="btn sm" data-act="zoom-fit" title="Fit (F)">Fit</button></div>
     </div>
@@ -64,13 +67,13 @@ export function drawMap() {
   const box = $('#mapbox'); if (!box) return;
   box.innerHTML = renderMapSVG(S.job, S.layout, {
     calc: S.calc, selected: S.sel, selPlate: S.selPlate, selFeature: S.selFeature, selNozzle: S.selNozzle,
-    plateLabels: S.plateLabels, indLabels: S.indLabels, filter: S.filter, showCZ: S.showCZ, showPatches: S.showPatches,
+    plateLabels: S.plateLabels, indLabels: S.indLabels, filter: S.filter, showCZ: S.showCZ, showPatches: S.showPatches, showUT: S.showUT,
     showDatums: S.showDatums || S.mode === 'datum', datumFocus: focusPlate(),
     floorOf: (ft) => itemFloor(S.layout, ft)
   });
   box.dataset.mode = S.mode;
   S.mapCtl?.afterRender();
-  const hint = { nozzle: 'Click at the shell where the nozzle is — its angle is taken from the click · Esc to stop', datum: 'Click inside a plate, in the corner the X/Y was measured from · Esc to stop', select: '', add: 'Click a plate to place an indication · Shift-click to keep adding · Esc to stop', feature: 'Click to place the feature · Esc to stop', place: 'Click the map to set this indication\'s location · Esc to cancel' }[S.mode];
+  const hint = { nozzle: 'Click at the shell where the nozzle is — its angle is taken from the click · Esc to stop', datum: 'Click inside a plate, in the corner the X/Y was measured from · Esc to stop', select: '', add: 'Click a plate to place an indication · Shift-click to keep adding · Esc to stop', feature: 'Click to place the feature · Esc to stop', utarea: 'Click a plate at the centre of the UT area · Shift-click to keep adding · Esc to stop', place: 'Click the map to set this indication\'s location · Esc to cancel' }[S.mode];
   const mh = $('#modeHint'); if (mh) mh.textContent = hint || '';
 }
 
@@ -119,6 +122,16 @@ function mapClick(fp, hit) {
     }
     S.selPlate = p.key; S.sel = S.selFeature = null;
     drawMap(); renderSide();
+    return;
+  }
+  if (S.mode === 'utarea') {
+    if (!p) return toast('That point is not on a plate.');
+    const { X, Y } = toLocal(S.layout, p, fp.x, fp.y);
+    const a = addArea({ plate: p.key, x: roundLocal(X), y: roundLocal(Y) });
+    if (!hit.shift) S.mode = 'select';
+    $$('[data-act="mode"]').forEach((b) => b.classList.toggle('on', b.dataset.mode === S.mode));
+    commit(); drawMap();
+    toast(`UT area ${a.no} added on ${p.label}. Enter its size and readings on Floor → UT readings.`, { label: 'Open', fn: () => go('flut') });
     return;
   }
   if (S.mode === 'add' || S.mode === 'place' || S.mode === 'feature') {

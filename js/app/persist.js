@@ -28,7 +28,7 @@ export function recompute() {
   const { rd, ...shell } = j.shell || {};
   const layKey = JSON.stringify([j.tank, j.layout, j.plates]);
   if (!same || !S.layout || layKey !== RC.lay) { S.layout = buildLayout(j); RC.lay = layKey; RC.calc = null; }
-  const calcKey = JSON.stringify([j.calc, j.indications, shell]);
+  const calcKey = JSON.stringify([j.calc, j.indications, shell, j.floorUT]);
   if (!same || !S.calc || calcKey !== RC.calc) { S.calc = api653(j, S.layout); RC.calc = calcKey; }
   RC.job = j; RC.inds = j.indications;
 }
@@ -79,7 +79,7 @@ function showSaveState(st, err) {
 }
 /* Unsaved change detection (stage 2): each committed change is counted, with the area it was made in,
    until the job is next saved to a file. */
-export const VIEW_AREA = { map: 'Floor', inds: 'Floor', plates: 'Floor', api: 'Floor', shell: 'Shell', roofF: 'Roof', roofL: 'Roof', seal: 'Roof', nozzles: 'Nozzles', settle: 'Settlement', setup: 'Tank setup', equip: 'Equipment', summary: 'Findings and report', defs: 'Findings and report', report: 'Findings and report' };
+export const VIEW_AREA = { map: 'Floor', inds: 'Floor', plates: 'Floor', flut: 'Floor', api: 'Floor', shell: 'Shell', roofF: 'Roof', roofL: 'Roof', seal: 'Roof', nozzles: 'Nozzles', settle: 'Settlement', setup: 'Tank setup', equip: 'Equipment', summary: 'Findings and report', defs: 'Findings and report', report: 'Findings and report' };
 export function scheduleSave() {
   if (!S.job) return;
   const j = S.job; j.updated = Date.now();

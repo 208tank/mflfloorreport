@@ -137,6 +137,9 @@ export function renderMapSVG(job, layout, opts = {}) {
   }
   out.push('</g>');
 
+  // floor UT survey (schema 7): areas, critical zone scans (and lower shell scans), five readings per plate
+  if (opts.showUT !== false && ((calc?.ut?.pts?.length || 0) + (calc?.ut?.shell?.length || 0))) out.push(utOverlay(job, layout, calc.ut, s));
+
   // repair patch plates
   if (opts.showPatches !== false && calc) {
     const pl = opts.patches || patchList(job, layout, calc);
@@ -198,6 +201,42 @@ export function renderMapSVG(job, layout, opts = {}) {
   }
   out.push('</svg>');
   return out.join('');
+}
+
+const UT_OK = '#0f766e', UT_BAD = '#b91c1c', UT_PEND = '#6b7280';
+const utCol = (st) => (st === 'below MRT' || st === 'Below t-min' ? UT_BAD : st === 'OK' ? UT_OK : /Evaluate/.test(st || '') ? '#b45309' : UT_PEND);
+/** Floor UT locations drawn over the plates. Small areas and scans are drawn at a minimum size so they show. */
+function utOverlay(job, layout, ut, s) {
+  const R = layout.R, o = [`<g class="flut" stroke-width="${f(s * 0.3)}">`];
+  const rect = (cx, cy, w, hgt, rotDeg, col, cls, tip) => {
+    const W = Math.max(w, s * 2.2), H = Math.max(hgt, s * 2.2);
+    return `<rect class="${cls}" x="${f(cx - W / 2)}" y="${f(-cy - H / 2)}" width="${f(W)}" height="${f(H)}"${rotDeg ? ` transform="rotate(${f(rotDeg)} ${f(cx)} ${f(-cy)})"` : ''} fill="${col}" fill-opacity=".18" stroke="${col}"><title>${esc(tip)}</title></rect>`;
+  };
+  const T = (v) => (v == null ? '—' : (job.units === 'metric' ? v.toFixed(1) + ' mm' : (v / 25.4).toFixed(3) + ' in'));
+  const areas = new Map((job.floorUT?.areas || []).map((a) => [a.id, a]));
+  for (const q of ut.pts) {
+    if (!q.floor) continue;
+    const col = utCol(q.status), tip = `${q.label}${q.type ? ' · ' + q.type : ''}: min ${T(q.t)}${q.avg != null ? ', avg ' + T(q.avg) : ''}${q.status ? ' · ' + q.status : ''}`;
+    if (q.kind === 'area') {
+      const a = areas.get(q.id), ann = q.plate?.kind === 'annular';
+      const rot = ann ? (Math.atan2(q.floor.x, q.floor.y) * 180) / Math.PI : 0; // annular: length along the shell
+      o.push(`<g class="ut-area" data-utarea="${esc(q.id)}">${rect(q.floor.x, q.floor.y, +a?.len || 0, +a?.wid || 0, rot, col, 'ua', tip)}` +
+        `<text x="${f(q.floor.x)}" y="${f(-q.floor.y - Math.max(+a?.wid || 0, s * 2.2) / 2 - s * 0.8)}" font-size="${f(s * 1.9)}" text-anchor="middle" fill="${col}" font-weight="700">${esc(q.label)}</text></g>`);
+    } else if (q.kind === 'cz') {
+      const size = +job.floorUT?.cz?.size || 152.4;
+      o.push(`<g class="ut-cz">${rect(q.floor.x, q.floor.y, size, size, q.angle, col, 'uc', tip)}</g>`);
+    } else {
+      o.push(`<circle class="ut-pt" cx="${f(q.floor.x)}" cy="${f(-q.floor.y)}" r="${f(s * 0.75)}" fill="${col}" stroke="#fff" stroke-width="${f(s * 0.15)}"><title>${esc(tip)}</title></circle>`);
+    }
+  }
+  // lower shell scans: a short bar just outside the shell at the scan angle
+  for (const x of ut.shell || []) {
+    if (x.t === null) continue;
+    const [x1, y1] = polar(R + s * 0.9, x.angle), [x2, y2] = polar(R + s * 3, x.angle);
+    o.push(`<line class="ut-sh" x1="${f(x1)}" y1="${f(-y1)}" x2="${f(x2)}" y2="${f(-y2)}" stroke="${utCol(x.status)}" stroke-width="${f(s * 1.1)}"><title>${esc(`${x.no} lower shell ${x.angle}°: min ${T(x.t)}${x.status ? ' · ' + x.status : ''}`)}</title></line>`);
+  }
+  o.push('</g>');
+  return o.join('');
 }
 
 function axesOf(layout, p) {

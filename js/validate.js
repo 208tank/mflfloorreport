@@ -32,6 +32,9 @@ const NUM = {
   plate: { tNom: T('Nominal thickness'), utMin: T('UT minimum'), len: T('Length'), wid: T('Width') },
   proj: { t: T('Thickness'), len: POS('Projection') },
   edgeSt: { max: POS('Maximum settlement'), bo: POS('Breakover') },
+  utArea: { x: POS('X'), y: POS('Y'), len: T('Length'), wid: T('Width'), tMin: T('Minimum'), tAvg: T('Average') },
+  czScan: { tMin: T('Minimum'), tAvg: T('Average'), sMin: T('Lower shell minimum'), sAvg: T('Lower shell average') },
+  plate5: { tl: POS('Top-left'), tr: POS('Top-right'), c: POS('Centre'), bl: POS('Bottom-left'), br: POS('Bottom-right') },
   course: { h: T('Height'), tNom: T('Nominal thickness'), tMin: T('t-min'), pn: ['Number of plates', 1, Infinity], seam0: ANG('First seam angle'), plen: T('Plate length') },
 };
 
@@ -52,7 +55,7 @@ export async function validateJobFile(data, { schema = Infinity, fileVersion = I
   if (data.hash !== undefined && (typeof data.hash !== 'string' || data.hash !== (await sha256(data.job)))) err('The job’s checksum does not match: the file has been changed or damaged since it was saved.');
   for (const k of ['info', 'tank', 'layout', 'plates']) if (data.job[k] !== undefined && !isObj(data.job[k])) err(`The job’s ${k} part has the wrong type.`);
   for (const k of ['indications', 'features', 'nozzles', 'equipment', 'personnel']) if (data.job[k] !== undefined && !Array.isArray(data.job[k])) err(`The job’s ${k} part is not a list.`);
-  for (const k of ['repairs', 'docctl', 'small']) if (data.job[k] !== undefined && !isObj(data.job[k])) err(`The job’s ${k} part has the wrong type.`);
+  for (const k of ['repairs', 'docctl', 'small', 'floorUT']) if (data.job[k] !== undefined && !isObj(data.job[k])) err(`The job’s ${k} part has the wrong type.`);
   if (errors.length) return { errors, warnings, job: null };
   // ---- update a copy to this version
   let job;
@@ -70,6 +73,7 @@ export async function validateJobFile(data, { schema = Infinity, fileVersion = I
     ['Person', job.personnel, (x) => x.name], ['Distribution entry', job.docctl?.dist, (x) => x.name],
     ...(job.equipment || []).filter(isObj).map((e) => ['On-site check', e.checks, (x) => x.check, null, [e.make, e.model, e.serial].filter(Boolean).join(' ')]),
     ['Floor projection', job.small?.proj, (x) => x.loc], ['Over-pressure device', job.small?.opp, (x) => x.dev], ['Tilt station', job.small?.tilt, (x) => x.loc], ['Edge settlement station', job.small?.edge, (x) => x.st],
+    ['Floor UT area', job.floorUT?.areas, (x) => x.no],
     ['Primary seal gap', job.roof?.seal?.primary?.gaps, null], ['Secondary seal gap', job.roof?.seal?.secondary?.gaps, null],
     ...Object.entries(job.secs || {}).flatMap(([k, s]) => [['NDE method', s?.nde, (x) => x.method, k], ['Observation', s?.obs, (x) => x.item, k], ['Recommendation', s?.recs, (x) => x.no || x.finding, k]]),
   ];
@@ -112,6 +116,9 @@ export async function validateJobFile(data, { schema = Infinity, fileVersion = I
   (job.shell?.courses || []).forEach((c, i) => checkNums(c, NUM.course, `Shell course ${i + 1}`));
   for (const x of job.small?.proj || []) checkNums(x, NUM.proj, `Floor projection ${x.loc || x.id}`);
   for (const x of job.small?.edge || []) checkNums(x, NUM.edgeSt, `Edge settlement station ${x.st || x.id}`);
+  for (const x of job.floorUT?.areas || []) checkNums(x, NUM.utArea, `Floor UT area ${x.no || x.id}`);
+  for (const [k, r] of Object.entries(job.floorUT?.cz?.rd || {})) checkNums(r, NUM.czScan, `Critical zone scan at ${k}°`);
+  for (const [k, r] of Object.entries(job.floorUT?.plates?.rd || {})) checkNums(r, NUM.plate5, `Plate ${k} UT readings`);
   const nos = new Map();
   for (const x of job.indications) { if (!blank(x.no)) { if (nos.has(String(x.no))) warn(`Two indications are numbered ${x.no}.`); nos.set(String(x.no), x); } }
 
@@ -120,6 +127,7 @@ export async function validateJobFile(data, { schema = Infinity, fileVersion = I
   try { plateKeys = buildLayout(job).byKey; } catch { /* layout can't be built: reported by the calculation */ }
   if (plateKeys?.size) {
     for (const x of job.indications) if (x.plate && !plateKeys.has(x.plate)) warn(`Indication ${x.no || x.id} is on plate ${x.plate}, which is not in the floor layout.`);
+    for (const x of job.floorUT?.areas || []) if (x.plate && !plateKeys.has(x.plate)) warn(`Floor UT area ${x.no || x.id} is on plate ${x.plate}, which is not in the floor layout.`);
     for (const x of job.features) if (x.plate && !plateKeys.has(x.plate)) warn(`Floor feature ${x.label || x.type || x.id} is on plate ${x.plate}, which is not in the floor layout.`);
   }
   const indIds = new Set(job.indications.map((x) => x.id)), eqIds = new Set((job.equipment || []).map((e) => e.id));

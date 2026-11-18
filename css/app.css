@@ -910,3 +910,13 @@ dialog.wide-dlg { max-width: 96vw; }
 .sm-res { margin-top: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); }
 .sm-res h4 { margin: 0; font-size: 13px; } .sm-res .kv th { text-align: left; font-weight: 500; padding-right: 12px; } .sm-res .kv td { padding-right: 12px; }
 .sm-iv { margin-bottom: 4px; } .sm-ivt td { vertical-align: top; } .sm-src { margin: 6px 0; padding-left: 18px; }
+
+/* ---------------------------------------------------------------- floor UT readings (schema 7) */
+.flut-page .sp-head { gap: 10px; align-items: baseline; }
+.flut-page .grid input, .flut-page .grid select { min-width: 0; width: 100%; }
+.flut-areas td:nth-child(1) { min-width: 74px; } .flut-areas td:nth-child(14) { min-width: 150px; } .flut-areas td:nth-child(2) { width: 70px; }
+.flut-areas td:nth-child(n+3):nth-child(-n+8) { width: 84px; }
+.flut-areas td:nth-child(9) { width: 150px; } .flut-areas td:nth-child(10) { width: 120px; }
+.flut-areas .mt4 { margin-top: 4px; }
+.flut-cz td input { width: 84px; } .flut-cz td input[data-f$="ote"] { width: 140px; }
+.flut-pl td input { width: 84px; }
