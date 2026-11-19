@@ -187,12 +187,12 @@ function hfPreviewHTML() {
     <div class="hf-pv-band" style="${st};${rule('top')}"><span>${h(fl)}</span><span>${h(fc)}</span><span>${h(fr)}</span></div></div>`;
 }
 async function saveHF(key, value) {
-  S.company.hf = { ...(S.company.hf || {}), [key]: value };
+  S.company.hf = { ...(S.company.hf || {}), [key]: value, logoV38: true };
   await db.setMeta('company', S.company);
 }
 document.addEventListener('input', (e) => {
   const k = e.target.dataset?.hf; if (!k || e.target.type === 'checkbox' || e.target.tagName === 'SELECT') return;
-  S.company.hf = { ...(S.company.hf || {}), [k]: k === 'size' ? +e.target.value : e.target.value };
+  S.company.hf = { ...(S.company.hf || {}), [k]: k === 'size' ? +e.target.value : e.target.value, logoV38: true };
   const p = document.getElementById('hfPreview'); if (p) p.innerHTML = hfPreviewHTML();
 });
 onChange([

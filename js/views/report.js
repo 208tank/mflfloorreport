@@ -42,7 +42,7 @@ function sectionsPanel() {
 
 function viewReport() {
   return `<div class="report-tools no-print">
-    <div><h1>Report</h1><p class="muted small">Print or save as PDF from the browser dialog (choose “Save as PDF” and margins Default, and turn off the browser’s “Headers and footers”: the report prints its own).</p></div>
+    <div><h1>Report</h1><p class="muted small">Print or save as PDF from the browser dialog (choose “Save as PDF” and margins Default, and turn off the browser’s “Headers and footers”: the report prints its own). The page header with the logo, and the footer, show in the printed report and the PDF, not in this preview.${S.company.logo ? '' : ' <b>No logo is set:</b> choose one under Jobs → Company.'}</p></div>
     <div class="acts">${issuedOf(S.job) ? '<span class="muted small">The issued report is shown with the options it was issued with.</span>' : ''}
       <button class="btn primary" data-act="print">Print / Save PDF</button></div>
     ${issuedOf(S.job) ? '' : sectionsPanel() + `<details class="rsec" ${S.reportDocOpen ? 'open' : ''}><summary data-act="rdoc-toggle">Document control</summary><div class="rdoc">${docCtlHTML()}</div></details>`}</div>

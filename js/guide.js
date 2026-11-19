@@ -7,7 +7,7 @@
 // Text is written as HTML. [[view|Label]] becomes a button that opens that page when a job is open (plain bold text
 // otherwise). Keep sentences short and plain: this guide is shared with field crews.
 
-export const GUIDE_VERSION = '3.38.0';
+export const GUIDE_VERSION = '3.38.1';
 export const GUIDE_URL = 'https://208tank.github.io/mflfloorreport/';
 
 export const GUIDE = [
@@ -153,6 +153,7 @@ or without a connection once it has been opened.</p>
 <li>Using an old installed copy: reload when the app says a new version is available.</li>
 <li>Two people editing the same job at once: hand over through the job file.</li>
 <li>Printing with the browser's headers and footers on: the report doubles them up.</li>
+<li>Looking for the page header on screen: the header (with the logo) and footer only show in the printed report or PDF. A Complete job shows its issued report exactly as it was issued.</li>
 <li>Expecting a UT reading below the minimum to get a patch automatically: add an indication with a repair there.</li>
 </ul>` }
 ];

@@ -7,6 +7,15 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Report — header logo fix (v3.38.1)
+
+- A *No logo* choice saved in *Report page header and footer* before v3.38 is switched to the left once, so the
+  logo appears in the page headers as intended (choosing *No logo* again afterwards is kept).
+- The Report screen says that the page header (with the logo) and footer appear in the printed report and PDF, not in
+  the on-screen preview, and says when no company logo is set.
+- **Drawing sheet margins** are 0.3 in (were 0.6 in), so the floor plan, shell roll-out and roof plans print larger.
+  Drawing sheets have had no running header or footer since v3.38, so nothing is lost from the margin.
+
 ## Report — logo and page headers (v3.38.0)
 
 - The company logo prints **larger on the cover** (up to 130 px high, was 70).

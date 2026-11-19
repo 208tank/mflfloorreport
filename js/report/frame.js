@@ -123,7 +123,7 @@ const css = (s) => `"${String(s ?? '').replace(/[\\"]/g, (c) => '\\' + c).replac
 
 /** Paper sizes in inches (portrait). */
 export const PAPER = { letter: [8.5, 11, 'letter'], a4: [8.27, 11.69, 'A4'], tabloid: [11, 17, ''] }; // tabloid: sized in inches below
-const DRAW_MARGIN = 0.6;
+const DRAW_MARGIN = 0.3; // v3.38.1: was 0.6 in; drawing sheets have no running header or footer since v3.38
 
 /** The printable area of a drawing page, in inches: [width, height]. */
 export function drawArea(paper, orient) {

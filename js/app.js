@@ -123,7 +123,11 @@ function dbFailed(e) {
 
 (async function init() {
   dbConfig.appVersion = APP_VERSION;
-  try { S.company = (await db.getMeta('company')) || {}; }
+  try {
+    S.company = (await db.getMeta('company')) || {};
+    // v3.38.1: the header logo is on by default; a "No logo" saved before then is switched to the left once
+    if (S.company.hf?.logo === 'none' && !S.company.hf.logoV38) { S.company.hf = { ...S.company.hf, logo: 'left', logoV38: true }; await db.setMeta('company', S.company); }
+  }
   catch (e) { dbFailed(e); return; }
   await loadJobs(); await loadTanks(); await loadBackupState().catch(() => {});
   await recoverAfterCrash().catch((e) => console.warn('Recovery check', e));
