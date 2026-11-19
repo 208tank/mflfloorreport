@@ -195,6 +195,11 @@ function hfLogo(src, align, hIn = HF_DEFAULTS.logoH) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><image width="${W}" height="${H}" preserveAspectRatio="${a} meet" xlink:href="${src}" href="${src}"/></svg>`;
   return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
 }
+/** The header logo image exactly as the page header uses it (same URL), or '' when the header has no logo. */
+export function hfLogoUrl(company) {
+  const o = hfOf(company);
+  return o.logo !== 'none' && company?.logo ? hfLogo(company.logo, o.logo, o.logoH) : '';
+}
 /** The text of the six positions, for previews: [[hl, hc, hr], [fl, fc, fr]] with sample page numbers. */
 export function hfPreview(company, vals) {
   const o = hfOf(company), t = (k) => hfPieces(o[k], vals).map((p) => (typeof p === 'string' ? p : p.counter === 'page' ? '3' : '24')).join('');
@@ -376,7 +381,11 @@ export function assembleReport({ job, company, opts, layout, N, chapterBody, app
   const revText = job.rev ? `Rev ${job.rev} · ${dateOf(job.savedAt)}` : 'Not saved to a job file';
   const style = FRAME_CSS + SHEET_CSS + CALC_CSS + extraCSS + pageCSS({ size: company.pageSize, company: company.name, tankId: I.tankId, reportNo: I.reportNo, revText, status: issued ? 'ISSUED' : 'DRAFT', drawOrient: layout.drawOrient, drawPaper: layout.drawPaper,
     hf: { ...hfOf(company), logoSrc: company.logo }, vals: hfVals(job, company) });
-  return `<article class="report rp2${cls ? ' ' + cls : ''}"><style>${style}</style>${issued ? '' : '<div class="rp-draft" aria-hidden="true">DRAFT</div>'}
+  // v3.41.1: the page header's logo is only asked for when printing starts, so a print preview could be taken before it
+  // had loaded (the cover's logo, an ordinary image, always showed). Loading the same image with the report means it is
+  // ready when the pages are printed.
+  const pre = hfLogoUrl(company);
+  return `<article class="report rp2${cls ? ' ' + cls : ''}"><style>${style}</style>${pre ? `<img class="rp-hf-pre" src="${pre}" alt="" aria-hidden="true" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">` : ''}${issued ? '' : '<div class="rp-draft" aria-hidden="true">DRAFT</div>'}
   ${front.join('\n')}
   ${chapters.join('\n')}
   ${apps.join('\n')}

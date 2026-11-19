@@ -7,7 +7,7 @@
 // Text is written as HTML. [[view|Label]] becomes a button that opens that page when a job is open (plain bold text
 // otherwise). Keep sentences short and plain: this guide is shared with field crews.
 
-export const GUIDE_VERSION = '3.41.0';
+export const GUIDE_VERSION = '3.41.1';
 export const GUIDE_URL = 'https://208tank.github.io/mflfloorreport/';
 
 export const GUIDE = [

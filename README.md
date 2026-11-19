@@ -7,6 +7,13 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Header logo ready before printing (v3.41.1)
+
+The page header's logo is a CSS image that the browser only asks for when printing starts, so a print preview could be
+taken before it had loaded: the logo showed on the cover (an ordinary image) but not in the page headers. The report now
+loads the same header image with the report (a hidden 1 px copy), and **Print / Save PDF** waits until every image in
+the report has decoded (at most 4 s) before opening the print dialog.
+
 ## Roles taken out again; header logo status (v3.41.0)
 
 - The inspector / admin roles and the Admin review stage of v3.40.0 are removed: stages, editing, Reopen and the

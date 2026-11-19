@@ -98,6 +98,9 @@ onAction({
     dlg.classList.add('wide-dlg'); if (!dlg.open) dlg.showModal();
   },
   'print': async (el, id, e, act) => {
+    // wait until every image in the report (the header logo too) has loaded and decoded, so none prints blank
+    const imgs = [...document.querySelectorAll('#reportRoot img, #issuedReport img')];
+    await Promise.race([Promise.all(imgs.map((i) => (i.decode ? i.decode().catch(() => {}) : null))), new Promise((r) => setTimeout(r, 4000))]);
     window.print(); return;
   }
 });
