@@ -10,7 +10,7 @@ import { resizeImage } from '../app/images.js';
 import { addRevision } from '../app/revisions.js';
 import { logChange, setAuditBase } from '../app/auditlog.js';
 import { indCount } from '../cards.js';
-import { HF_DEFAULTS, HF_TOKENS, hfOf, hfPreview, hfVals } from '../report/frame.js';
+import { HF_DEFAULTS, HF_LOGO_SIZES, HF_TOKENS, hfOf, hfPreview, hfVals } from '../report/frame.js';
 import { db, requestPersistence } from '../db.js';
 import { makeDemo } from '../demo.js';
 import { pendingSteps } from '../migrations.js';
@@ -168,6 +168,7 @@ function hfCardHTML() {
       <div class="hf-row"><b>Footer</b>${f('fl', 'Left')}${f('fc', 'Centre')}${f('fr', 'Right')}</div></div>
     <div class="hf-opts">
       <label class="fld"><span class="lbl">Logo in the header</span><span class="ctl"><select data-hf="logo">${[['none', 'No logo'], ['left', 'Left'], ['centre', 'Centre'], ['right', 'Right']].map(([v, l]) => `<option value="${v}" ${o.logo === v ? 'selected' : ''}>${l}</option>`).join('')}</select></span></label>
+      ${o.logo !== 'none' ? `<label class="fld"><span class="lbl">Logo height</span><span class="ctl"><select data-hf="logoH">${HF_LOGO_SIZES.map(([v, l]) => `<option value="${v}" ${Math.abs(o.logoH - v) < 1e-6 ? 'selected' : ''}>${l}</option>`).join('')}</select></span></label>` : ''}
       <label class="fld"><span class="lbl">Colour</span><span class="ctl"><input type="color" data-hf="color" value="${h(o.color)}"></span></label>
       <label class="fld"><span class="lbl">Text size (pt)</span><span class="ctl"><input type="number" min="6" max="11" step="0.5" data-hf="size" value="${o.size}"></span></label>
       <label class="chk"><input type="checkbox" data-hf="rule" ${o.rule ? 'checked' : ''}> Rule lines under the header and over the footer</label>
@@ -180,7 +181,7 @@ function hfPreviewHTML() {
   const o = hfOf(S.company), sample = { client: 'Client', site: 'Site', tank: 'TK-101', report: 'R-001', rev: 'Rev 2 · 2026-11-15', date: '2026-11-15', inspector: 'Inspector' };
   const vals = S.job ? hfVals(S.job, S.company) : { ...hfVals(null, S.company), ...sample };
   const [[hl, hc, hr], [fl, fc, fr]] = hfPreview(S.company, vals);
-  const logo = (pos) => (o.logo === pos && S.company.logo ? `<img src="${S.company.logo}" alt="">` : '');
+  const logo = (pos) => (o.logo === pos && S.company.logo ? `<img src="${S.company.logo}" alt="" style="height:${Math.round(o.logoH * 40)}px">` : ''); // half size, as the preview is
   const st = `color:${o.color};font-size:${o.size}pt`, rule = (side) => (o.rule ? `border-${side}:1px solid ${o.color}` : '');
   return `<div class="hf-prev"><div class="hf-pv-band" style="${st};${rule('bottom')}"><span>${logo('left')}${h(hl)}</span><span>${logo('centre')}${h(hc)}</span><span>${logo('right')}${h(hr)}</span></div>
     <div class="hf-pv-body">Report page${S.job ? ` — preview uses ${h(S.job.info?.tankId || 'the open job')}` : ' — sample values'}</div>
@@ -198,7 +199,7 @@ document.addEventListener('input', (e) => {
 onChange([
   { order: 272, when: (el) => el.matches('[data-hf]'), run: async (el) => {
     const k = el.dataset.hf;
-    await saveHF(k, el.type === 'checkbox' ? el.checked : k === 'size' ? +el.value : el.value);
+    await saveHF(k, el.type === 'checkbox' ? el.checked : k === 'size' || k === 'logoH' ? +el.value : el.value);
     const c = document.getElementById('hfCard'); if (c && (k === 'logo' || el.type === 'checkbox')) c.innerHTML = hfCardHTML(); else { const p = document.getElementById('hfPreview'); if (p) p.innerHTML = hfPreviewHTML(); }
   } }
 ]);

@@ -143,7 +143,9 @@ export const HF_DEFAULTS = Object.freeze({
   hl: '{company}', hc: '', hr: 'Tank {tank} · Report {report}',
   fl: '{rev} · {status}', fc: '', fr: 'Page {page} of {pages}',
   logo: 'left', rule: false, color: '#5b6470', size: 8, // v3.38: the company logo is in every page header unless switched off
+  logoH: 1, // v3.39: printed height of the header logo, inches (the page's top margin grows to fit it)
 });
+export const HF_LOGO_SIZES = [[0.35, '0.35 in (small)'], [0.5, '½ in'], [0.75, '¾ in'], [1, '1 in'], [1.25, '1¼ in'], [1.5, '1½ in']];
 export const HF_TOKENS = [
   ['company', 'Company name'], ['client', 'Client'], ['site', 'Site'], ['tank', 'Tank ID'], ['report', 'Report number'],
   ['rev', 'Revision and date'], ['status', 'DRAFT or ISSUED'], ['date', 'Inspection date'], ['inspector', 'Inspector'],
@@ -154,6 +156,7 @@ export function hfOf(company) {
   o.size = Math.min(11, Math.max(6, +o.size || 8));
   if (!/^#[0-9a-f]{6}$/i.test(o.color)) o.color = HF_DEFAULTS.color;
   if (!['none', 'left', 'centre', 'right'].includes(o.logo)) o.logo = 'none';
+  o.logoH = Math.min(1.5, Math.max(0.25, +o.logoH || HF_DEFAULTS.logoH));
   return o;
 }
 /** Splits a template into pieces: text, or {page}/{pages}. Parts between " · " whose placeholders are all empty are
@@ -184,10 +187,12 @@ const hfContent = (pieces, logo) => {
 };
 /** The logo wrapped in an SVG of a fixed printed size, so the page header shows it at a set height whatever its
  *  pixel size. */
-function hfLogo(src, align) {
+function hfLogo(src, align, hIn = HF_DEFAULTS.logoH) {
   if (!src) return '';
   const a = align === 'right' ? 'xMaxYMid' : align === 'centre' ? 'xMidYMid' : 'xMinYMid';
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="150" height="34" viewBox="0 0 150 34"><image width="150" height="34" preserveAspectRatio="${a} meet" xlink:href="${src}" href="${src}"/></svg>`;
+  // the logo's box: hIn tall (CSS px, 96 per inch), up to 4.4 times as wide but never wider than a header half
+  const H = Math.round(hIn * 96), W = Math.min(Math.round(H * 4.4), 330);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><image width="${W}" height="${H}" preserveAspectRatio="${a} meet" xlink:href="${src}" href="${src}"/></svg>`;
   return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
 }
 /** The text of the six positions, for previews: [[hl, hc, hr], [fl, fc, fr]] with sample page numbers. */
@@ -205,7 +210,8 @@ export function pageCSS({ size = 'letter', company = '', tankId = '', reportNo =
   const H = hfOf(hf ? { hf, logo: hf.logoSrc } : null);
   vals = { ...(vals || {}), company, tank: tankId, report: reportNo, rev: revText, status };
   const font = `font: ${H.size}pt Arial, Helvetica, sans-serif; color: ${H.color};`;
-  const logo = H.logo !== 'none' && hf?.logoSrc ? hfLogo(hf.logoSrc, H.logo) : '';
+  const logo = H.logo !== 'none' && hf?.logoSrc ? hfLogo(hf.logoSrc, H.logo, H.logoH) : '';
+  const top = logo ? Math.max(0.75, H.logoH + 0.4) : 0.75; // room for the header logo above the page's text
   const box = (pos, key, edge) => {
     const pieces = hfPieces(H[key], vals), withLogo = logo && edge === 'top' && pos === H.logo;
     const rule = H.rule ? (edge === 'top' ? `border-bottom: 0.75pt solid ${H.color}; padding-bottom: 3pt;` : `border-top: 0.75pt solid ${H.color}; padding-top: 3pt;`) : '';
@@ -214,13 +220,13 @@ export function pageCSS({ size = 'letter', company = '', tankId = '', reportNo =
     // with nothing in the centre, the left and right boxes share the width, so a logo and the text beside it stay on one line
     const mid = edge === 'top' ? 'hc' : 'fc', empty = !hfPieces(H[mid], vals).length && !(logo && edge === 'top' && H.logo === 'centre');
     const width = pos === 'centre' ? '33.3%' : empty ? '50%' : '33.3%';
-    return `@${edge}-${pos === 'centre' ? 'center' : pos} { content: ${hfContent(pieces, withLogo ? logo : '')}; ${font} text-align: ${align}; vertical-align: ${edge === 'top' ? 'bottom' : 'top'}; width: ${width};${withLogo ? ' white-space: nowrap;' : ''} ${rule} }`;
+    return `@${edge}-${pos === 'centre' ? 'center' : pos} { content: ${hfContent(pieces, withLogo ? logo : '')}; ${font} text-align: ${align}; vertical-align: ${edge === 'top' ? 'bottom' : 'top'}; width: ${width};${withLogo ? ' white-space: nowrap;' : ''}${logo && edge === 'top' && !H.rule ? ' padding-bottom: 8pt;' : ''} ${rule} }`;
   };
   const boxes = ['left', 'centre', 'right'].map((p, i) => box(p, ['hl', 'hc', 'hr'][i], 'top')).concat(['left', 'centre', 'right'].map((p, i) => box(p, ['fl', 'fc', 'fr'][i], 'bottom'))).filter(Boolean).join('\n      ');
   const big = drawPaper === 'tabloid' ? 'tabloid' : paper;
   const [, hs] = drawArea(paper, o), [, hb] = drawArea(big, o);
   return `@media print {
-    @page { size: ${S} portrait; margin: 0.75in 0.6in 0.7in; ${boxes} }
+    @page { size: ${S} portrait; margin: ${+top.toFixed(2)}in 0.6in 0.7in; ${boxes} }
     @page cover { size: ${S} portrait; margin: 0.75in 0.6in; ${NO_BOXES} }
     @page drawing { size: ${S} ${o}; margin: ${DRAW_MARGIN}in; ${NO_BOXES} }
     @page drawing-lg { size: ${big === 'tabloid' ? (o === 'landscape' ? '17in 11in' : '11in 17in') : PAPER[big][2] + ' ' + o}; margin: ${DRAW_MARGIN}in; ${NO_BOXES} }
@@ -387,18 +393,15 @@ export function hfVals(job, company) {
 }
 
 /* ------------------------------------------------------------------ drawing sheets ---
-   Floor, shell and roof drawings print as engineering drawing sheets: a double border with grid references, the
-   drawing with its view title on the left, and on the right the design data, legend, numbered notes and a title
-   block (report improvements, after R1). */
-const ZONES_X = 8, ZONES_Y = 6;
+   Floor, shell and roof drawings print as engineering drawing sheets: a single clean border (v3.39: no grid
+   references), the drawing with its view title on the left, and on the right the design data, legend, numbered
+   notes and a title block (report improvements, after R1). */
 
 /** info: { company: {name, logo}, client, site, tankId, reportNo, rev, revDate, status, drawnBy, checkedBy } */
 export function sheetHTML(N, info, { cls = '', section, figure, view, scale = 'Not to scale', drawing, wrap = 'map-wrap', data = [], legend = '', notes = [], blocks = [] }) {
   const anchor = section ? N.anchor(section) : '';
   const f = N.figureRef(figure);
   const dwgNo = `${info.reportNo || info.tankId || 'DWG'}-F${f.no}`;
-  const zx = (pos) => `<div class="z z${pos}">${Array.from({ length: ZONES_X }, (_, i) => `<span>${i + 1}</span>`).join('')}</div>`;
-  const zy = (pos) => `<div class="z z${pos}">${Array.from({ length: ZONES_Y }, (_, i) => `<span>${String.fromCharCode(65 + i)}</span>`).join('')}</div>`;
   const kv = (rows) => `<table class="dwg-kv">${rows.filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => `<tr><th>${h(k)}</th><td>${v}</td></tr>`).join('')}</table>`;
   const block = (title, body) => (body ? `<div class="dwg-blk"><div class="dwg-bh">${title}</div>${body}</div>` : '');
   const tb = `<table class="dwg-tb">
@@ -412,7 +415,7 @@ export function sheetHTML(N, info, { cls = '', section, figure, view, scale = 'N
       <tr><td><span>Figure</span>${h(f.no)}</td><td class="tb-st">${h(info.status || '')}</td></tr>
     </table>`;
   return `<section class="rp-draw dwg ${cls}" id="${f.id}">${anchor}
-    <div class="dwg-frame">${zx('t')}${zy('l')}
+    <div class="dwg-frame">
       <div class="dwg-in">
         <div class="dwg-area"><div class="${wrap}">${drawing}</div><div class="dwg-view"><b>${h(view)}</b><span>${h(scale)}</span></div></div>
         <aside class="dwg-side">
@@ -421,7 +424,7 @@ export function sheetHTML(N, info, { cls = '', section, figure, view, scale = 'N
           ${block('Notes', notes.length ? `<ol class="dwg-notes">${notes.map((n) => `<li>${n}</li>`).join('')}</ol>` : '')}
           ${tb}
         </aside>
-      </div>${zy('r')}${zx('b')}
+      </div>
     </div>
   </section>`;
 }
@@ -435,35 +438,32 @@ export const swatch = {
 export const legendList = (items) => `<ul class="dwg-legend">${items.map(([sw, label]) => `<li>${sw}<span>${label}</span></li>`).join('')}</ul>`;
 
 export const SHEET_CSS = `
-.report .dwg-frame { display: grid; grid-template-columns: 14px minmax(0, 1fr) 14px; grid-template-rows: 14px minmax(0, 1fr) 14px; grid-template-areas: ". t ." "l in r" ". b ."; border: 2px solid #1d232b; outline: 0.5px solid #1d232b; outline-offset: -5px; margin: 6px 0 12px; }
-.report .dwg-frame .z { display: flex; font: 8px Arial, Helvetica, sans-serif; color: #3a434e; }
-.report .dwg-frame .z span { flex: 1; display: flex; align-items: center; justify-content: center; }
-.report .dwg-frame .zt { grid-area: t; } .report .dwg-frame .zb { grid-area: b; }
-.report .dwg-frame .zt span + span, .report .dwg-frame .zb span + span { border-left: 0.5px solid #1d232b; }
-.report .dwg-frame .zl, .report .dwg-frame .zr { flex-direction: column; } .report .dwg-frame .zl { grid-area: l; } .report .dwg-frame .zr { grid-area: r; }
-.report .dwg-frame .zl span + span, .report .dwg-frame .zr span + span { border-top: 0.5px solid #1d232b; }
-.report .dwg-in { grid-area: in; display: grid; grid-template-columns: minmax(0, 1fr) 2.15in; border: 1px solid #1d232b; min-height: 0; }
-.report .dwg-area { display: flex; flex-direction: column; padding: 6px; min-width: 0; min-height: 0; }
+.report .dwg-frame { border: 1px solid #1d232b; margin: 6px 0 12px; }
+.report .dwg-in { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 2.2in; min-height: 0; }
+.report .dwg-area { display: flex; flex-direction: column; padding: 10px 12px 8px; min-width: 0; min-height: 0; }
 .report .dwg-area > div:first-child { flex: 1 1 auto; min-height: 0; }
 .report .dwg-area svg { width: 100%; height: auto; display: block; }
-.report .dwg-view { text-align: center; margin-top: 4px; font-size: 10px; }
-.report .dwg-view b { display: block; text-transform: uppercase; letter-spacing: .06em; text-decoration: underline; text-underline-offset: 2px; }
-.report .dwg-view span { color: #3a434e; font-size: 8.5px; }
-.report .dwg-side { border-left: 1px solid #1d232b; display: flex; flex-direction: column; font-size: 8px; min-height: 0; }
-.report .dwg-blk { border-bottom: 1px solid #1d232b; padding: 3px 5px 4px; }
-.report .dwg-bh { font-weight: 700; text-transform: uppercase; letter-spacing: .05em; text-align: center; border-bottom: 0.5px solid #1d232b; margin: 0 -5px 3px; padding-bottom: 2px; font-size: 8px; }
-.report .dwg-kv { width: 100%; border-collapse: collapse; } .report .dwg-kv th { text-align: left; font-weight: 400; color: #3a434e; padding: 1px 4px 1px 0; vertical-align: top; } .report .dwg-kv td { padding: 1px 0; font-weight: 600; }
+.report .dwg-view { text-align: center; margin-top: 6px; font-size: 10px; }
+.report .dwg-view b { display: block; text-transform: uppercase; letter-spacing: .1em; color: #1d232b; }
+.report .dwg-view span { color: #6b7480; font-size: 8px; }
+.report .dwg-side { border-left: 1px solid #1d232b; display: flex; flex-direction: column; gap: 7px; padding: 8px 8px 0; font-size: 8px; min-height: 0; overflow: hidden; }
+.report .dwg-blk { padding: 0; }
+.report .dwg-bh { font-weight: 700; text-transform: uppercase; letter-spacing: .08em; text-align: left; border-left: 3px solid #0a2a5e; margin: 0 0 5px; padding: 0 0 0 6px; font-size: 7.5px; color: #0a2a5e; }
+.report .dwg-kv { width: 100%; border-collapse: collapse; } .report .dwg-kv th { text-align: left; font-weight: 400; color: #6b7480; padding: 1.5px 6px 1.5px 0; vertical-align: top; } .report .dwg-kv td { padding: 1.5px 0; font-weight: 600; text-align: right; }
+.report .dwg-kv tr + tr th, .report .dwg-kv tr + tr td { border-top: 0.5px solid #e3e6ea; }
 .report .dwg-legend { list-style: none; margin: 0; padding: 0; } .report .dwg-legend li { display: flex; align-items: center; gap: 5px; padding: 1px 0; } .report .dwg-legend svg { flex: none; }
-.report .dwg-notes { margin: 0; padding-left: 14px; } .report .dwg-notes li { margin: 0 0 2px; line-height: 1.3; }
-.report .dwg-tb { margin-top: auto; width: 100%; border-collapse: collapse; border-top: 1.5px solid #1d232b; }
-.report .dwg-tb td { border-bottom: 0.5px solid #1d232b; padding: 2px 4px; vertical-align: top; font-weight: 600; font-size: 8px; } .report .dwg-tb td + td { border-left: 0.5px solid #1d232b; }
-.report .dwg-tb td span { display: block; font-weight: 400; color: #5b6470; font-size: 6.5px; text-transform: uppercase; letter-spacing: .04em; }
-.report .dwg-tb .tb-co { text-align: center; font-size: 10px; padding: 4px; } .report .dwg-tb .tb-co img { display: block; max-height: 28px; max-width: 100%; margin: 0 auto 2px; }
-.report .dwg-tb .tb-title { font-size: 9px; }
-.report .dwg-tb .tb-no { font-size: 10px; } .report .dwg-tb .tb-rev { font-size: 10px; width: 30%; }
-.report .dwg-tb .tb-st { text-align: center; vertical-align: middle; font-size: 10px; letter-spacing: .12em; }
+.report .dwg-notes { margin: 0; padding-left: 14px; color: #3a434e; } .report .dwg-notes li { margin: 0 0 2px; line-height: 1.3; }
+.report .dwg-tb { margin: auto -8px 0; width: calc(100% + 16px); border-collapse: collapse; border-top: 1px solid #1d232b; }
+.report .dwg-tb td { border-bottom: 0.5px solid #d5d9de; padding: 2px 6px; vertical-align: top; font-weight: 600; font-size: 8px; } .report .dwg-tb td + td { border-left: 0.5px solid #d5d9de; }
+.report .dwg-tb tr:last-child td { border-bottom: none; }
+.report .dwg-tb td span { display: block; font-weight: 400; color: #6b7480; font-size: 6px; text-transform: uppercase; letter-spacing: .08em; }
+.report .dwg-tb .tb-co { text-align: left; font-size: 9px; padding: 6px; } .report .dwg-tb .tb-co img { display: block; max-height: 30px; max-width: 100%; margin: 0 0 4px; }
+.report .dwg-tb .tb-title { font-size: 10px; font-weight: 700; padding: 3px 6px; background: #f3f5f8; }
+.report .dwg-tb .tb-no { font-size: 11px; font-weight: 700; color: #0a2a5e; } .report .dwg-tb .tb-rev { font-size: 10px; width: 30%; }
+.report .dwg-tb .tb-st { text-align: center; vertical-align: middle; font-size: 10px; font-weight: 700; letter-spacing: .14em; color: #fff; background: #0a2a5e; }
+.report .dwg-tb .tb-st, .report .dwg-tb .tb-title { -webkit-print-color-adjust: exact; print-color-adjust: exact; } /* print even with the browser's background graphics off */
 .report .dwg.port .dwg-in { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
-.report .dwg.port .dwg-side { border-left: 0; border-top: 1px solid #1d232b; display: grid; grid-template-columns: 1fr 1fr; }
+.report .dwg.port .dwg-side { border-left: 0; border-top: 1px solid #1d232b; display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; }
 .report .dwg.port .dwg-side .dwg-tb { grid-column: 1 / -1; }
 .report .rp-anchor { display: block; height: 0; }
 .report .grid.wrap td, .report .grid.wrap td:nth-last-child(2) { white-space: normal; overflow-wrap: break-word; }

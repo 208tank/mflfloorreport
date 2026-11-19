@@ -7,6 +7,28 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Report — clean modern drawing sheets (v3.39.0)
+
+Every drawing sheet (floor plan, shell roll-out, fixed and floating roof plans; landscape, portrait and 11 × 17; full and
+small tank reports) has a new look:
+
+- **Border:** one thin line around the sheet and one between the drawing and the side panel. The 1–8 / A–F grid
+  references and the double border are gone. The scale bar on the drawing stays.
+- **Side panel:** Design data, Legend and Notes under small navy headings with an accent bar instead of boxed
+  sections; design data rows have light dividers and right-aligned values.
+- **Title block:** logo and company at the top left, the drawing title on a light grey band, lighter field lines, the
+  drawing number in navy and DRAFT / ISSUED in a solid navy box. The navy box and grey band print even with the
+  browser's *Background graphics* off.
+- The view title (e.g. FLOOR PLAN — VIEWED FROM ABOVE) is no longer underlined.
+
+**Header logo height:** Jobs → *Report page header and footer* → **Logo height** (0.35, ½, ¾, 1, 1¼ or 1½ in; default
+1 in). The page's top margin grows to fit it (logo height + 0.4 in, at least 0.75 in), with a small gap above the page
+text; a wide logo is kept within half the header width. A taller logo means less text per page: the demo report is 56
+Letter pages with a 1 in logo (53 without one).
+
+Print audit: the demo report is still 53 Letter pages with no new issues (Letter, portrait, 11 × 17; small tank 14
+pages). Golden report files differ only in the sheet frame markup and its styles.
+
 ## Report — header logo fix (v3.38.1)
 
 - A *No logo* choice saved in *Report page header and footer* before v3.38 is switched to the left once, so the

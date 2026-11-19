@@ -2043,7 +2043,7 @@ export default {
     assert.deepEqual(apps.map((x) => x[0]), ['A', 'B', 'C', 'D']);
     const sheets = await page.$$eval('#reportRoot .rp-draw.dwg', (ds) => ds.map((d) => ({ title: d.querySelector('.tb-title')?.textContent.replace('Title', '').trim(), zones: d.querySelectorAll('.zt span').length + d.querySelectorAll('.zl span').length })));
     assert.deepEqual(sheets.map((x) => x.title), ['External shell and nozzle UT — plan', 'Fixed roof UT — plan', 'Floor internal — MFL indications and UT prove-up']);
-    assert.ok(sheets.every((x) => x.zones === 14));
+    assert.ok(sheets.every((x) => x.zones === 0), 'v3.39: no grid references on the sheet border');
     await page.emulateMedia({ media: 'print' });
     for (const [paper, px] of [['Letter', Math.floor((8.5 - 1.2) * 96)], ['A4', Math.floor((8.27 - 1.2) * 96)]]) {
       await page.setViewportSize({ width: px, height: 900 }); await page.waitForTimeout(200);
@@ -2242,7 +2242,7 @@ export default {
     // drawing sheets: border with grid references, design data, legend, notes and a title block for floor, shell and roof
     const sheets = await page.$$eval('#reportRoot .rp-draw.dwg', (ds) => ds.map((d) => ({ zones: d.querySelectorAll('.zt span').length + d.querySelectorAll('.zl span').length, title: d.querySelector('.tb-title')?.textContent.replace('Title', '').trim(), no: d.querySelector('.tb-no')?.textContent.replace('Drawing no.', '').trim(), notes: d.querySelectorAll('.dwg-notes li').length, data: d.querySelectorAll('.dwg-kv tr').length, legend: !!d.querySelector('.dwg-side .legend, .dwg-side .dwg-legend') })));
     assert.deepEqual(sheets.map((x) => x.title.split(' — ')[0]), ['Floor plan', 'Shell roll-out', 'Fixed roof plan', 'Floating roof plan']);
-    assert.ok(sheets.every((x) => x.zones === 14 && x.notes >= 2 && x.data >= 4 && /^DEMO-001-F\d+-\d+$/.test(x.no)), JSON.stringify(sheets));
+    assert.ok(sheets.every((x) => x.zones === 0 && x.notes >= 2 && x.data >= 4 && /^DEMO-001-F\d+-\d+$/.test(x.no)), JSON.stringify(sheets));
     assert.deepEqual(sheets.map((x) => x.legend), [true, false, true, true]);
     assert.deepEqual(page.errors, []);
     await page.context().close();
