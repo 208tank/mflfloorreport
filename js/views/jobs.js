@@ -17,7 +17,6 @@ import { pendingSteps } from '../migrations.js';
 import { copyPhotos, migrate, migrationNotes, newJob, SCHEMA, uid } from '../model.js';
 import { $, askConfirm, toast } from '../ui.js';
 import { esc as h } from '../util.js';
-import { adoptPin } from '../app/admin.js';
 import { backupCardHTML } from './backup.js';
 import { integrityHTML, renderIntegrity } from './history.js';
 import { smallMaxText } from './small.js';
@@ -54,9 +53,6 @@ function viewJobs() {
       <section class="card"><h2>This device</h2>
         <label class="fld"><span class="lbl">Inspector name on this device</span><span class="ctl"><input data-cb="inspector" value="${h(c.inspector || '')}" placeholder="Recorded with each saved revision and change"></span></label>
         <label class="fld"><span class="lbl">Suggest the small tank report below diameter</span><span class="ctl"><input data-smallmax value="${h(smallMaxText())}" placeholder="40 ft"></span><small>For new jobs; type feet, or add m / mm.</small></label>
-        <div class="admin-box"><b>Admin</b> ${S.admin?.on ? `<span class="admin-on">Admin mode on${S.admin.name ? ' — ' + h(S.admin.name) : ''}</span> <button class="btn sm" data-act="admin-exit">Leave admin mode</button> <button class="btn sm ghost" data-act="admin-pin">Change admin PIN</button>`
-          : `<button class="btn sm" data-act="admin-enter">${S.company?.adminPin ? 'Enter admin mode…' : 'Set the admin PIN…'}</button>`}
-          <p class="muted small">Inspectors edit a job until it is sent to Peer review; from then on (Peer review, Admin review, Complete) only an admin can edit it, change its stage or unlock it for the inspector. Admin mode lasts until you leave it or close the app. ${S.company?.adminPin ? 'This device has the admin PIN.' : 'No admin PIN on this device yet: it is set here, or learnt from a job an admin has handled.'} This is a workflow lock inside the app; changes and unlocks are recorded with the name above.</p></div>
         <p class="muted small" id="migInfo"></p>
         <div class="integrity"><div class="acts"><button class="btn sm" data-act="integrity-run">Check data on this device</button><span class="muted small" id="integrityLast"></span></div><div id="integrityRes">${integrityHTML()}</div></div>
         <p class="muted">Install the app from the browser's address bar (or the Install button above) so it opens full-window and works without a connection.</p>
@@ -93,7 +89,6 @@ export async function openJob(id, view = 'map') {
   // stage 9: log what the update changed (the migrated job is saved by the first write after opening)
   if (steps) await logChange(id, j, mj, 'migration', `Updated from schema ${j.schema || 1} to ${SCHEMA}`).catch((e) => console.warn('Audit', e));
   S.job = mj; setAuditBase(mj);
-  await adoptPin(mj); // v3.40: a job an admin has handled teaches this device the admin PIN
   S.photos = await db.jobPhotos(id);
   const fh = await db.getMeta('fh:' + id).catch(() => null);
   S.fileName = fh?.name || null;

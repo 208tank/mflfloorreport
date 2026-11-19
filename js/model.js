@@ -10,7 +10,7 @@ import { defaultSecs, migrateSecs, defaultSummary } from './sections.js';
 import { defaultSmall, migrateSmall } from './small.js';
 import { defaultFloorUT, migrateFloorUT } from './floorut.js';
 
-export const STAGES = [['upcoming', 'Upcoming'], ['inspection', 'Inspection ongoing'], ['reporting', 'Reporting'], ['review', 'Peer review'], ['admin', 'Admin review'], ['complete', 'Complete']];
+export const STAGES = [['upcoming', 'Upcoming'], ['inspection', 'Inspection ongoing'], ['reporting', 'Reporting'], ['review', 'Peer review'], ['complete', 'Complete']];
 export const STAGE_LABEL = Object.fromEntries(STAGES);
 export const defaultStatus = () => ({ stage: 'upcoming', planned: '', due: '', inspector: '', reviewer: '', notes: '', history: [] });
 
@@ -77,6 +77,7 @@ function normalise(job) {
     out.equipment = equipFromLegacy(job.equip);
     for (const sec of Object.values(out.secs || {})) for (const n of sec.nde || []) if (!Array.isArray(n.equip)) n.equip = suggestEquip(out.equipment, n.method);
   } else out.equipment = job.equipment;
+  if (out.status?.stage === 'admin') out.status = { ...out.status, stage: 'review' }; // v3.41: the Admin review stage (v3.40) is gone
   if (out.calc.patchMargin === 25.4) out.calc.patchMargin = 50.8; // v3.1 default was 1 in; API 653 §9.11.1.1 c asks for 2 in
   return out;
 }

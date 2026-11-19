@@ -5,7 +5,7 @@ import { defineView, renderView } from '../app/nav.js';
 import { onAction, onChange } from '../app/actions.js';
 import { db } from '../db.js';
 import { buildReport, REPORT_MAP_LAYERS } from '../report.js';
-import { layoutOf } from '../report/frame.js';
+import { hfOf, layoutOf } from '../report/frame.js';
 import { isSmall } from '../small.js';
 import { SMALL_APPENDICES, SMALL_CHAPTERS } from '../report/small.js';
 import { reportHistory } from '../app/stage.js';
@@ -40,9 +40,18 @@ function sectionsPanel() {
   </div><p class="muted small">Chapters and appendices are numbered in the order shown; those without content for this job are left out. Contents lists section, table and figure numbers; the browser adds page numbers to each page.</p></details>`;
 }
 
+/** v3.41: why the page header logo will or won't print, so a missing logo can be put right. */
+function hfStatus() {
+  const o = hfOf(S.company), iss = issuedOf(S.job);
+  if (iss) return '<b>Header logo:</b> this job is Complete, so it prints its issued report exactly as it was issued, with the header it had then. Reopen the job to print the current header.';
+  if (!S.company?.logo) return '<b class="bad">Header logo: no company logo on this device.</b> Add it under Jobs → Report header (the logo is kept per device).';
+  if (o.logo === 'none') return '<b class="bad">Header logo: switched off.</b> Turn it on under Jobs → Report page header and footer → Logo in the header.';
+  return `<b>Header logo:</b> on, ${o.logo}, ${o.logoH} in tall. Print with Print / Save PDF on this screen.`;
+}
+
 function viewReport() {
   return `<div class="report-tools no-print">
-    <div><h1>Report</h1><p class="muted small">Print or save as PDF from the browser dialog (choose “Save as PDF” and margins Default, and turn off the browser’s “Headers and footers”: the report prints its own). The page header with the logo, and the footer, show in the printed report and the PDF, not in this preview.${S.company.logo ? '' : ' <b>No logo is set:</b> choose one under Jobs → Company.'}</p></div>
+    <div><h1>Report</h1><p class="muted small">Print or save as PDF from the browser dialog (choose “Save as PDF” and margins Default, and turn off the browser’s “Headers and footers”: the report prints its own). The page header and footer show in the printed report and the PDF, not in this preview.</p><p class="small hf-status">${hfStatus()}</p></div>
     <div class="acts">${issuedOf(S.job) ? '<span class="muted small">The issued report is shown with the options it was issued with.</span>' : ''}
       <button class="btn primary" data-act="print">Print / Save PDF</button></div>
     ${issuedOf(S.job) ? '' : sectionsPanel() + `<details class="rsec" ${S.reportDocOpen ? 'open' : ''}><summary data-act="rdoc-toggle">Document control</summary><div class="rdoc">${docCtlHTML()}</div></details>`}</div>

@@ -5,7 +5,7 @@ import { SEC } from './sections.js';
 /** Fields that record a job's file and save bookkeeping rather than its content. */
 export const BOOKKEEPING = ['rev', 'savedAt', 'revisions', 'updated', 'edits', 'editAreas', 'issued'];
 
-const AREA = { info: 'Job', tank: 'Tank', layout: 'Floor layout', calc: 'API 653 settings', status: 'Stage', summary: 'Executive summary', shell: 'Shell', roof: 'Roof', settle: 'Settlement', plates: 'Plate', indications: 'Indication', features: 'Floor feature', nozzles: 'Nozzle', equipment: 'Equipment', personnel: 'Personnel', repairs: 'Repair status', docctl: 'Document control', secs: 'Section', scope: 'Scope', units: 'Units', template: 'Report template', small: 'Small tank checklist', floorUT: 'Floor UT', adminPin: 'Admin PIN' };
+const AREA = { info: 'Job', tank: 'Tank', layout: 'Floor layout', calc: 'API 653 settings', status: 'Stage', summary: 'Executive summary', shell: 'Shell', roof: 'Roof', settle: 'Settlement', plates: 'Plate', indications: 'Indication', features: 'Floor feature', nozzles: 'Nozzle', equipment: 'Equipment', personnel: 'Personnel', repairs: 'Repair status', docctl: 'Document control', secs: 'Section', scope: 'Scope', units: 'Units', template: 'Report template', small: 'Small tank checklist', floorUT: 'Floor UT' };
 const IGNORE = new Set([...BOOKKEEPING, 'status.history']);
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const keyed = (a) => Array.isArray(a) && a.length > 0 && a.every((x) => isObj(x) && typeof x.id === 'string');

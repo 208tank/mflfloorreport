@@ -5,8 +5,6 @@
 import { S } from './state.js';
 import { go, renderAll } from './nav.js';
 import { checkpointIfDue, contentHash, isLocked } from './revisions.js';
-import { isAdmin } from './admin.js';
-import { inspectorLocked } from '../roles.js';
 import { auditWrite, hasAuditBase, recordWrite, setAuditBase } from './auditlog.js';
 import { api653 } from '../calc.js';
 import { db, requestPersistence } from '../db.js';
@@ -50,9 +48,7 @@ async function writeCurrent() {
     await db.putTank(t); await loadTanks();
     return;
   }
-  const staged = stageWrite.has(job.id); // cleared after the write
-  if ((isLocked(job) || inspectorLocked(job)) && (await refusedAsLocked(job))) return;
-  if (staged) stageWrite.delete(job.id);
+  if (isLocked(job) && (await refusedAsLocked(job))) return;
   await checkpointIfDue(job.id).catch((e) => console.warn('Checkpoint', e)); // stage 8: never blocks the save
   const w = auditWrite(job, hasAuditBase(job.id) ? null : await db.getJob(job.id)); // stage 9: what this write changes
   await db.putJob(job);
@@ -62,20 +58,15 @@ async function writeCurrent() {
 /** The Complete lock's backstop (stage 8b): a Complete job whose stored copy is Complete too may only change in its
  *  bookkeeping (file revision, save times, the issued record). Anything else that got past the screens is refused:
  *  the stored job is put back on screen and the unsaved change is dropped. */
-/** Jobs whose next write is a stage change (stage.js marks them; the write that follows clears the mark). */
-export const stageWrite = new Set();
 async function refusedAsLocked(job) {
   const stored = await db.getJob(job.id);
-  if (stageWrite.has(job.id)) return false; // a stage change made through changeStage (stage.js), which checks who may make it
-  // Complete: nobody; Peer review / Admin review (v3.40): only an admin
-  const locked = isLocked(stored) || (inspectorLocked(stored) && !isAdmin(stored));
-  if (!locked || (await contentHash(stored)) === (await contentHash(job))) return false;
+  if (!isLocked(stored) || (await contentHash(stored)) === (await contentHash(job))) return false;
   // opening an older job updates it to this version: that update is not an edit (v3.40)
   if ((stored.schema || 1) < (job.schema || 1)) { try { if ((await contentHash(migrate(structuredClone(stored)))) === (await contentHash(job))) return false; } catch { /* refuse below */ } }
-  console.warn('Refused a change to a locked job');
+  console.warn('Refused a change to a Complete job');
   journal.clear(job.id);
   if (S.job === job) { S.job = stored; setAuditBase(stored); recompute(); renderAll(); }
-  toast(isLocked(stored) ? 'This job is Complete, so that change was not saved. Reopen it first.' : 'This job is in review and locked for inspectors, so that change was not saved.');
+  toast('This job is Complete, so that change was not saved. Reopen it first.');
   return true;
 }
 let saveErrToast = 0;

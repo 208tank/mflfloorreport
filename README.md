@@ -7,38 +7,16 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
-## Inspector and admin roles, Admin review stage (v3.40.0, schema 8)
+## Roles taken out again; header logo status (v3.41.0)
 
-**Stages:** Upcoming → Inspection ongoing → Reporting → Peer review → **Admin review** → Complete.
-
-**Two levels:**
-
-- **Inspectors** create jobs and edit them through Reporting, then send them to **Peer review** (the app asks first).
-  From Peer review on (Peer review, Admin review, Complete) the job is **locked for inspectors**: its screens are
-  read-only (viewing, printing, exporting and saving the file still work), a change that gets past the screens is
-  refused when saving, and only an admin can change its stage. An inspector cannot move a job to Admin review or
-  Complete.
-- **Admins** switch on **admin mode** in Jobs → This device → Admin by entering the **admin PIN** (the first admin sets
-  it there, entered twice). Admin mode lasts until it is left (the orange *Admin* badge in the header) or the app is
-  closed. In admin mode a job in Peer review or Admin review can be edited and moved on; **Unlock for inspector** (header)
-  sends it back to Reporting with a reason; a Complete job is **Reopened** to Admin review (with a reason; it was Peer
-  review before). Complete stays read-only for everyone until reopened, as before.
-
-**The PIN** is kept only as a SHA-256 hash: in the device's company settings (`adminPin`, in backups) and in each job
-that has reached Peer review (`job.adminPin`). A device with no PIN learns it from such a job when it opens it; a PIN
-set on another device does not unlock a job stamped with a different one. Changing the PIN (in admin mode) leaves
-jobs stamped with the old one: entering the old PIN still unlocks those.
-
-**Records:** each stage history entry made in admin mode carries the admin's name (the inspector name on the device),
-and submissions, unlocks and reopens are in the revision notes and the audit trail.
-
-This is a workflow lock inside the app, not security: there is no server, and someone who edits a job file by hand
-can change it (the audit trail shows such changes).
-
-Also: an older job opened in a locked stage is updated to this version without the save backstop refusing the update
-(a Complete job opened after a schema change had its update refused before). Job step 7 → 8 adds nothing to existing
-jobs. `js/roles.js` holds the rules (tested in `tests/roles.test.mjs`), `js/app/admin.js` admin mode; the browser
-check "roles" walks the whole flow.
+- The inspector / admin roles and the Admin review stage of v3.40.0 are removed: stages, editing, Reopen and the
+  Dashboard work as in v3.39.0. Job files saved by v3.40 still open (job schema stays 8); a job left in Admin review
+  returns to Peer review. An admin PIN saved on a device is no longer used.
+- Kept from v3.40: a Complete job opened after an app update is updated to this version without the Complete lock's
+  save backstop refusing the update.
+- **Report → header logo status:** the Report screen now says whether the page header logo will print — on (position
+  and height), switched off, no company logo on this device (the logo is kept per device), or a Complete job printing
+  its issued report with the header it had when issued.
 
 ## Report — clean modern drawing sheets (v3.39.0)
 
@@ -1494,7 +1472,6 @@ every limit is editable.
 | `js/report/small.js` | The small tank report: chapters in the template order (S3) |
 | `js/floorut.js` | Floor UT survey (schema 7): areas, critical zone and lower shell scans, five readings per plate; the readings as locations for the API 653 evaluation |
 | `js/views/floorut.js` | Floor → UT readings screen |
-| `js/roles.js`, `js/app/admin.js` | Inspector / admin rules (who may edit and change the stage) and admin mode with the PIN |
 | `js/guide.js`, `js/views/guide.js` | The user guide's text (kept current every release) and its screen |
 | `js/smallcalc.js` | Small tank calculations: thickness and rates, intervals, planar tilt, edge settlement (S2) |
 | `js/report/frame.js` | Report frame: chapter order and switches, numbering, cover, document control, contents, value key, page set-up, running header and footer |

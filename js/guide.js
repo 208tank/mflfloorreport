@@ -7,7 +7,7 @@
 // Text is written as HTML. [[view|Label]] becomes a button that opens that page when a job is open (plain bold text
 // otherwise). Keep sentences short and plain: this guide is shared with field crews.
 
-export const GUIDE_VERSION = '3.40.0';
+export const GUIDE_VERSION = '3.41.0';
 export const GUIDE_URL = 'https://208tank.github.io/mflfloorreport/';
 
 export const GUIDE = [
@@ -23,7 +23,7 @@ or without a connection once it has been opened.</p>
 <li>Hand the UT loader sheet to the technician and load it back.</li>
 <li>Review the API 653 results, repairs and recommendations.</li>
 <li>Clean up the drawing with Layers and print the report.</li>
-<li>Save the job file and send it to Peer review; an admin takes it through Admin review to Complete.</li>
+<li>Save the job file, move it through review and mark it Complete.</li>
 </ol>
 <p class="muted small">Want to look around first? [[jobs|Jobs]] → <b>Load demo tank</b> opens a complete example job.</p>` },
 
@@ -121,12 +121,9 @@ or without a connection once it has been opened.</p>
 <ol>
 <li>The app saves to this device automatically (<i>Saved locally</i> in the header). To share or move a job, <b>Save file…</b> (<b>Ctrl+S</b>) into the shared OneDrive jobs folder. Each save is a new revision (Rev 1, Rev 2 …).</li>
 <li>On another computer, [[jobs|Jobs]] → <b>Open job file…</b> and pick the file from the synced folder.</li>
-<li>Move the job through <b>Upcoming → Inspection ongoing → Reporting → Peer review → Admin review → Complete</b> by dragging its card on the [[dash|Dashboard]] (or in Tank setup). The team sees the stage on their next rescan.</li>
-<li><b>Inspectors</b> create and edit the job up to Reporting, then <b>send it to Peer review</b> (the app asks first). From then on it is <b>locked for inspectors</b>: they can view, print and export it, but not change it or its stage.</li>
-<li><b>Admins</b> switch on admin mode in [[jobs|Jobs]] → <b>This device → Admin</b> with the admin PIN (the first admin sets it there). In admin mode a job in Peer review or Admin review can be edited, moved to Admin review and Complete, or handed back with <b>Unlock for inspector</b> in the header (it goes back to Reporting, with a reason). The orange <b>Admin</b> badge in the header shows admin mode is on; click it to leave.</li>
-<li>Marking it <b>Complete</b> issues the report: it is frozen exactly as printed and the job is read-only for everyone. An admin can <b>Reopen</b> it (back to Admin review, with a reason); the issued report stays in [[revs|Revisions]].</li>
+<li>Move the job through <b>Upcoming → Inspection ongoing → Reporting → Peer review → Complete</b> by dragging its card on the [[dash|Dashboard]] (or in Tank setup). The team sees the stage on their next rescan.</li>
+<li>Marking it <b>Complete</b> issues the report: it is frozen exactly as printed and the job becomes read-only. <b>Reopen</b> asks for a reason; the issued report stays in [[revs|Revisions]].</li>
 </ol>
-<p class="tip"><b>Tip:</b> jobs sent to Peer review carry the admin PIN (as a code, never the PIN itself), so an admin's other devices learn it when they open the job. Every submission, unlock and reopen is recorded with the name on the device, in the stage history and the [[audit|Audit trail]]. The lock works inside the app; it is not protection against someone editing a job file by hand.</p>
 <ul class="tips">
 <li>Only one person edits a job at a time: open the latest file, work, save, then hand over. If someone else saved since you opened it, the app asks before overwriting and keeps both versions.</li>
 <li>[[jobs|Jobs]] → <b>Back up this device</b> now and then, to somewhere other than the laptop. The app reminds you when a backup is overdue.</li>

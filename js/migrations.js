@@ -113,9 +113,11 @@ export const JOB_STEPS = [
   { to: 7, name: 'Floor UT thickness survey: selected areas, critical zone and lower shell scans, five readings per plate',
     notes: () => [],
     run() { /* job.floorUT starts empty (normalise fills it in); nothing existing changes */ } },
-  { to: 8, name: 'Inspector and admin roles: Admin review stage, admin PIN carried by the job',
-    notes: (src) => (['review'].includes(src.status?.stage) ? ['Jobs in Peer review can now be edited only in admin mode (Jobs → This device → Admin).'] : []),
-    run() { /* the 'admin' stage and job.adminPin are new and optional; nothing existing changes */ } }
+  // v3.40.0 added inspector / admin roles with an Admin review stage; v3.41.0 took them out again. The step stays so
+  // job files saved by v3.40 still open; a job left in Admin review is put back in Peer review (model.js normalise).
+  { to: 8, name: 'Admin review stage (v3.40, removed in v3.41: such jobs return to Peer review)',
+    notes: () => [],
+    run() { /* nothing to change */ } }
 ];
 export const JOB_SCHEMA = JOB_STEPS.at(-1).to;
 
