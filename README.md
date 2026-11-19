@@ -7,6 +7,18 @@ drawing, the API 653 bottom minimum remaining thickness (MRT) calculation, and a
 Plain HTML, CSS and JavaScript modules. No build step, no server, no external libraries — it runs
 from GitHub Pages and keeps working with no connection once opened.
 
+## Report — logo and page headers (v3.38.0)
+
+- The company logo prints **larger on the cover** (up to 130 px high, was 70).
+- The logo is now in **every page header** by default (left, beside the company name; header logo 150 × 34, was
+  110 × 26). Companies that saved their own header settings keep their logo choice: set it under Jobs → *Report page
+  header and footer*. With nothing in the centre position, the left and right header / footer boxes share the width,
+  so the logo and the text beside it stay on one line.
+- **Drawing sheets** (floor plan, shell roll-out, roof plans) print with **no running header or footer**: the sheet's
+  title block already carries the company, logo, tank, report, revision and DRAFT / ISSUED. The cover has none either.
+
+Golden report files changed only in these page styles.
+
 ## User guide in the app (v3.37.0)
 
 **User guide** (last item in the side menu, open with or without a job) is the step-by-step guide for crews: the

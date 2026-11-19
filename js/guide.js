@@ -7,7 +7,7 @@
 // Text is written as HTML. [[view|Label]] becomes a button that opens that page when a job is open (plain bold text
 // otherwise). Keep sentences short and plain: this guide is shared with field crews.
 
-export const GUIDE_VERSION = '3.37.0';
+export const GUIDE_VERSION = '3.38.0';
 export const GUIDE_URL = 'https://208tank.github.io/mflfloorreport/';
 
 export const GUIDE = [
@@ -32,7 +32,7 @@ or without a connection once it has been opened.</p>
 <li>Open <b>${GUIDE_URL}</b> in <b>Chrome or Edge</b>.</li>
 <li>Click the <b>install icon</b> in the address bar (or <i>Install app</i>). It then opens like a desktop program and works offline in the tank.</li>
 <li>[[jobs|Jobs]] → <b>This device</b>: type your <b>inspector name</b>. It is recorded on every revision and change you make.</li>
-<li>[[jobs|Jobs]] → <b>Company</b>: the company name, logo, report page size and the report header and footer, once per device.</li>
+<li>[[jobs|Jobs]] → <b>Company</b>: the company name, logo, report page size and the report header and footer, once per device. The logo prints large on the cover and in every page header (change its position, or switch it off, under <i>Report page header and footer</i>).</li>
 <li>[[dash|Dashboard]] → <b>Link jobs folder…</b>: pick the team's shared OneDrive / SharePoint jobs folder. The browser asks again each session: click <b>Reconnect</b>.</li>
 </ol>
 <p class="tip"><b>Tip:</b> when a new version is published the app shows <b>Reload</b>. Reload every device the team uses: an older copy refuses job files saved by a newer one.</p>` },
@@ -114,6 +114,7 @@ or without a connection once it has been opened.</p>
 <li>Turn chapters and appendices on or off and change their order.</li>
 </ul>
 <p>Then <b>Print / Save PDF</b>. In the browser's print dialog pick <i>Save as PDF</i>, margins <i>Default</i>, and turn <b>off</b> the browser's <i>Headers and footers</i>: the report prints its own.</p>
+<p>Drawing sheets (floor plan, shell roll-out, roof plans) print without the page header and footer: their title block carries the company, logo, tank, report number, revision and status.</p>
 <p class="tip"><b>Tip:</b> for a busy tank, a clean floor drawing usually means nozzles, floor features and shell seams off, with plate labels and indications on.</p>` },
 
   { id: 'complete', title: 'Step 8 — Save, share and complete the job', html: `

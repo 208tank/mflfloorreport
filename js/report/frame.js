@@ -142,7 +142,7 @@ export function drawArea(paper, orient) {
 export const HF_DEFAULTS = Object.freeze({
   hl: '{company}', hc: '', hr: 'Tank {tank} · Report {report}',
   fl: '{rev} · {status}', fc: '', fr: 'Page {page} of {pages}',
-  logo: 'none', rule: false, color: '#5b6470', size: 8,
+  logo: 'left', rule: false, color: '#5b6470', size: 8, // v3.38: the company logo is in every page header unless switched off
 });
 export const HF_TOKENS = [
   ['company', 'Company name'], ['client', 'Client'], ['site', 'Site'], ['tank', 'Tank ID'], ['report', 'Report number'],
@@ -187,7 +187,7 @@ const hfContent = (pieces, logo) => {
 function hfLogo(src, align) {
   if (!src) return '';
   const a = align === 'right' ? 'xMaxYMid' : align === 'centre' ? 'xMidYMid' : 'xMinYMid';
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="110" height="26" viewBox="0 0 110 26"><image width="110" height="26" preserveAspectRatio="${a} meet" xlink:href="${src}" href="${src}"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="150" height="34" viewBox="0 0 150 34"><image width="150" height="34" preserveAspectRatio="${a} meet" xlink:href="${src}" href="${src}"/></svg>`;
   return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
 }
 /** The text of the six positions, for previews: [[hl, hc, hr], [fl, fc, fr]] with sample page numbers. */
@@ -195,6 +195,10 @@ export function hfPreview(company, vals) {
   const o = hfOf(company), t = (k) => hfPieces(o[k], vals).map((p) => (typeof p === 'string' ? p : p.counter === 'page' ? '3' : '24')).join('');
   return [[t('hl'), t('hc'), t('hr')], [t('fl'), t('fc'), t('fr')]];
 }
+
+/** No running header or footer: the cover, and the drawing sheets (their title block carries the company, logo, tank,
+ *  report, revision and status, v3.38). */
+const NO_BOXES = '@top-left { content: none; } @top-center { content: none; } @top-right { content: none; } @bottom-left { content: none; } @bottom-center { content: none; } @bottom-right { content: none; }';
 
 export function pageCSS({ size = 'letter', company = '', tankId = '', reportNo = '', revText = '', status = '', drawOrient = 'landscape', drawPaper = 'report', hf = null, vals = null }) {
   const paper = size === 'a4' ? 'a4' : 'letter', S = PAPER[paper][2], o = drawOrient === 'portrait' ? 'portrait' : 'landscape';
@@ -207,16 +211,19 @@ export function pageCSS({ size = 'letter', company = '', tankId = '', reportNo =
     const rule = H.rule ? (edge === 'top' ? `border-bottom: 0.75pt solid ${H.color}; padding-bottom: 3pt;` : `border-top: 0.75pt solid ${H.color}; padding-top: 3pt;`) : '';
     if (!pieces.length && !withLogo && !rule) return '';
     const align = pos === 'left' ? 'left' : pos === 'right' ? 'right' : 'center';
-    return `@${edge}-${pos === 'centre' ? 'center' : pos} { content: ${hfContent(pieces, withLogo ? logo : '')}; ${font} text-align: ${align}; vertical-align: ${edge === 'top' ? 'bottom' : 'top'}; width: 33.3%; ${rule} }`;
+    // with nothing in the centre, the left and right boxes share the width, so a logo and the text beside it stay on one line
+    const mid = edge === 'top' ? 'hc' : 'fc', empty = !hfPieces(H[mid], vals).length && !(logo && edge === 'top' && H.logo === 'centre');
+    const width = pos === 'centre' ? '33.3%' : empty ? '50%' : '33.3%';
+    return `@${edge}-${pos === 'centre' ? 'center' : pos} { content: ${hfContent(pieces, withLogo ? logo : '')}; ${font} text-align: ${align}; vertical-align: ${edge === 'top' ? 'bottom' : 'top'}; width: ${width};${withLogo ? ' white-space: nowrap;' : ''} ${rule} }`;
   };
   const boxes = ['left', 'centre', 'right'].map((p, i) => box(p, ['hl', 'hc', 'hr'][i], 'top')).concat(['left', 'centre', 'right'].map((p, i) => box(p, ['fl', 'fc', 'fr'][i], 'bottom'))).filter(Boolean).join('\n      ');
   const big = drawPaper === 'tabloid' ? 'tabloid' : paper;
   const [, hs] = drawArea(paper, o), [, hb] = drawArea(big, o);
   return `@media print {
     @page { size: ${S} portrait; margin: 0.75in 0.6in 0.7in; ${boxes} }
-    @page cover { size: ${S} portrait; margin: 0.75in 0.6in; @top-left { content: none; } @top-center { content: none; } @top-right { content: none; } @bottom-left { content: none; } @bottom-center { content: none; } @bottom-right { content: none; } }
-    @page drawing { size: ${S} ${o}; margin: ${DRAW_MARGIN}in; ${boxes} }
-    @page drawing-lg { size: ${big === 'tabloid' ? (o === 'landscape' ? '17in 11in' : '11in 17in') : PAPER[big][2] + ' ' + o}; margin: ${DRAW_MARGIN}in; ${boxes} }
+    @page cover { size: ${S} portrait; margin: 0.75in 0.6in; ${NO_BOXES} }
+    @page drawing { size: ${S} ${o}; margin: ${DRAW_MARGIN}in; ${NO_BOXES} }
+    @page drawing-lg { size: ${big === 'tabloid' ? (o === 'landscape' ? '17in 11in' : '11in 17in') : PAPER[big][2] + ' ' + o}; margin: ${DRAW_MARGIN}in; ${NO_BOXES} }
     .report .rp-draw { height: ${(hs - 0.05).toFixed(2)}in; }
     .report .rp-draw.lg { height: ${(hb - 0.05).toFixed(2)}in; }
   }`;
@@ -225,7 +232,7 @@ export function pageCSS({ size = 'letter', company = '', tankId = '', reportNo =
 /** Styles for the frame, carried inside the report. */
 export const FRAME_CSS = `
 .report .rp-cover { min-height: 9in; display: flex; flex-direction: column; gap: 18px; }
-.report .rp-cover .logo { max-height: 70px; max-width: 220px; }
+.report .rp-cover .logo { max-height: 130px; max-width: 400px; }
 .report .rp-cover .co { font-size: 11px; color: #5b6470; }
 .report .rp-cover .co b { color: #1d232b; font-size: 13px; }
 .report .rp-cover h1 { font-size: 26px; margin: 1.4in 0 4px; letter-spacing: 0; }
