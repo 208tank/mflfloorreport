@@ -34,6 +34,27 @@ export function askChoice(msg, choices) {
 
 /** In-app dialog asking for a line of text (a reason). Resolves the trimmed text, or null if cancelled.
  *  OK stays disabled until something is typed when `required`. */
+/** Ask for a PIN (shown as dots). With confirm, asks for it twice. Resolves the PIN, or null if cancelled. */
+export function askSecret(msg, { ok = 'OK', cancel = 'Cancel', label = 'PIN', confirm = false } = {}) {
+  return new Promise((resolve) => {
+    const d = $('#confirmDlg');
+    d.innerHTML = `<form class="cf" method="dialog"><p>${h(msg).replace(/\n/g, '<br>')}</p>
+      <label class="fld"><span class="lbl">${h(label)}</span><input type="password" id="askPin" autocomplete="off"></label>
+      ${confirm ? `<label class="fld"><span class="lbl">Again</span><input type="password" id="askPin2" autocomplete="off"></label>` : ''}
+      <p class="muted small" id="askPinMsg"></p><div class="acts">
+      <button type="button" class="btn" data-cf="no">${h(cancel)}</button>
+      <button type="submit" class="btn primary" data-cf="yes" disabled>${h(ok)}</button></div></form>`;
+    d.returnValue = '';
+    const a = $('#askPin', d), b = $('#askPin2', d), yes = $('[data-cf="yes"]', d), m = $('#askPinMsg', d);
+    const check = () => { const v = a.value.trim(), short = v.length < 4, diff = !!b && b.value.trim() !== v; yes.disabled = short || diff; m.textContent = v && short ? 'At least 4 characters.' : b && b.value && diff ? 'The two entries differ.' : ''; };
+    a.oninput = check; if (b) b.oninput = check;
+    d.onclick = (e) => { const x = e.target.closest('[data-cf]'); if (x && !x.disabled) { e.preventDefault(); d.close(x.dataset.cf); } };
+    d.onclose = () => resolve(d.returnValue === 'yes' ? a.value.trim() : null);
+    d.showModal();
+    a.focus();
+  });
+}
+
 export function askText(msg, { ok = 'OK', cancel = 'Cancel', label = '', required = true, placeholder = '' } = {}) {
   return new Promise((resolve) => {
     const d = $('#confirmDlg');

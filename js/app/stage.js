@@ -2,7 +2,7 @@
 // board, the header's Reopen button — goes through here, so each one keeps a revision, Complete freezes the
 // report, and leaving Complete asks for a reason. Core module.
 import { APP_VERSION, S } from './state.js';
-import { commit, flushSave, writeNow } from './persist.js';
+import { commit, flushSave, stageWrite, writeNow } from './persist.js';
 import { renderHeader } from './header.js';
 import { onAction } from './actions.js';
 import { writeStageToFile } from './folder.js';
@@ -15,7 +15,9 @@ import { db } from '../db.js';
 import { buildLayout } from '../geometry.js';
 import { defaultStatus, migrate, STAGE_LABEL } from '../model.js';
 import { buildReport } from '../report.js';
-import { askText } from '../ui.js';
+import { askConfirm, askText, toast } from '../ui.js';
+import { adminName, adoptPin, isAdmin, pinForJob } from './admin.js';
+import { stageChangeKind, stageChangeRefusal } from '../roles.js';
 import { sha256 } from '../util.js';
 
 /** The report of a job as it would be printed now. For the open job the screen's own layout, results and photos are
@@ -59,28 +61,46 @@ export async function changeStage(jobOrId, to) {
   if (open) job.status = job.status || {}; else job.status = { ...defaultStatus(), ...(job.status || jobCard(job)) };
   const from = job.status.stage;
   if (from === to) return false;
+  await adoptPin(job);
+  // v3.40: from Peer review on, only an admin changes the stage; inspectors send the job to Peer review
+  const admin = isAdmin(job), refusal = stageChangeRefusal(from, to, admin);
+  if (refusal) { toast(refusal); return false; }
+  const kind = stageChangeKind(from, to), name = job.info?.tankId || 'this job';
   let reason = '';
   if (isLocked(job)) { reason = await askReopenReason(job); if (reason === null) return false; }
+  else if (kind === 'submit' && !admin && !(await askConfirm(`Send ${name} to ${STAGE_LABEL[to]}?\n\nFrom then on it is locked for inspectors: only an admin can edit it, or unlock it for you.`, { ok: `Send to ${STAGE_LABEL[to]}` }))) return false;
+  else if (kind === 'unlock') {
+    reason = await askText(`Unlock ${name} for the inspector? It goes back to ${STAGE_LABEL[to]} and can be edited again.\n\nWhy is it being unlocked?`, { ok: 'Unlock', label: 'Reason (kept with the job’s history)', placeholder: 'e.g. Peer review comments to address' });
+    if (reason === null) return false;
+  }
+  if (kind === 'submit' || admin) { const pin = pinForJob(job); if (pin && !job.adminPin) job.adminPin = pin; } // the PIN travels with the job
   const now = Date.now(), before = open ? null : structuredClone(job);
-  const note = reason ? 'Reopened: ' + reason : to === 'complete' ? 'Report issued' : '';
+  const by = admin ? adminName() : '';
+  const note = (reason ? (kind === 'unlock' ? 'Unlocked for the inspector: ' : 'Reopened: ') + reason : to === 'complete' ? 'Report issued' : '') + (by ? `${reason || to === 'complete' ? ' ' : ''}(admin: ${by})` : '');
   job.status.stage = to;
-  (job.status.history = job.status.history || []).push(reason ? { stage: to, at: now, reason } : { stage: to, at: now });
-  if (open) { auditSource('stage', note); commit(); await flushSave(); }
+  const entry = { stage: to, at: now, ...(reason ? { reason } : {}), ...(by ? { admin: by } : {}) };
+  (job.status.history = job.status.history || []).push(entry);
+  if (open) { auditSource('stage', note); stageWrite.add(job.id); commit(); await flushSave(); stageWrite.delete(job.id); }
   else { job.updated = now; await db.putJob(job); await logChange(job.id, before, job, 'stage', note).catch((e) => console.warn('Audit', e)); }
   if (to === 'complete') {
     await issue(job, from).catch((e) => console.warn('Issue', e));
     if (open) await writeNow(); else await db.putJob(job);
   } else {
-    await stageRevision(job, from, to, reason ? 'Reopened: ' + reason : '');
+    await stageRevision(job, from, to, note);
   }
   if (open) renderHeader();
   return true;
 }
 
-/* The header's Reopen button: back to Peer review, which stays editable. */
+/* The header's Reopen button (admins): back to Admin review, editable in admin mode. Unlock: back to Reporting, so the
+   inspector can edit it again. */
 onAction({
   'reopen': async () => {
-    if (!S.job || !(await changeStage(S.job, 'review'))) return;
-    writeStageToFile(S.job.id, 'review'); renderAll();
+    if (!S.job || !(await changeStage(S.job, 'admin'))) return;
+    writeStageToFile(S.job.id, 'admin'); renderAll();
+  },
+  'unlock-insp': async () => {
+    if (!S.job || !(await changeStage(S.job, 'reporting'))) return;
+    writeStageToFile(S.job.id, 'reporting'); renderAll();
   },
 });

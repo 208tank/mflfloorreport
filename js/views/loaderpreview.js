@@ -14,7 +14,7 @@ import { fmt, u } from '../units.js';
 import { esc as h } from '../util.js';
 
 /** Stages at which every reading in the job counts as verified (decision 1 (a)). */
-const VERIFIED_STAGES = new Set(['review', 'complete']);
+const VERIFIED_STAGES = new Set(['review', 'admin', 'complete']);
 
 async function bytesHash(buf) {
   const d = await crypto.subtle.digest('SHA-256', buf);

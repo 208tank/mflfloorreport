@@ -46,7 +46,7 @@ test('S1: step 6 keeps existing jobs on the full report and changes nothing they
   assert.ok(!raw.template);
   const before = JSON.stringify(raw), out = migrate(raw, { log });
   assert.equal(JSON.stringify(raw), before, 'the stored job is not changed');
-  assert.deepEqual(log.map((l) => l.to), [6, 7]);
+  assert.deepEqual(log.map((l) => l.to), [6, 7, 8]);
   assert.equal(out.template, 'full');
   assert.equal(isSmall(out), false);
   assert.deepEqual(out.small.items, {});
@@ -96,11 +96,11 @@ test('S1: the small template is suggested under 40 ft (or the device setting) un
 test('S1: validation checks the checklist lists and numbers', async () => {
   const j = migrate(fixture('demo'));
   j.small.proj[0].t = '0.25'; j.small.edge[1].max = 'deep'; j.small.opp = [{ dev: 'PVRV' }];
-  const r = await validateJobFile({ format: 'tank-floor-inspector', version: 1, job: j }, { schema: 7, fileVersion: 2 });
+  const r = await validateJobFile({ format: 'tank-floor-inspector', version: 1, job: j }, { schema: Infinity, fileVersion: 2 });
   assert.ok(r.warnings.some((w) => /Floor projection N: Thickness was stored as the text/.test(w)), r.warnings.join('\n'));
   assert.ok(r.errors.some((e) => /Edge settlement station 2: Maximum settlement is “deep”/.test(e)), r.errors.join('\n'));
   assert.ok(r.errors.some((e) => /Over-pressure device PVRV has no id/.test(e)), r.errors.join('\n'));
-  const bad = await validateJobFile({ format: 'tank-floor-inspector', version: 1, job: { ...migrate(fixture('demo')), small: [] } }, { schema: 7, fileVersion: 2 });
+  const bad = await validateJobFile({ format: 'tank-floor-inspector', version: 1, job: { ...migrate(fixture('demo')), small: [] } }, { schema: Infinity, fileVersion: 2 });
   assert.ok(bad.errors.some((e) => /small part has the wrong type/.test(e)));
 });
 

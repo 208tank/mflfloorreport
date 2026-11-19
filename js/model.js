@@ -10,7 +10,7 @@ import { defaultSecs, migrateSecs, defaultSummary } from './sections.js';
 import { defaultSmall, migrateSmall } from './small.js';
 import { defaultFloorUT, migrateFloorUT } from './floorut.js';
 
-export const STAGES = [['upcoming', 'Upcoming'], ['inspection', 'Inspection ongoing'], ['reporting', 'Reporting'], ['review', 'Peer review'], ['complete', 'Complete']];
+export const STAGES = [['upcoming', 'Upcoming'], ['inspection', 'Inspection ongoing'], ['reporting', 'Reporting'], ['review', 'Peer review'], ['admin', 'Admin review'], ['complete', 'Complete']];
 export const STAGE_LABEL = Object.fromEntries(STAGES);
 export const defaultStatus = () => ({ stage: 'upcoming', planned: '', due: '', inspector: '', reviewer: '', notes: '', history: [] });
 

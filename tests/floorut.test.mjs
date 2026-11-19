@@ -27,7 +27,7 @@ test('floor UT: a new job and a migrated job start with an empty survey; schema 
   near(j.floorUT.cz.size, 6 * IN); near(j.floorUT.cz.spacing, 10 * FT);
   assert.equal(newJob('metric').floorUT.cz.size, 150);
   const m = demo();
-  assert.equal(m.schema, 7);
+  assert.ok(m.schema >= 7);
   assert.equal(hasFloorUT(m), false);
 });
 
@@ -142,11 +142,11 @@ test('floor UT: map, report, CSV and validation', async () => {
   assert.ok(/Area,A-1,/.test(csv) && /Critical zone scan,CZ-1,/.test(csv) && /Plate reading,Centre,/.test(csv));
   // validation: duplicate ids are an error; a number stored as text is converted
   const bad = structuredClone(j); bad.floorUT.areas.push({ ...bad.floorUT.areas[0] }); bad.floorUT.areas[0].tMin = '1.5';
-  const r = await validateJobFile({ format: 'tank-floor-inspector', version: 2, job: bad }, { schema: 7, fileVersion: 2 });
+  const r = await validateJobFile({ format: 'tank-floor-inspector', version: 2, job: bad }, { schema: Infinity, fileVersion: 2 });
   assert.ok(r.errors.some((e) => /Floor UT areas .*share the id ua1/.test(e)), r.errors.join('\n'));
   assert.ok(r.warnings.some((w) => /Floor UT area A-1: Minimum was stored as the text/.test(w)), r.warnings.join('\n'));
   const wrong = structuredClone(j); wrong.floorUT = [];
-  assert.ok((await validateJobFile({ format: 'tank-floor-inspector', version: 2, job: wrong }, { schema: 7, fileVersion: 2 })).errors.some((e) => /floorUT part has the wrong type/.test(e)));
+  assert.ok((await validateJobFile({ format: 'tank-floor-inspector', version: 2, job: wrong }, { schema: Infinity, fileVersion: 2 })).errors.some((e) => /floorUT part has the wrong type/.test(e)));
 });
 
 test('UT loader sheet: floor UT sheets round-trip', async (t) => {

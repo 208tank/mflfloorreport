@@ -112,7 +112,10 @@ export const JOB_STEPS = [
     run(out, src) { if (!src.template) out.template = 'full'; } },
   { to: 7, name: 'Floor UT thickness survey: selected areas, critical zone and lower shell scans, five readings per plate',
     notes: () => [],
-    run() { /* job.floorUT starts empty (normalise fills it in); nothing existing changes */ } }
+    run() { /* job.floorUT starts empty (normalise fills it in); nothing existing changes */ } },
+  { to: 8, name: 'Inspector and admin roles: Admin review stage, admin PIN carried by the job',
+    notes: (src) => (['review'].includes(src.status?.stage) ? ['Jobs in Peer review can now be edited only in admin mode (Jobs → This device → Admin).'] : []),
+    run() { /* the 'admin' stage and job.adminPin are new and optional; nothing existing changes */ } }
 ];
 export const JOB_SCHEMA = JOB_STEPS.at(-1).to;
 

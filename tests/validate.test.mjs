@@ -96,7 +96,7 @@ test('validate: checking a file never changes it, and returns the job as this ve
   const f = asFile(legacy), before = JSON.stringify(f);
   const r = await run(f);
   assert.equal(JSON.stringify(f), before);
-  assert.equal(r.job.schema, 7);
+  assert.equal(r.job.schema, 8);
 });
 
 test('validate (schema 5): personnel, calibration checks and distribution entries need ids; wrong types are errors', async () => {

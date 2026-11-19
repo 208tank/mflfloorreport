@@ -535,6 +535,7 @@ export default {
 
   async 'job files: saving over a file someone else saved asks first; Dashboard stage changes merge'({ browser, url, appPage }) {
     const page = await appPage(browser, url);
+    await page.evaluate(() => { window.__app.admin = { on: true, hash: '', name: 'Test admin', at: 1 }; }); // v3.40: stage changes after Peer review are the admin's
     // a real file handle (Origin Private File System), remembered as this job's file
     await page.evaluate(async () => {
       const { db } = await import('./js/db.js');
@@ -726,6 +727,7 @@ export default {
 
   async 'job files: the file written in pieces is byte-for-byte the v3.4.2 format (version 2 adds the issued report)'({ browser, url, appPage }) {
     const page = await appPage(browser, url);
+    await page.evaluate(() => { window.__app.admin = { on: true, hash: '', name: 'Test admin', at: 1 }; }); // v3.40: stage changes after Peer review are the admin's
     await page.evaluate(async () => {
       const { db } = await import('./js/db.js');
       const job = window.tfi.job(), id = job.id;
@@ -906,17 +908,17 @@ export default {
     await page.evaluate(async () => { const { db } = await import('./js/db.js'); for (let i = 0; i < 150 && !(await db.getMeta('baseline:v4')); i++) await new Promise((r) => setTimeout(r, 100)); });
     await page.evaluate(() => window.tfi.go('jobs'));
     await page.click('[data-act="job-open"][data-id="demo-a"]');
-    await page.waitForFunction(() => window.tfi.job()?.id === 'demo-a' && window.tfi.job().schema === 7);
+    await page.waitForFunction(() => window.tfi.job()?.id === 'demo-a' && window.tfi.job().schema === 8);
     await page.waitForTimeout(800); // let the migrated job save
     const r = await page.evaluate(async () => {
       const { db } = await import('./js/db.js');
       const revs = await db.jobRevisions('demo-a'), log = await db.migrationLog(), stored = await db.getJob('demo-a');
       return { revs: revs.map((x) => [x.n, x.reason, x.note, x.schema, x.job]), jobLog: log.filter((m) => m.kind === 'job' && m.jobId === 'demo-a').map((m) => [m.from, m.to]), storedSchema: stored.schema };
     });
-    assert.deepEqual(r.revs.map((x) => x.slice(0, 4)), [[1, 'migration', 'Baseline at upgrade to the data integrity version', 1], [2, 'migration', 'Before migration from schema 1 to 7', 1]]);
+    assert.deepEqual(r.revs.map((x) => x.slice(0, 4)), [[1, 'migration', 'Baseline at upgrade to the data integrity version', 1], [2, 'migration', 'Before migration from schema 1 to 8', 1]]);
     assert.deepEqual(r.revs[1][4], before.jobs.find((j) => j.id === 'demo-a'), 'the revision holds the job exactly as stored before the migration');
-    assert.deepEqual(r.jobLog, [[1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7]]);
-    assert.equal(r.storedSchema, 7);
+    assert.deepEqual(r.jobLog, [[1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8]]);
+    assert.equal(r.storedSchema, 8);
     // opening it again adds no revision and no log entry
     const openVia = (id) => page.evaluate((i) => { window.tfi.go('jobs'); document.querySelector(`[data-act="job-open"][data-id="${i}"]`).click(); }, id);
     await openVia('demo-b');
@@ -1263,6 +1265,7 @@ export default {
 
   async 'complete lock: Complete freezes the report, locks the job, and Reopen asks for a reason'({ browser, url, appPage }) {
     const page = await appPage(browser, url);
+    await page.evaluate(() => { window.__app.admin = { on: true, hash: '', name: 'Test admin', at: 1 }; }); // v3.40: stage changes after Peer review are the admin's
     await page.evaluate(() => window.tfi.go('setup'));
     await page.selectOption('select[data-bind="status.stage"]', 'complete');
     await page.waitForSelector('#jobTitle [data-act="reopen"]');
@@ -1309,13 +1312,13 @@ export default {
     await page.click('#jobTitle [data-act="reopen"]');
     await page.fill('#askText', 'Client asked for nozzle readings');
     await page.click('#confirmDlg [data-cf="yes"]');
-    await page.waitForFunction(() => window.tfi.job().status.stage === 'review');
+    await page.waitForFunction(() => window.tfi.job().status.stage === 'admin'); // v3.40: Reopen goes back to Admin review
     const after = await page.evaluate(async () => {
       const { db } = await import('./js/db.js'), j = window.tfi.job();
       for (let i = 0; i < 60; i++) { const revs = await db.jobRevisions(j.id); const r = revs.find((x) => x.reason === 'stage' && /Reopened/.test(x.note)); if (r) return { note: r.note, hist: j.status.history.at(-1) }; await new Promise((res) => setTimeout(res, 50)); }
       return null;
     });
-    assert.match(after.note, /Complete → Peer review.*Reopened: Client asked for nozzle readings/);
+    assert.match(after.note, /Complete → Admin review.*Reopened: Client asked for nozzle readings/);
     assert.equal(after.hist.reason, 'Client asked for nozzle readings');
     assert.equal(await page.$('#jobTitle [data-act="reopen"]'), null);
     await page.evaluate(() => window.tfi.go('setup'));
@@ -1327,6 +1330,7 @@ export default {
 
   async 'complete lock: the Report flags a report this version would produce differently, and compares them'({ browser, url, appPage }) {
     const page = await appPage(browser, url);
+    await page.evaluate(() => { window.__app.admin = { on: true, hash: '', name: 'Test admin', at: 1 }; }); // v3.40: stage changes after Peer review are the admin's
     await page.evaluate(() => window.tfi.go('setup'));
     await page.selectOption('select[data-bind="status.stage"]', 'complete');
     await page.waitForFunction(() => window.tfi.job().issued);
@@ -1352,6 +1356,7 @@ export default {
 
   async 'complete lock: the Dashboard issues a stored job at Complete and asks why when it is moved back'({ browser, url, appPage }) {
     const page = await appPage(browser, url);
+    await page.evaluate(() => { window.__app.admin = { on: true, hash: '', name: 'Test admin', at: 1 }; }); // v3.40: stage changes after Peer review are the admin's
     const id = await page.evaluate(() => window.tfi.job().id);
     // put the job away, so the Dashboard changes the stored copy (as for a job that isn't open)
     await page.evaluate(async () => { const { flushSave, recompute } = await import('./js/app/persist.js'); await flushSave(); window.__app.job = null; window.__app.photos = []; recompute(); window.tfi.go('dash'); });
@@ -1379,6 +1384,7 @@ export default {
 
   async 'job files: a Complete job’s issued report travels in the file to another device'({ browser, url, appPage }) {
     const page = await appPage(browser, url);
+    await page.evaluate(() => { window.__app.admin = { on: true, hash: '', name: 'Test admin', at: 1 }; }); // v3.40: stage changes after Peer review are the admin's
     await page.evaluate(() => window.tfi.go('setup'));
     await page.selectOption('select[data-bind="status.stage"]', 'complete');
     await page.waitForFunction(() => window.tfi.job().issued);
@@ -1393,6 +1399,7 @@ export default {
 
     // another device: a fresh profile
     const other = await appPage(browser, url);
+    await other.evaluate(() => { window.__app.admin = { on: true, hash: '', name: 'Test admin', at: 1 }; }); // v3.40: stage changes after Peer review are the admin's
     await other.evaluate(() => window.tfi.go('jobs'));
     await other.setInputFiles('#openFileInput', { name: 'issued.json', mimeType: 'application/json', buffer: Buffer.from(text) });
     await other.waitForSelector('#confirmDlg[open]'); // this device has its own demo of the same tank and date
@@ -1416,6 +1423,7 @@ export default {
     // a file whose issued report was changed: a warning, and the job opens without it
     const bad = JSON.parse(text); bad.issued.html = bad.issued.html.replace('Demo Energy Ltd.', 'Someone Else');
     const third = await appPage(browser, url);
+    await third.evaluate(() => { window.__app.admin = { on: true, hash: '', name: 'Test admin', at: 1 }; }); // v3.40: stage changes after Peer review are the admin's
     await third.evaluate(() => window.tfi.go('jobs'));
     await third.setInputFiles('#openFileInput', { name: 'changed.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(bad)) });
     await third.waitForSelector('#confirmDlg[open]');
@@ -1857,6 +1865,57 @@ export default {
     assert.deepEqual(page.errors, []);
     await page.context().close();
   },
+  async 'roles: inspectors are locked from Peer review on; an admin (PIN) edits, moves it through Admin review and unlocks it'({ browser, url, appPage }) {
+    const page = await appPage(browser, url);
+    const stage = () => page.evaluate(() => window.tfi.job().status.stage);
+    const setStage = async (v) => { await page.evaluate(() => window.tfi.go('setup')); await page.waitForSelector('[data-bind="status.stage"]'); await page.selectOption('[data-bind="status.stage"]', v); };
+    // inspector: Reporting, then send to Peer review (asks first)
+    await setStage('reporting'); await page.waitForFunction(() => window.tfi.job().status.stage === 'reporting');
+    await setStage('admin'); await page.waitForTimeout(400);
+    assert.equal(await stage(), 'reporting', 'an inspector cannot skip to Admin review');
+    await setStage('review'); await page.waitForSelector('#confirmDlg[open]'); await page.click('#confirmDlg [data-cf="yes"]');
+    await page.waitForFunction(() => window.tfi.job().status.stage === 'review');
+    await page.waitForSelector('#jobTitle .locked');
+    // locked for the inspector: fields disabled, a change straight to the job is refused, the stage can't be moved back
+    await page.evaluate(() => window.tfi.go('setup')); await page.waitForSelector('input[data-bind="info.client"]');
+    assert.equal(await page.$eval('input[data-bind="info.client"]', (e) => e.disabled), true);
+    await page.evaluate(async () => { const { commit, flushSave } = await import('./js/app/persist.js'); window.tfi.job().info.client = 'Sneaky'; commit(); await flushSave(); });
+    await page.waitForFunction(() => window.tfi.job().info.client === 'Demo Energy Ltd.');
+    await page.evaluate(async () => { const { changeStage } = await import('./js/app/stage.js'); await changeStage(window.tfi.job(), 'reporting'); });
+    assert.equal(await stage(), 'review');
+    // admin: set the PIN (first time on this device), then edit and move it on
+    await page.evaluate(() => window.tfi.go('jobs')); await page.click('[data-act="admin-enter"]');
+    await page.fill('#askPin', '4821'); await page.fill('#askPin2', '4821'); await page.click('#confirmDlg [data-cf="yes"]');
+    await page.waitForSelector('#adminBadge:not([hidden])');
+    const pin = await page.evaluate(() => window.__app.company.adminPin); assert.match(pin, /^[0-9a-f]{64}$/);
+    await page.evaluate(() => window.tfi.go('setup')); await page.waitForSelector('input[data-bind="info.client"]');
+    assert.equal(await page.$eval('input[data-bind="info.client"]', (e) => e.disabled), false);
+    await page.fill('input[data-bind="info.client"]', 'Demo Energy Ltd. (reviewed)'); await page.press('input[data-bind="info.client"]', 'Tab');
+    await page.waitForFunction(() => window.tfi.job().info.client === 'Demo Energy Ltd. (reviewed)');
+    await setStage('admin'); await page.waitForFunction(() => window.tfi.job().status.stage === 'admin');
+    const j = await page.evaluate(() => window.tfi.job());
+    assert.equal(j.adminPin, pin, 'the job carries the PIN'); assert.equal(j.status.history.at(-1).admin !== undefined, true);
+    // leave admin mode: locked again; a wrong PIN does not get back in
+    await page.click('#adminBadge'); await page.waitForSelector('#adminBadge[hidden]', { state: 'attached' });
+    await page.evaluate(() => window.tfi.go('jobs')); await page.click('[data-act="admin-enter"]');
+    await page.fill('#askPin', '0000'); await page.click('#confirmDlg [data-cf="yes"]'); await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(() => window.__app.admin.on), false);
+    await page.click('[data-act="admin-enter"]'); await page.fill('#askPin', '4821'); await page.click('#confirmDlg [data-cf="yes"]');
+    await page.waitForFunction(() => window.__app.admin.on);
+    // unlock for the inspector: back to Reporting with a reason; editable again after leaving admin mode
+    await page.click('#jobTitle [data-act="unlock-insp"]'); await page.waitForSelector('#confirmDlg[open] #askText');
+    await page.fill('#askText', 'Peer review comments'); await page.click('#confirmDlg [data-cf="yes"]');
+    await page.waitForFunction(() => window.tfi.job().status.stage === 'reporting');
+    assert.match(await page.evaluate(() => window.tfi.job().status.history.at(-1).reason), /Peer review comments/);
+    await page.click('#adminBadge');
+    await page.evaluate(() => window.tfi.go('setup')); await page.waitForSelector('input[data-bind="info.client"]');
+    assert.equal(await page.$eval('input[data-bind="info.client"]', (e) => e.disabled), false);
+    // another device learns the PIN from the job; a different PIN set there does not unlock it
+    const other = await page.evaluate(async () => { const { adminFor, pinHash } = await import('./js/roles.js'); const j = window.tfi.job(); return { own: adminFor(j, { on: true, hash: await pinHash('4821') }), rogue: adminFor(j, { on: true, hash: await pinHash('1111') }) }; });
+    assert.deepEqual(other, { own: true, rogue: false });
+    assert.deepEqual(page.errors, []);
+    await page.context().close();
+  },
   async 'user guide: in the side menu with or without a job; contents, search and its buttons open the pages'({ browser, url, appPage }) {
     const page = await appPage(browser, url, { demo: false });
     const btn = page.locator('#nav [data-go="guide"]');
@@ -2105,7 +2164,7 @@ export default {
     assert.match(txt, /Approved by · Signature and date|P\. Approver/);
     // saved in the job
     const j = await page.evaluate(() => window.tfi.job());
-    assert.equal(j.schema, 7); assert.equal(j.docctl.approvedBy, 'P. Approver'); assert.equal(j.tank.src.opTemp, 'assumed');
+    assert.equal(j.schema, 8); assert.equal(j.docctl.approvedBy, 'P. Approver'); assert.equal(j.tank.src.opTemp, 'assumed');
     assert.equal(j.secs.shell.assess.by, 'E. Engineer'); assert.ok(!('inspector' in j.info));
     assert.deepEqual(page.errors, []);
     await page.context().close();
@@ -2208,6 +2267,7 @@ export default {
 
   async 'report frame: an issued report keeps its document control and still matches the live report'({ browser, url, appPage }) {
     const page = await appPage(browser, url);
+    await page.evaluate(() => { window.__app.admin = { on: true, hash: '', name: 'Test admin', at: 1 }; }); // v3.40: stage changes after Peer review are the admin's
     await page.evaluate(() => { delete Window.prototype.showSaveFilePicker; delete window.showSaveFilePicker; });
     await Promise.all([page.waitForEvent('download'), page.click('#saveFileBtn')]);
     await page.waitForTimeout(500);

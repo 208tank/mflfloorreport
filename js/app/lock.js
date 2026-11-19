@@ -6,6 +6,8 @@ import { S } from './state.js';
 import { setActionGuard } from './actions.js';
 import { renderView } from './nav.js';
 import { isLocked } from './revisions.js';
+import { isAdmin } from './admin.js';
+import { inspectorLocked } from '../roles.js';
 import { $, toast } from '../ui.js';
 
 /** Screens that don't edit the open job: never locked. */
@@ -14,11 +16,15 @@ const FREE_VIEWS = new Set(['dash', 'reg', 'jobs', 'report', 'revs', 'audit', 'r
 const VIEW_ONLY = new Set(['zoom-in', 'zoom-out', 'zoom-fit', 'filter', 'sort', 'def-filter', 'toggle', 'resfilter', 'search', 'plate-search',
   'ind-nav', 'ind-pick', 'ind-show', 'ind-zoom', 'ind-close', 'open-ind', 'sel-ind', 'close-sel', 'photo-view', 'rsel', 'rsel-close', 'rsel-nav',
   'nav-sec', 'print', 'ropt', 'file-save', 'file-save-as', 'job-save', 'reopen']);
-const LOCK_MSG = 'This job is Complete and its report has been issued, so it is read-only. Use Reopen in the header to change it.';
+const lockMsg = () => (isLocked(S.job)
+  ? 'This job is Complete and its report has been issued, so it is read-only.' + (isAdmin() ? ' Use Reopen in the header to change it.' : ' An admin can reopen it.')
+  : `This job is in ${S.job?.status?.stage === 'admin' ? 'Admin review' : 'Peer review'}, so it is locked for inspectors. An admin can edit it, or unlock it for you (Jobs → This device → Admin).`);
 
 /** Is the screen showing a locked job's data? */
 export function lockedNow() {
-  return !!S.job && !S.job.regEdit && isLocked(S.job) && !FREE_VIEWS.has(S.view);
+  if (!S.job || S.job.regEdit || FREE_VIEWS.has(S.view)) return false;
+  // Complete: read-only for everyone until reopened; Peer review and Admin review (v3.40): read-only unless admin
+  return isLocked(S.job) || (inspectorLocked(S.job) && !isAdmin());
 }
 
 /** May this element be used on a locked job? */
@@ -41,7 +47,7 @@ export function applyLock() {
     if (!root) continue;
     for (const el of root.querySelectorAll('input, select, textarea, button')) {
       if (el.disabled || allowedWhenLocked(el)) continue;
-      el.disabled = true; el.classList.add('locked-off'); el.title = el.title || 'Locked: the job is Complete';
+      el.disabled = true; el.classList.add('locked-off'); el.title = el.title || (isLocked(S.job) ? 'Locked: the job is Complete' : 'Locked for inspectors: the job is in review');
     }
   }
 }
@@ -49,7 +55,7 @@ export function applyLock() {
 let toastAt = 0;
 setActionGuard((el, kind) => {
   if (!lockedNow() || !inLockedArea(el) || allowedWhenLocked(el)) return true;
-  if (Date.now() - toastAt > 3000) { toastAt = Date.now(); toast(LOCK_MSG); }
+  if (Date.now() - toastAt > 3000) { toastAt = Date.now(); toast(lockMsg()); }
   if (kind === 'change') renderView(); // put the field back as it was
   return false;
 });
